@@ -10,6 +10,7 @@
 
 import type * as clerkWebhooks from "../clerkWebhooks.js";
 import type * as http from "../http.js";
+import type * as queries from "../queries.js";
 
 import type {
   ApiFromModules,
@@ -20,6 +21,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   clerkWebhooks: typeof clerkWebhooks;
   http: typeof http;
+  queries: typeof queries;
 }>;
 
 /**

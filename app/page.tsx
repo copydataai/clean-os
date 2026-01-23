@@ -33,7 +33,7 @@ export default function Home() {
         {/* Clean CTA */}
         <div className="flex flex-col items-start gap-3">
           <Unauthenticated>
-            <SignInButton mode="modal">
+            <SignInButton>
               <button className="h-12 rounded-full bg-[#1A1A1A] px-8 text-sm font-medium text-[#FAFAFA] transition-all hover:bg-[#333333] hover:shadow-lg">
                 Sign In
               </button>
