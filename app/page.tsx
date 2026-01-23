@@ -1,4 +1,10 @@
+"use client";
+
 import Image from "next/image";
+import { Authenticated, Unauthenticated } from "convex/react";
+import { SignInButton, UserButton } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
+import { api } from "../convex/_generated/api";
 
 export default function Home() {
   return (
@@ -35,6 +41,13 @@ export default function Home() {
           </p>
         </div>
         <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+          <Authenticated>
+            <UserButton />
+            <Content />
+          </Authenticated>
+          <Unauthenticated>
+            <SignInButton />
+          </Unauthenticated>
           <a
             className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
             href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
@@ -62,4 +75,9 @@ export default function Home() {
       </main>
     </div>
   );
+}
+
+function Content() {
+  const messages = useQuery(api.messages.getForCurrentUser);
+  return <div>Authenticated content: {messages?.length ?? 0}</div>;
 }
