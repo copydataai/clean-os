@@ -2,8 +2,9 @@
 
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 
-export default function BookCancelPage() {
+function BookCancelPageContent() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
 
@@ -54,5 +55,19 @@ export default function BookCancelPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BookCancelPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+        </div>
+      }
+    >
+      <BookCancelPageContent />
+    </Suspense>
   );
 }

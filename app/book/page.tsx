@@ -2,11 +2,11 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Id } from "@/convex/_generated/dataModel";
 
-export default function BookPage() {
+function BookPageContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"loading" | "redirecting" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -129,5 +129,24 @@ export default function BookPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BookPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+          <div className="w-full max-w-md text-center">
+            <div className="mb-6 flex justify-center">
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+            </div>
+            <h1 className="text-2xl font-medium text-[#1A1A1A]">Loading...</h1>
+          </div>
+        </div>
+      }
+    >
+      <BookPageContent />
+    </Suspense>
   );
 }

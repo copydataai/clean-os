@@ -1,10 +1,10 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 
-export default function CompletePaymentPage() {
+function CompletePaymentPageContent() {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"loading" | "processing" | "success" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
@@ -133,5 +133,20 @@ export default function CompletePaymentPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function CompletePaymentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+          <p className="mt-4 text-[#666666]">Loading...</p>
+        </div>
+      }
+    >
+      <CompletePaymentPageContent />
+    </Suspense>
   );
 }
