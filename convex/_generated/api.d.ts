@@ -8,9 +8,14 @@
  * @module
  */
 
+import type * as bookingDb from "../bookingDb.js";
+import type * as bookings from "../bookings.js";
+import type * as cardDb from "../cardDb.js";
+import type * as cardWebhooks from "../cardWebhooks.js";
 import type * as clerkWebhooks from "../clerkWebhooks.js";
 import type * as http from "../http.js";
 import type * as queries from "../queries.js";
+import type * as stripeActions from "../stripeActions.js";
 
 import type {
   ApiFromModules,
@@ -19,9 +24,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  bookingDb: typeof bookingDb;
+  bookings: typeof bookings;
+  cardDb: typeof cardDb;
+  cardWebhooks: typeof cardWebhooks;
   clerkWebhooks: typeof clerkWebhooks;
   http: typeof http;
   queries: typeof queries;
+  stripeActions: typeof stripeActions;
 }>;
 
 /**
