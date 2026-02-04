@@ -22,13 +22,13 @@ import {
 } from "@/components/ui/sidebar";
 const navItems = [
   { label: "Overview", href: "/dashboard" },
-  { label: "Quotes", href: "/quotes" },
-  { label: "Requests", href: "/requests" },
-  { label: "Bookings", href: "/bookings" },
-  { label: "Schedule", href: "/schedule" },
-  { label: "Cleaners", href: "/cleaners" },
-  { label: "Payments", href: "/payments", disabled: true },
-  { label: "Settings", href: "/settings", disabled: true },
+  { label: "Quotes", href: "/dashboard/quotes" },
+  { label: "Requests", href: "/dashboard/requests" },
+  { label: "Bookings", href: "/dashboard/bookings" },
+  { label: "Schedule", href: "/dashboard/schedule" },
+  { label: "Cleaners", href: "/dashboard/cleaners" },
+  { label: "Payments", href: "/dashboard/payments", disabled: true },
+  { label: "Settings", href: "/dashboard/settings", disabled: true },
 ];
 
 export default function DashboardLayout({
