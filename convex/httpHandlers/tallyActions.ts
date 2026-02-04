@@ -53,7 +53,7 @@ function verifyTallySignature(
   signature: string,
   secret: string,
 ): boolean {
-  const expected = createHmac("sha256", secret).update(payload).digest("hex");
+  const expected = createHmac("sha256", secret).update(payload).digest("base64");
   const provided = normalizeTallySignature(signature);
   if (provided.length !== expected.length) {
     return false;
