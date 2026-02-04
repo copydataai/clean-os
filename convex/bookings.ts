@@ -12,6 +12,7 @@ export const createBookingFromTally = mutation({
     amount: v.optional(v.number()),
     notes: v.optional(v.string()),
     tallyResponseId: v.optional(v.string()),
+    bookingRequestId: v.optional(v.id("bookingRequests")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
     const now = Date.now();
@@ -24,9 +25,48 @@ export const createBookingFromTally = mutation({
       amount: args.amount,
       notes: args.notes,
       tallyResponseId: args.tallyResponseId,
+      bookingRequestId: args.bookingRequestId,
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+export const createBookingFromRequest = mutation({
+  args: {
+    requestId: v.id("bookingRequests"),
+  },
+  handler: async (ctx, args): Promise<Id<"bookings">> => {
+    const request = await ctx.db.get(args.requestId);
+    if (!request) {
+      throw new Error("Booking request not found");
+    }
+
+    if (request.bookingId) {
+      return request.bookingId;
+    }
+
+    if (!request.email) {
+      throw new Error("Booking request is missing email");
+    }
+
+    const now = Date.now();
+    const bookingId = await ctx.db.insert("bookings", {
+      email: request.email,
+      customerName: request.contactDetails,
+      status: "pending_card",
+      notes: request.additionalNotes ?? request.attentionAreas,
+      bookingRequestId: request._id,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.runMutation(internal.bookingRequests.linkBookingToRequest, {
+      requestId: request._id,
+      bookingId,
+    });
+
+    return bookingId;
   },
 });
 
@@ -114,5 +154,26 @@ export const getPaymentIntentsForBooking = query({
       .query("paymentIntents")
       .withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
       .collect();
+  },
+});
+
+export const listBookings = query({
+  args: {
+    status: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 50;
+
+    if (args.status) {
+      const status = args.status;
+      return await ctx.db
+        .query("bookings")
+        .withIndex("by_status", (q) => q.eq("status", status))
+        .order("desc")
+        .take(limit);
+    }
+
+    return await ctx.db.query("bookings").order("desc").take(limit);
   },
 });

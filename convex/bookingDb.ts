@@ -11,6 +11,7 @@ export const createBooking = internalMutation({
     amount: v.optional(v.number()),
     notes: v.optional(v.string()),
     tallyResponseId: v.optional(v.string()),
+    bookingRequestId: v.optional(v.id("bookingRequests")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
     const now = Date.now();
@@ -23,6 +24,7 @@ export const createBooking = internalMutation({
       amount: args.amount,
       notes: args.notes,
       tallyResponseId: args.tallyResponseId,
+      bookingRequestId: args.bookingRequestId,
       createdAt: now,
       updatedAt: now,
     });

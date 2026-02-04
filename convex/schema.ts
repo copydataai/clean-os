@@ -54,6 +54,7 @@ const paymentMethods = defineTable({
   stripePaymentMethodId: v.string(),
   stripeCustomerId: v.string(),
   type: v.string(),
+  source: v.optional(v.string()), // "stripe" | "tally"
   card: v.optional(
     v.object({
       brand: v.string(),
@@ -78,12 +79,76 @@ const bookings = defineTable({
   amount: v.optional(v.number()), // Amount in cents
   notes: v.optional(v.string()),
   tallyResponseId: v.optional(v.string()),
+  bookingRequestId: v.optional(v.id("bookingRequests")),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
   .index("by_email", ["email"])
   .index("by_checkout_session", ["stripeCheckoutSessionId"])
   .index("by_status", ["status"]);
+
+const bookingRequests = defineTable({
+  status: v.string(), // "requested" | "confirmed"
+  requestResponseId: v.optional(v.string()),
+  confirmationResponseId: v.optional(v.string()),
+  requestFormId: v.optional(v.string()),
+  confirmationFormId: v.optional(v.string()),
+  quoteRequestId: v.optional(v.id("quoteRequests")),
+  email: v.optional(v.string()),
+  contactDetails: v.optional(v.string()),
+  phoneNumber: v.optional(v.string()),
+  accessMethod: v.optional(v.array(v.string())),
+  accessInstructions: v.optional(v.string()),
+  parkingInstructions: v.optional(v.string()),
+  floorTypes: v.optional(v.array(v.string())),
+  finishedBasement: v.optional(v.string()),
+  delicateSurfaces: v.optional(v.string()),
+  attentionAreas: v.optional(v.string()),
+  pets: v.optional(v.array(v.string())),
+  homeDuringCleanings: v.optional(v.string()),
+  scheduleAdjustmentWindows: v.optional(v.array(v.string())),
+  timingShiftOk: v.optional(v.string()),
+  additionalNotes: v.optional(v.string()),
+  rawRequestPayload: v.optional(v.any()),
+  rawConfirmationPayload: v.optional(v.any()),
+  bookingId: v.optional(v.id("bookings")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  confirmedAt: v.optional(v.number()),
+})
+  .index("by_email", ["email"])
+  .index("by_status", ["status"])
+  .index("by_request_response_id", ["requestResponseId"])
+  .index("by_confirmation_response_id", ["confirmationResponseId"]);
+
+const quoteRequests = defineTable({
+  firstName: v.optional(v.string()),
+  lastName: v.optional(v.string()),
+  email: v.optional(v.string()),
+  phone: v.optional(v.string()),
+  service: v.optional(v.string()),
+  serviceType: v.optional(v.string()),
+  frequency: v.optional(v.string()),
+  squareFootage: v.optional(v.number()),
+  address: v.optional(v.string()),
+  addressLine2: v.optional(v.string()),
+  postalCode: v.optional(v.string()),
+  city: v.optional(v.string()),
+  state: v.optional(v.string()),
+  additionalNotes: v.optional(v.string()),
+  utm_source: v.optional(v.string()),
+  utm_campaign: v.optional(v.string()),
+  gad_campaignid: v.optional(v.string()),
+  gclid: v.optional(v.string()),
+  status: v.optional(v.string()),
+  tallyFormId: v.optional(v.string()),
+  requestStatus: v.string(), // "requested" | "quoted" | "confirmed"
+  bookingRequestId: v.optional(v.id("bookingRequests")),
+  rawRequestPayload: v.optional(v.any()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_email", ["email"])
 
 const paymentIntents = defineTable({
   bookingId: v.id("bookings"),
@@ -110,5 +175,7 @@ export default defineSchema({
   setupIntents,
   paymentMethods,
   bookings,
+  bookingRequests,
+  quoteRequests,
   paymentIntents,
 });

@@ -69,6 +69,7 @@ export const savePaymentMethodToDb = internalMutation({
     stripePaymentMethodId: v.string(),
     stripeCustomerId: v.string(),
     type: v.string(),
+    source: v.optional(v.string()),
     card: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
@@ -77,6 +78,7 @@ export const savePaymentMethodToDb = internalMutation({
       stripePaymentMethodId: args.stripePaymentMethodId,
       stripeCustomerId: args.stripeCustomerId,
       type: args.type,
+      source: args.source,
       card: args.card,
       createdAt: Date.now(),
     });
