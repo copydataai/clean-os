@@ -50,10 +50,17 @@ http.route({
     if ("error" in result) {
       return new Response(result.error, { status: result.status });
     }
-    return new Response(JSON.stringify({ success: true, requestId: result.requestId }), {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        requestId: result.requestId,
+        bookingRequestId: "bookingRequestId" in result ? result.bookingRequestId : undefined,
+      }),
+      {
       status: 200,
       headers: { "Content-Type": "application/json" },
-    });
+      }
+    );
   }),
 });
 
@@ -76,10 +83,17 @@ http.route({
     if ("error" in result) {
       return new Response(result.error, { status: result.status });
     }
-    return new Response(JSON.stringify({ success: true, requestId: result.requestId }), {
+    return new Response(
+      JSON.stringify({
+        success: true,
+        requestId: result.requestId,
+        bookingRequestId: "bookingRequestId" in result ? result.bookingRequestId : undefined,
+      }),
+      {
       status: 200,
       headers: { "Content-Type": "application/json" },
-    });
+      }
+    );
   }),
 });
 

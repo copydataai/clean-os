@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 const FALLBACK_LOOKBACK_DAYS = 7;
@@ -9,6 +10,7 @@ export const createRequest = internalMutation({
   args: {
     requestResponseId: v.optional(v.string()),
     requestFormId: v.optional(v.string()),
+    quoteRequestId: v.optional(v.id("quoteRequests")),
     email: v.optional(v.string()),
     contactDetails: v.optional(v.string()),
     phoneNumber: v.optional(v.string()),
@@ -32,6 +34,7 @@ export const createRequest = internalMutation({
       status: "requested",
       requestResponseId: args.requestResponseId,
       requestFormId: args.requestFormId,
+      quoteRequestId: args.quoteRequestId,
       email: args.email,
       contactDetails: args.contactDetails,
       phoneNumber: args.phoneNumber,
@@ -96,11 +99,11 @@ export const confirmRequest = internalMutation({
         return null;
       }
       const now = Date.now();
-      return await ctx.db.insert("bookingRequests", {
+      const createdId = await ctx.db.insert("bookingRequests", {
         status: "confirmed",
-      confirmationResponseId: args.confirmationResponseId,
-      confirmationFormId: args.confirmationFormId,
-      quoteRequestId: args.quoteRequestId,
+        confirmationResponseId: args.confirmationResponseId,
+        confirmationFormId: args.confirmationFormId,
+        quoteRequestId: args.quoteRequestId,
         email: args.email,
         contactDetails: args.contactDetails,
         phoneNumber: args.phoneNumber,
@@ -121,6 +124,12 @@ export const confirmRequest = internalMutation({
         updatedAt: now,
         confirmedAt: now,
       });
+      if (args.quoteRequestId) {
+        await ctx.runMutation(internal.quoteRequests.markConfirmed, {
+          quoteRequestId: args.quoteRequestId,
+        });
+      }
+      return createdId;
     }
 
     await ctx.db.patch(request._id, {
@@ -147,6 +156,12 @@ export const confirmRequest = internalMutation({
       updatedAt: Date.now(),
       confirmedAt: Date.now(),
     });
+
+    if (request.quoteRequestId) {
+      await ctx.runMutation(internal.quoteRequests.markConfirmed, {
+        quoteRequestId: request.quoteRequestId,
+      });
+    }
 
     return request._id;
   },
@@ -178,6 +193,19 @@ export const linkBookingToRequest = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.requestId, {
       bookingId: args.bookingId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const linkQuoteRequestToRequest = internalMutation({
+  args: {
+    requestId: v.id("bookingRequests"),
+    quoteRequestId: v.id("quoteRequests"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.requestId, {
+      quoteRequestId: args.quoteRequestId,
       updatedAt: Date.now(),
     });
   },

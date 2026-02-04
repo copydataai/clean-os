@@ -252,8 +252,8 @@ function verifyAndParseTallyPayload(
 
 type WebhookResult = 
   | { error: string; status: number }
-  | { success: true; requestId: string; status: number }
-  | { success: true; requestId: any; status: number };
+  | { success: true; requestId: string; status: number; bookingRequestId?: string }
+  | { success: true; requestId: any; status: number; bookingRequestId?: string };
 
 export const handleTallyRequestWebhook = internalAction({
   args: {
@@ -269,6 +269,23 @@ export const handleTallyRequestWebhook = internalAction({
     }
 
     const parsedFields = parseQuoteRequestFields(verified.fields);
+    const contactDetails = [parsedFields.firstName, parsedFields.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    const bookingRequestId = await ctx.runMutation(
+      internal.bookingRequests.createRequest,
+      {
+        requestResponseId: verified.responseId,
+        requestFormId: verified.formId,
+        email: parsedFields.email,
+        contactDetails: contactDetails.length > 0 ? contactDetails : undefined,
+        phoneNumber: parsedFields.phone,
+        rawRequestPayload: verified.data,
+      },
+    );
+
     const quoteRequestId = await ctx.runMutation(
       internal.quoteRequests.createQuoteRequest,
       {
@@ -292,11 +309,17 @@ export const handleTallyRequestWebhook = internalAction({
         gclid: parsedFields.gclid,
         status: parsedFields.status,
         tallyFormId: verified.formId,
+        bookingRequestId,
         rawRequestPayload: verified.data,
       },
     );
 
-    return { success: true, requestId: quoteRequestId, status: 200 };
+    await ctx.runMutation(internal.bookingRequests.linkQuoteRequestToRequest, {
+      requestId: bookingRequestId,
+      quoteRequestId,
+    });
+
+    return { success: true, requestId: quoteRequestId, bookingRequestId, status: 200 };
   },
 });
 

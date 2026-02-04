@@ -24,6 +24,7 @@ export const createQuoteRequest = internalMutation({
     gclid: v.optional(v.string()),
     status: v.optional(v.string()),
     tallyFormId: v.optional(v.string()),
+    bookingRequestId: v.optional(v.id("bookingRequests")),
     rawRequestPayload: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"quoteRequests">> => {
@@ -45,6 +46,29 @@ export const linkBookingRequest = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.quoteRequestId, {
       bookingRequestId: args.bookingRequestId,
+      requestStatus: "confirmed",
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const linkBookingRequestId = internalMutation({
+  args: {
+    quoteRequestId: v.id("quoteRequests"),
+    bookingRequestId: v.id("bookingRequests"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.quoteRequestId, {
+      bookingRequestId: args.bookingRequestId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const markConfirmed = internalMutation({
+  args: { quoteRequestId: v.id("quoteRequests") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.quoteRequestId, {
       requestStatus: "confirmed",
       updatedAt: Date.now(),
     });

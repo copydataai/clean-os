@@ -13,6 +13,8 @@ import type * as bookingRequests from "../bookingRequests.js";
 import type * as bookings from "../bookings.js";
 import type * as cardDb from "../cardDb.js";
 import type * as cardWebhooks from "../cardWebhooks.js";
+import type * as cleanerDb from "../cleanerDb.js";
+import type * as cleaners from "../cleaners.js";
 import type * as clerkWebhooks from "../clerkWebhooks.js";
 import type * as dashboard from "../dashboard.js";
 import type * as http from "../http.js";
@@ -21,6 +23,7 @@ import type * as httpHandlers_stripeActions from "../httpHandlers/stripeActions.
 import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js";
 import type * as queries from "../queries.js";
 import type * as quoteRequests from "../quoteRequests.js";
+import type * as schedule from "../schedule.js";
 import type * as stripeActions from "../stripeActions.js";
 
 import type {
@@ -35,6 +38,8 @@ declare const fullApi: ApiFromModules<{
   bookings: typeof bookings;
   cardDb: typeof cardDb;
   cardWebhooks: typeof cardWebhooks;
+  cleanerDb: typeof cleanerDb;
+  cleaners: typeof cleaners;
   clerkWebhooks: typeof clerkWebhooks;
   dashboard: typeof dashboard;
   http: typeof http;
@@ -43,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   "httpHandlers/tallyActions": typeof httpHandlers_tallyActions;
   queries: typeof queries;
   quoteRequests: typeof quoteRequests;
+  schedule: typeof schedule;
   stripeActions: typeof stripeActions;
 }>;
 
