@@ -9,13 +9,18 @@
  */
 
 import type * as bookingDb from "../bookingDb.js";
+import type * as bookingRequests from "../bookingRequests.js";
 import type * as bookings from "../bookings.js";
 import type * as cardDb from "../cardDb.js";
 import type * as cardWebhooks from "../cardWebhooks.js";
 import type * as clerkWebhooks from "../clerkWebhooks.js";
 import type * as dashboard from "../dashboard.js";
 import type * as http from "../http.js";
+import type * as httpHandlers_clerkActions from "../httpHandlers/clerkActions.js";
+import type * as httpHandlers_stripeActions from "../httpHandlers/stripeActions.js";
+import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js";
 import type * as queries from "../queries.js";
+import type * as quoteRequests from "../quoteRequests.js";
 import type * as stripeActions from "../stripeActions.js";
 
 import type {
@@ -26,13 +31,18 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   bookingDb: typeof bookingDb;
+  bookingRequests: typeof bookingRequests;
   bookings: typeof bookings;
   cardDb: typeof cardDb;
   cardWebhooks: typeof cardWebhooks;
   clerkWebhooks: typeof clerkWebhooks;
   dashboard: typeof dashboard;
   http: typeof http;
+  "httpHandlers/clerkActions": typeof httpHandlers_clerkActions;
+  "httpHandlers/stripeActions": typeof httpHandlers_stripeActions;
+  "httpHandlers/tallyActions": typeof httpHandlers_tallyActions;
   queries: typeof queries;
+  quoteRequests: typeof quoteRequests;
   stripeActions: typeof stripeActions;
 }>;
 

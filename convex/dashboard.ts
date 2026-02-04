@@ -13,6 +13,8 @@ export const getStats = query({
     activeClients: v.number(),
     pendingBookings: v.number(),
     jobsScheduledToday: v.number(),
+    pendingRequests: v.number(),
+    confirmedRequests: v.number(),
   }),
   handler: async (ctx) => {
     const now = Date.now();
@@ -52,6 +54,10 @@ export const getStats = query({
       (b) => b.status === "pending_card"
     ).length;
 
+    const allRequests = await ctx.db.query("bookingRequests").collect();
+    const pendingRequests = allRequests.filter((r) => r.status === "requested").length;
+    const confirmedRequests = allRequests.filter((r) => r.status === "confirmed").length;
+
     // Jobs scheduled today (by serviceDate if available)
     const todayStr = new Date().toISOString().split("T")[0];
     const jobsScheduledToday = allBookings.filter(
@@ -64,6 +70,8 @@ export const getStats = query({
       activeClients,
       pendingBookings,
       jobsScheduledToday,
+      pendingRequests,
+      confirmedRequests,
     };
   },
 });

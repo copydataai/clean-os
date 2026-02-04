@@ -324,6 +324,7 @@ export const handleCheckoutCompleted = internalAction({
       stripePaymentMethodId: paymentMethod.id,
       stripeCustomerId: session.customer as string,
       type: paymentMethod.type,
+      source: "stripe",
       card: cardDetails,
     });
 
