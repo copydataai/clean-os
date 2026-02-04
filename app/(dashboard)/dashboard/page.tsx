@@ -3,6 +3,9 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Authenticated } from "convex/react";
+import PageHeader from "@/components/dashboard/PageHeader";
+import StatusBadge from "@/components/dashboard/StatusBadge";
+import RequestCard from "@/components/dashboard/RequestCard";
 
 function formatCurrency(cents: number): string {
   return `$${(cents / 100).toLocaleString()}`;
@@ -37,8 +40,9 @@ export default function DashboardPage() {
   const stats = useQuery(api.dashboard.getStats);
   const recentBookings = useQuery(api.dashboard.getRecentBookings, { limit: 5 });
   const todaysSchedule = useQuery(api.dashboard.getTodaysSchedule);
+  const recentRequests = useQuery(api.bookingRequests.listRecent, { limit: 3 });
 
-  if (!currentUser || !organizations || !stats || !recentBookings || !todaysSchedule) {
+  if (!currentUser || !organizations || !stats || !recentBookings || !todaysSchedule || !recentRequests) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
@@ -49,60 +53,62 @@ export default function DashboardPage() {
     );
   }
 
-  const primaryOrg = organizations[0];
-
   return (
     <Authenticated>
-      <div className="min-h-screen bg-[#FAFAFA] p-8">
-        <div className="mx-auto max-w-6xl space-y-8">
-          {/* Header */}
-          <header className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-normal tracking-tight text-[#1A1A1A]">
-                Welcome back, {currentUser.firstName || 'there'}
-              </h1>
-              <p className="mt-1 text-[#666666]">
-                {primaryOrg?.name || 'Your cleaning business'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-[#1A1A1A] flex items-center justify-center text-white font-medium">
-                {(currentUser.firstName || currentUser.email)[0].toUpperCase()}
-              </div>
-            </div>
-          </header>
+      <div className="mx-auto max-w-6xl space-y-8">
+        <PageHeader
+          title="Overview"
+          subtitle={`Welcome back, ${currentUser.firstName || "there"}.`}
+        />
 
-          {/* Stats Grid */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <p className="text-sm font-medium text-[#666666]">Revenue This Month</p>
-              <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{formatCurrency(stats.revenueThisMonthCents)}</p>
-              <p className="mt-1 text-sm text-green-600">+18% from last month</p>
-            </div>
-
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <p className="text-sm font-medium text-[#666666]">Jobs Completed</p>
-              <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{stats.jobsCompletedThisMonth}</p>
-              <p className="mt-1 text-sm text-green-600">+12% from last month</p>
-            </div>
-
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <p className="text-sm font-medium text-[#666666]">Active Clients</p>
-              <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{stats.activeClients}</p>
-              <p className="mt-1 text-sm text-green-600">+5% from last month</p>
-            </div>
-
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <p className="text-sm font-medium text-[#666666]">Pending Bookings</p>
-              <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{stats.pendingBookings}</p>
-              <p className="mt-1 text-sm text-[#888888]">{stats.jobsScheduledToday} scheduled today</p>
-            </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+            <p className="text-sm font-medium text-[#666666]">Revenue This Month</p>
+            <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{formatCurrency(stats.revenueThisMonthCents)}</p>
+            <p className="mt-1 text-sm text-green-600">+18% from last month</p>
           </div>
 
-          {/* Main Content */}
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Recent Jobs */}
-            <div className="lg:col-span-2 rounded-2xl border border-[#E5E5E5] bg-white p-6">
+          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+            <p className="text-sm font-medium text-[#666666]">Jobs Completed</p>
+            <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{stats.jobsCompletedThisMonth}</p>
+            <p className="mt-1 text-sm text-green-600">+12% from last month</p>
+          </div>
+
+          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+            <p className="text-sm font-medium text-[#666666]">Active Clients</p>
+            <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{stats.activeClients}</p>
+            <p className="mt-1 text-sm text-green-600">+5% from last month</p>
+          </div>
+
+          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+            <p className="text-sm font-medium text-[#666666]">Pending Bookings</p>
+            <p className="mt-2 text-3xl font-semibold text-[#1A1A1A]">{stats.pendingBookings}</p>
+            <p className="mt-1 text-sm text-[#888888]">{stats.jobsScheduledToday} scheduled today</p>
+          </div>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-[#1A1A1A]">New Requests</h2>
+                <div className="flex items-center gap-2 text-xs text-[#666666]">
+                  <StatusBadge status="requested" label={`${stats.pendingRequests} requested`} />
+                  <StatusBadge status="confirmed" label={`${stats.confirmedRequests} confirmed`} />
+                </div>
+              </div>
+              <div className="mt-4 space-y-4">
+                {recentRequests.length === 0 ? (
+                  <p className="text-sm text-[#666666]">No recent requests</p>
+                ) : (
+                  recentRequests.map((request) => (
+                    <RequestCard key={request._id} request={request} />
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
               <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">Recent Jobs</h2>
               <div className="space-y-3">
                 {recentBookings.length === 0 ? (
@@ -129,51 +135,51 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
-
-            {/* Quick Actions */}
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">Quick Actions</h2>
-              <div className="space-y-3">
-                <button className="w-full rounded-xl bg-[#1A1A1A] px-4 py-3 text-left text-white transition-all hover:bg-[#333333]">
-                  <p className="font-medium">Schedule New Job</p>
-                  <p className="text-sm text-[#888888]">Book a cleaning appointment</p>
-                </button>
-                <button className="w-full rounded-xl border border-[#E5E5E5] px-4 py-3 text-left transition-all hover:bg-[#FAFAFA]">
-                  <p className="font-medium text-[#1A1A1A]">Add New Client</p>
-                  <p className="text-sm text-[#666666]">Register a customer</p>
-                </button>
-                <button className="w-full rounded-xl border border-[#E5E5E5] px-4 py-3 text-left transition-all hover:bg-[#FAFAFA]">
-                  <p className="font-medium text-[#1A1A1A]">View Calendar</p>
-                  <p className="text-sm text-[#666666]">Manage schedule</p>
-                </button>
-                <button className="w-full rounded-xl border border-[#E5E5E5] px-4 py-3 text-left transition-all hover:bg-[#FAFAFA]">
-                  <p className="font-medium text-[#1A1A1A]">Generate Invoice</p>
-                  <p className="text-sm text-[#666666]">Create billing</p>
-                </button>
-              </div>
-            </div>
           </div>
 
-          {/* Upcoming Schedule */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">Today&apos;s Schedule</h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {todaysSchedule.length === 0 ? (
-                <p className="text-[#666666] col-span-full text-center py-8">No jobs scheduled for today</p>
-              ) : (
-                todaysSchedule.map((job) => (
-                  <div key={job._id} className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                    <p className="text-sm font-medium text-[#666666]">{job.serviceDate || "TBD"}</p>
-                    <p className="mt-2 font-semibold text-[#1A1A1A]">{job.customerName || job.email}</p>
-                    <div className="mt-2 flex items-center justify-between text-sm">
-                      <span className="text-[#666666]">{job.serviceType || "Standard"}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>
-                        {formatStatus(job.status)}
-                      </span>
+          <div className="space-y-6">
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">Request Status</h2>
+              <div className="space-y-3 text-sm text-[#666666]">
+                <div className="flex items-center justify-between">
+                  <span>Requested</span>
+                  <StatusBadge status="requested" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Confirmed</span>
+                  <StatusBadge status="confirmed" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Booking Linked</span>
+                  <StatusBadge status="booking_created" label="booking linked" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Card Saved</span>
+                  <StatusBadge status="card_saved" />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">Today&apos;s Schedule</h2>
+              <div className="grid gap-4">
+                {todaysSchedule.length === 0 ? (
+                  <p className="text-[#666666] text-center py-6">No jobs scheduled for today</p>
+                ) : (
+                  todaysSchedule.map((job) => (
+                    <div key={job._id} className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
+                      <p className="text-sm font-medium text-[#666666]">{job.serviceDate || "TBD"}</p>
+                      <p className="mt-2 font-semibold text-[#1A1A1A]">{job.customerName || job.email}</p>
+                      <div className="mt-2 flex items-center justify-between text-sm">
+                        <span className="text-[#666666]">{job.serviceType || "Standard"}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>
+                          {formatStatus(job.status)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
