@@ -110,32 +110,6 @@ http.route({
 });
 
 http.route({
-  path: "/tally-card-webhook",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    console.log("[Tally Card Webhook] Received request");
-    const signature = request.headers.get("tally-signature");
-    if (!signature) {
-      return new Response("Missing signature", { status: 400 });
-    }
-
-    const payload = await request.text();
-    const result = await ctx.runAction(internal.httpHandlers.tallyActions.handleTallyCardWebhook, {
-      payload,
-      signature,
-    });
-
-    if ("error" in result) {
-      return new Response(result.error, { status: result.status });
-    }
-    return new Response(JSON.stringify(result), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }),
-});
-
-http.route({
   path: "/stripe-webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {

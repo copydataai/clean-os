@@ -122,6 +122,7 @@ export const attachPaymentMethod = internalAction({
       stripePaymentMethodId: paymentMethod.id,
       stripeCustomerId: customerRecord.stripeCustomerId,
       type: paymentMethod.type,
+      source: "stripe",
       card: cardDetails,
     });
 
@@ -172,6 +173,7 @@ export const saveCardFromSetupIntent = internalAction({
       stripePaymentMethodId: paymentMethod.id,
       stripeCustomerId: customerRecord.stripeCustomerId,
       type: paymentMethod.type,
+      source: "stripe",
       card: cardDetails,
     });
 
@@ -181,67 +183,6 @@ export const saveCardFromSetupIntent = internalAction({
     });
 
     return paymentMethod.id;
-  },
-});
-
-export const createPaymentMethodFromCard = internalAction({
-  args: {
-    clerkId: v.string(),
-    cardNumber: v.string(),
-    expMonth: v.union(v.string(), v.number()),
-    expYear: v.union(v.string(), v.number()),
-    cvc: v.union(v.string(), v.number()),
-  },
-  handler: async (ctx, args): Promise<{ paymentMethodId: string; brand: string; last4: string }> => {
-    const stripe = getStripeClient();
-    const customerRecord = await ctx.runQuery(internal.cardDb.getCustomerByClerkId, {
-      clerkId: args.clerkId,
-    });
-
-    if (!customerRecord) {
-      throw new Error("Customer not found. Create customer first.");
-    }
-
-    const cvcString = typeof args.cvc === 'number' ? args.cvc.toString() : args.cvc;
-    const expMonthString = typeof args.expMonth === 'number' ? args.expMonth.toString() : args.expMonth;
-    const expYearString = typeof args.expYear === 'number' ? args.expYear.toString() : args.expYear;
-
-    const paymentMethod = await stripe.paymentMethods.create({
-      type: 'card',
-      card: {
-        number: args.cardNumber,
-        exp_month: parseInt(expMonthString),
-        exp_year: parseInt(expYearString),
-        cvc: cvcString,
-      },
-    });
-
-    await stripe.paymentMethods.attach(paymentMethod.id, {
-      customer: customerRecord.stripeCustomerId,
-    });
-
-    const cardDetails = paymentMethod.card
-      ? {
-          brand: paymentMethod.card.brand,
-          last4: paymentMethod.card.last4,
-          expMonth: paymentMethod.card.exp_month,
-          expYear: paymentMethod.card.exp_year,
-        }
-      : undefined;
-
-    await ctx.runMutation(internal.cardDb.savePaymentMethodToDb, {
-      clerkId: args.clerkId,
-      stripePaymentMethodId: paymentMethod.id,
-      stripeCustomerId: customerRecord.stripeCustomerId,
-      type: paymentMethod.type,
-      card: cardDetails,
-    });
-
-    return {
-      paymentMethodId: paymentMethod.id,
-      brand: paymentMethod.card?.brand ?? 'unknown',
-      last4: paymentMethod.card?.last4 ?? '0000',
-    };
   },
 });
 
