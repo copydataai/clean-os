@@ -25,6 +25,8 @@ const navItems = [
   { label: "Quotes", href: "/quotes" },
   { label: "Requests", href: "/requests" },
   { label: "Bookings", href: "/bookings" },
+  { label: "Schedule", href: "/schedule" },
+  { label: "Cleaners", href: "/cleaners" },
   { label: "Payments", href: "/payments", disabled: true },
   { label: "Settings", href: "/settings", disabled: true },
 ];
