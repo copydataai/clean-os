@@ -7,6 +7,7 @@ import { Suspense } from "react";
 function BookCancelPageContent() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
+  const tallyUrl = process.env.NEXT_PUBLIC_TALLY_REQUEST_URL ?? "/";
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
@@ -40,9 +41,15 @@ function BookCancelPageContent() {
         )}
 
         <div className="mt-8 flex flex-col gap-3">
+          <a
+            href={tallyUrl}
+            className="inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+          >
+            Resume booking
+          </a>
           <Link
             href="/"
-            className="inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+            className="inline-block rounded-full border border-[#E5E5E5] px-8 py-3 text-sm font-medium text-[#666666] hover:bg-[#F5F5F5]"
           >
             Return Home
           </Link>

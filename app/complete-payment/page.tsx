@@ -99,9 +99,8 @@ function CompletePaymentPageContent() {
           </p>
         </div>
 
-        <div className="rounded-lg bg-white p-6 shadow-sm">
+        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
           <div id="payment-element" className="mb-6">
-            {/* Stripe Elements would be mounted here */}
             <div className="rounded-lg border-2 border-dashed border-gray-200 p-8 text-center">
               <p className="text-sm text-[#666666]">
                 Payment verification form would appear here.
@@ -117,7 +116,7 @@ function CompletePaymentPageContent() {
               onClick={() => setStatus("success")}
               className="w-full rounded-full bg-[#1A1A1A] py-3 text-sm font-medium text-white hover:bg-[#333333]"
             >
-              Complete Payment
+              Continue verification
             </button>
             <Link
               href="/"

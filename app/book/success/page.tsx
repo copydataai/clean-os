@@ -25,6 +25,15 @@ function BookSuccessPageContent() {
           Thank you for booking with us. Your payment method has been securely saved.
         </p>
 
+        <div className="mt-6 rounded-2xl border border-[#E5E5E5] bg-white p-5 text-left">
+          <p className="text-xs uppercase tracking-[0.2em] text-[#999999]">Booking summary</p>
+          <div className="mt-3 space-y-2 text-sm text-[#666666]">
+            <p>Booking ID: {bookingId ?? "—"}</p>
+            <p>Next step: We will confirm your cleaning schedule.</p>
+            <p>Payment: Card saved, charged after service.</p>
+          </div>
+        </div>
+
         <div className="mt-6 rounded-lg bg-white p-6 shadow-sm">
           <h2 className="font-medium text-[#1A1A1A]">What happens next?</h2>
           <ul className="mt-4 space-y-3 text-left text-sm text-[#666666]">
@@ -49,12 +58,20 @@ function BookSuccessPageContent() {
           </p>
         )}
 
-        <Link
-          href="/"
-          className="mt-8 inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
-        >
-          Return Home
-        </Link>
+        <div className="mt-8 flex flex-col gap-3">
+          <Link
+            href="/"
+            className="inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+          >
+            Return Home
+          </Link>
+          <a
+            href="mailto:support@cleanos.com"
+            className="text-sm text-[#666666] hover:text-[#1A1A1A]"
+          >
+            Need help? Contact support
+          </a>
+        </div>
       </div>
     </div>
   );
