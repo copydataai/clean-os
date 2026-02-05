@@ -136,14 +136,14 @@ function BookPageContent() {
 
     async function checkCardOnFile() {
       try {
-        const cardStatus = await getCardOnFileStatus({ bookingId });
+        const cardStatus = await getCardOnFileStatus({ bookingId: bookingId! });
         if (cardStatus.hasCard) {
           setStripeCustomerId(cardStatus.stripeCustomerId ?? null);
           setCardSummary(cardStatus.cardSummary ?? null);
           setStatus("confirm");
           return;
         }
-        await startCheckout(bookingId);
+        await startCheckout(bookingId!);
       } catch (err: any) {
         console.error("Card check error:", err);
         setError(err.message ?? "Something went wrong. Please try again.");
