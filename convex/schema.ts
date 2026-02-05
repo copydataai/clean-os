@@ -44,7 +44,11 @@ const setupIntents = defineTable({
   clientSecret: v.string(),
   status: v.string(),
   customerId: v.string(),
+  failureCode: v.optional(v.string()),
+  failureMessage: v.optional(v.string()),
+  lastStripeStatus: v.optional(v.string()),
   createdAt: v.number(),
+  updatedAt: v.optional(v.number()),
 })
   .index("by_clerk_id", ["clerkId"])
   .index("by_setup_intent_id", ["setupIntentId"]);

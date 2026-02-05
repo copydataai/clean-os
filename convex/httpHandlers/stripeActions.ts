@@ -52,14 +52,100 @@ export const handleStripeWebhook = internalAction({
           break;
         }
 
+        case "setup_intent.created": {
+          const setupIntent = evt.data.object as Stripe.SetupIntent;
+          console.log("[Stripe Webhook] SetupIntent lifecycle", {
+            eventType: evt.type,
+            setupIntentId: setupIntent.id,
+            customerId: setupIntent.customer,
+            status: setupIntent.status,
+          });
+          await ctx.runMutation(internal.cardDb.updateSetupIntentStatus, {
+            setupIntentId: setupIntent.id,
+            status: setupIntent.status,
+            lastStripeStatus: setupIntent.status,
+          });
+          break;
+        }
+
         case "setup_intent.succeeded": {
           const setupIntent = evt.data.object as Stripe.SetupIntent;
+          console.log("[Stripe Webhook] SetupIntent lifecycle", {
+            eventType: evt.type,
+            setupIntentId: setupIntent.id,
+            customerId: setupIntent.customer,
+            status: setupIntent.status,
+          });
+          await ctx.runMutation(internal.cardDb.updateSetupIntentStatus, {
+            setupIntentId: setupIntent.id,
+            status: setupIntent.status,
+            failureCode: undefined,
+            failureMessage: undefined,
+            lastStripeStatus: setupIntent.status,
+          });
           if (setupIntent.metadata?.clerkId && setupIntent.payment_method) {
             await ctx.runAction(internal.cardWebhooks.saveCardFromSetupIntent, {
               setupIntentId: setupIntent.id,
               clerkId: setupIntent.metadata.clerkId,
             });
           }
+          break;
+        }
+
+        case "setup_intent.requires_action": {
+          const setupIntent = evt.data.object as Stripe.SetupIntent;
+          console.log("[Stripe Webhook] SetupIntent lifecycle", {
+            eventType: evt.type,
+            setupIntentId: setupIntent.id,
+            customerId: setupIntent.customer,
+            status: setupIntent.status,
+          });
+          await ctx.runMutation(internal.cardDb.updateSetupIntentStatus, {
+            setupIntentId: setupIntent.id,
+            status: "requires_action",
+            lastStripeStatus: setupIntent.status,
+          });
+          break;
+        }
+
+        case "setup_intent.canceled": {
+          const setupIntent = evt.data.object as Stripe.SetupIntent;
+          console.log("[Stripe Webhook] SetupIntent lifecycle", {
+            eventType: evt.type,
+            setupIntentId: setupIntent.id,
+            customerId: setupIntent.customer,
+            status: setupIntent.status,
+          });
+          await ctx.runMutation(internal.cardDb.updateSetupIntentStatus, {
+            setupIntentId: setupIntent.id,
+            status: "canceled",
+            lastStripeStatus: setupIntent.status,
+          });
+          break;
+        }
+
+        case "setup_intent.setup_failed": {
+          const setupIntent = evt.data.object as Stripe.SetupIntent;
+          const failureCode = setupIntent.last_setup_error?.code;
+          const failureMessage =
+            setupIntent.last_setup_error?.message ?? "Card setup failed";
+
+          console.log("[Stripe Webhook] SetupIntent setup_failed", {
+            eventType: evt.type,
+            setupIntentId: setupIntent.id,
+            customerId: setupIntent.customer,
+            status: setupIntent.status,
+            failureCode,
+            failureMessage,
+          });
+
+          await ctx.runMutation(internal.cardDb.updateSetupIntentStatus, {
+            setupIntentId: setupIntent.id,
+            status: "setup_failed",
+            failureCode,
+            failureMessage,
+            lastStripeStatus: setupIntent.status,
+          });
           break;
         }
 
@@ -114,7 +200,7 @@ export const handleStripeWebhook = internalAction({
         }
 
         default:
-          console.log(`Unhandled Stripe event: ${evt.type}`);
+          console.log(`[Stripe Webhook] Ignoring unhandled event: ${evt.type}`);
       }
     } catch (err) {
       console.error(`Error processing Stripe event ${evt.type}:`, err);

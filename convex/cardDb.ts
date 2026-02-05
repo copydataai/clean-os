@@ -109,8 +109,10 @@ export const saveSetupIntentToDb = internalMutation({
       setupIntentId: args.setupIntentId,
       clientSecret: args.clientSecret,
       status: args.status,
+      lastStripeStatus: args.status,
       customerId: args.customerId,
       createdAt: Date.now(),
+      updatedAt: Date.now(),
     });
   },
 });
@@ -119,6 +121,9 @@ export const updateSetupIntentStatus = internalMutation({
   args: {
     setupIntentId: v.string(),
     status: v.string(),
+    failureCode: v.optional(v.string()),
+    failureMessage: v.optional(v.string()),
+    lastStripeStatus: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const si = await ctx.db
@@ -126,7 +131,13 @@ export const updateSetupIntentStatus = internalMutation({
       .withIndex("by_setup_intent_id", (q) => q.eq("setupIntentId", args.setupIntentId))
       .first();
     if (si) {
-      await ctx.db.patch(si._id, { status: args.status });
+      await ctx.db.patch(si._id, {
+        status: args.status,
+        failureCode: args.failureCode,
+        failureMessage: args.failureMessage,
+        lastStripeStatus: args.lastStripeStatus ?? args.status,
+        updatedAt: Date.now(),
+      });
     }
   },
 });
@@ -141,6 +152,17 @@ export const savePaymentMethodToDb = internalMutation({
     card: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("paymentMethods")
+      .withIndex("by_stripe_id", (q) =>
+        q.eq("stripePaymentMethodId", args.stripePaymentMethodId)
+      )
+      .first();
+
+    if (existing) {
+      return existing._id;
+    }
+
     return await ctx.db.insert("paymentMethods", {
       clerkId: args.clerkId,
       stripePaymentMethodId: args.stripePaymentMethodId,

@@ -7,6 +7,9 @@ import { Suspense } from "react";
 function BookCancelPageContent() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
+  const setupIntentId = searchParams.get("setup_intent");
+  const setupIntentClientSecret = searchParams.get("setup_intent_client_secret");
+  const possibleFailure = Boolean(setupIntentId || setupIntentClientSecret);
   const tallyUrl = process.env.NEXT_PUBLIC_TALLY_REQUEST_URL ?? "/";
 
   return (
@@ -20,16 +23,22 @@ function BookCancelPageContent() {
           </div>
         </div>
 
-        <h1 className="text-3xl font-medium text-foreground">Booking Incomplete</h1>
+        <h1 className="text-3xl font-medium text-foreground">
+          {possibleFailure ? "Card Setup Failed" : "Booking Incomplete"}
+        </h1>
         
         <p className="mt-4 text-lg text-muted-foreground">
-          You cancelled the payment process. Your booking hasn&apos;t been confirmed yet.
+          {possibleFailure
+            ? "We couldn&apos;t save your card. Please try again or use a different card."
+            : "You cancelled the payment process. Your booking hasn&apos;t been confirmed yet."}
         </p>
 
         <div className="mt-6 rounded-lg bg-card p-6 shadow-sm">
           <h2 className="font-medium text-foreground">Want to try again?</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            You can restart the booking process by filling out the form again. 
+            {possibleFailure
+              ? "Restart the booking flow to open a fresh secure card setup session."
+              : "You can restart the booking process by filling out the form again."}{" "}
             We won&apos;t charge your card until after the cleaning is completed.
           </p>
         </div>
