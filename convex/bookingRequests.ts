@@ -221,6 +221,16 @@ export const markLinkSent = mutation({
   },
 });
 
+export const markConfirmLinkSent = mutation({
+  args: { requestId: v.id("bookingRequests") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.requestId, {
+      confirmLinkSentAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const getById = query({
   args: { id: v.id("bookingRequests") },
   handler: async (ctx, args) => {

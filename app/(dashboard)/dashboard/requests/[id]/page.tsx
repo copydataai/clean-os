@@ -12,7 +12,7 @@ import EmptyState from "@/components/dashboard/EmptyState";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { getBookingRequestLink } from "@/lib/bookingLinks";
+import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
 
 function formatDate(timestamp?: number) {
   if (!timestamp) {
@@ -45,11 +45,13 @@ export default function RequestDetailPage() {
   );
   const createBooking = useMutation(api.bookings.createBookingFromRequest);
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
+  const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
 
   const [actionState, setActionState] = useState<"idle" | "loading" | "success" | "error">(
     "idle"
   );
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const quickSummary = useMemo(() => {
     if (!request) {
@@ -92,6 +94,9 @@ export default function RequestDetailPage() {
           <StatusBadge status={request.status} />
           {request.linkSentAt ? (
             <Badge className="bg-[#E7F5EC] text-[#1B7A3A]">link sent</Badge>
+          ) : null}
+          {request.confirmLinkSentAt ? (
+            <Badge className="bg-[#E8F0FF] text-[#2B4AA0]">confirm link sent</Badge>
           ) : null}
         </div>
       </PageHeader>
@@ -175,6 +180,46 @@ export default function RequestDetailPage() {
                   : copyState === "error"
                   ? "Copy failed"
                   : "Copy booking link"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const link = getConfirmRequestLink(request._id);
+                  if (!link) {
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                    return;
+                  }
+                  try {
+                    if (navigator?.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(link);
+                    } else {
+                      const textarea = document.createElement("textarea");
+                      textarea.value = link;
+                      textarea.setAttribute("readonly", "true");
+                      textarea.style.position = "absolute";
+                      textarea.style.left = "-9999px";
+                      document.body.appendChild(textarea);
+                      textarea.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(textarea);
+                    }
+                    await markConfirmLinkSent({ requestId: request._id });
+                    setConfirmCopyState("copied");
+                    setTimeout(() => setConfirmCopyState("idle"), 1500);
+                  } catch (error) {
+                    console.error(error);
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                  }
+                }}
+              >
+                {confirmCopyState === "copied"
+                  ? "Copied"
+                  : confirmCopyState === "error"
+                  ? "Missing confirm URL"
+                  : "Copy confirm link"}
               </Button>
               {request.bookingId ? (
                 <Link

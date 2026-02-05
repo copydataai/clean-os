@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Id } from "@/convex/_generated/dataModel";
-import { getBookingRequestLink } from "@/lib/bookingLinks";
+import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
 
 type RequestCardProps = {
   request: {
@@ -24,6 +24,7 @@ type RequestCardProps = {
     bookingId?: Id<"bookings"> | null;
     bookingStatus?: string | null;
     linkSentAt?: number | null;
+    confirmLinkSentAt?: number | null;
   };
   className?: string;
 };
@@ -38,7 +39,9 @@ function renderTag(label: string) {
 
 export default function RequestCard({ request, className }: RequestCardProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
+  const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
   const tags = [
@@ -73,6 +76,37 @@ export default function RequestCard({ request, className }: RequestCardProps) {
     }
   }
 
+  async function copyConfirmLink() {
+    const link = getConfirmRequestLink(request._id);
+    if (!link) {
+      setConfirmCopyState("error");
+      setTimeout(() => setConfirmCopyState("idle"), 2000);
+      return;
+    }
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = link;
+        textarea.setAttribute("readonly", "true");
+        textarea.style.position = "absolute";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+      await markConfirmLinkSent({ requestId: request._id });
+      setConfirmCopyState("copied");
+      setTimeout(() => setConfirmCopyState("idle"), 1500);
+    } catch (error) {
+      console.error(error);
+      setConfirmCopyState("error");
+      setTimeout(() => setConfirmCopyState("idle"), 2000);
+    }
+  }
+
   return (
     <div className={cn("rounded-2xl border border-[#E5E5E5] bg-white p-5", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -88,6 +122,9 @@ export default function RequestCard({ request, className }: RequestCardProps) {
           ) : null}
           {request.linkSentAt ? (
             <Badge className="bg-[#E7F5EC] text-[#1B7A3A]">link sent</Badge>
+          ) : null}
+          {request.confirmLinkSentAt ? (
+            <Badge className="bg-[#E8F0FF] text-[#2B4AA0]">confirm link sent</Badge>
           ) : null}
         </div>
       </div>
@@ -109,6 +146,13 @@ export default function RequestCard({ request, className }: RequestCardProps) {
               : copyState === "error"
               ? "Copy failed"
               : "Copy booking link"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={copyConfirmLink}>
+            {confirmCopyState === "copied"
+              ? "Copied"
+              : confirmCopyState === "error"
+              ? "Missing confirm URL"
+              : "Copy confirm link"}
           </Button>
           <Link
             href={`/dashboard/requests/${request._id}`}
