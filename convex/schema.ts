@@ -112,6 +112,7 @@ const bookingRequests = defineTable({
   rawRequestPayload: v.optional(v.any()),
   rawConfirmationPayload: v.optional(v.any()),
   bookingId: v.optional(v.id("bookings")),
+  linkSentAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   confirmedAt: v.optional(v.number()),

@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
@@ -206,6 +206,16 @@ export const linkQuoteRequestToRequest = internalMutation({
   handler: async (ctx, args) => {
     await ctx.db.patch(args.requestId, {
       quoteRequestId: args.quoteRequestId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const markLinkSent = mutation({
+  args: { requestId: v.id("bookingRequests") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.requestId, {
+      linkSentAt: Date.now(),
       updatedAt: Date.now(),
     });
   },

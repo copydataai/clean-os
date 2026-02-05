@@ -11,6 +11,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import EmptyState from "@/components/dashboard/EmptyState";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { getBookingRequestLink } from "@/lib/bookingLinks";
 
 function formatDate(timestamp?: number) {
   if (!timestamp) {
@@ -42,10 +44,12 @@ export default function RequestDetailPage() {
     request?.quoteRequestId ? { id: request.quoteRequestId } : "skip"
   );
   const createBooking = useMutation(api.bookings.createBookingFromRequest);
+  const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
 
   const [actionState, setActionState] = useState<"idle" | "loading" | "success" | "error">(
     "idle"
   );
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const quickSummary = useMemo(() => {
     if (!request) {
@@ -84,7 +88,12 @@ export default function RequestDetailPage() {
         title={request.contactDetails ?? "Booking Request"}
         subtitle={`Submitted ${formatDate(request.createdAt)}`}
       >
-        <StatusBadge status={request.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={request.status} />
+          {request.linkSentAt ? (
+            <Badge className="bg-[#E7F5EC] text-[#1B7A3A]">link sent</Badge>
+          ) : null}
+        </div>
       </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -132,6 +141,41 @@ export default function RequestDetailPage() {
           <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
             <h2 className="text-lg font-semibold text-[#1A1A1A]">Actions</h2>
             <div className="mt-4 space-y-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={async () => {
+                  const link = getBookingRequestLink(request._id);
+                  try {
+                    if (navigator?.clipboard?.writeText) {
+                      await navigator.clipboard.writeText(link);
+                    } else {
+                      const textarea = document.createElement("textarea");
+                      textarea.value = link;
+                      textarea.setAttribute("readonly", "true");
+                      textarea.style.position = "absolute";
+                      textarea.style.left = "-9999px";
+                      document.body.appendChild(textarea);
+                      textarea.select();
+                      document.execCommand("copy");
+                      document.body.removeChild(textarea);
+                    }
+                    await markLinkSent({ requestId: request._id });
+                    setCopyState("copied");
+                    setTimeout(() => setCopyState("idle"), 1500);
+                  } catch (error) {
+                    console.error(error);
+                    setCopyState("error");
+                    setTimeout(() => setCopyState("idle"), 2000);
+                  }
+                }}
+              >
+                {copyState === "copied"
+                  ? "Copied"
+                  : copyState === "error"
+                  ? "Copy failed"
+                  : "Copy booking link"}
+              </Button>
               {request.bookingId ? (
                 <Link
                   href={`/dashboard/bookings?bookingId=${request.bookingId}`}
