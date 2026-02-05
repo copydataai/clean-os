@@ -22,20 +22,20 @@ export default function CustomerPaymentInfo({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[#666666]">Total Spent</span>
-        <span className="text-sm font-medium text-[#1A1A1A]">
+        <span className="text-sm text-muted-foreground">Total Spent</span>
+        <span className="text-sm font-medium text-foreground">
           {formatCurrency(totalSpent)}
         </span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[#666666]">Total Bookings</span>
-        <span className="text-sm font-medium text-[#1A1A1A]">
+        <span className="text-sm text-muted-foreground">Total Bookings</span>
+        <span className="text-sm font-medium text-foreground">
           {totalBookings ?? 0}
         </span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-[#666666]">Stripe ID</span>
-        <span className="text-sm font-medium text-[#1A1A1A]">
+        <span className="text-sm text-muted-foreground">Stripe ID</span>
+        <span className="text-sm font-medium text-foreground">
           {stripeCustomerId ? (
             <span className="font-mono text-xs">{stripeCustomerId.slice(0, 16)}...</span>
           ) : (

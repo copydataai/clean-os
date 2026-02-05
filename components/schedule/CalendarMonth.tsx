@@ -60,7 +60,7 @@ export default function CalendarMonth({
   }
 
   return (
-    <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
+    <div className="surface-card p-4">
       {/* Header with month navigation */}
       <div className="flex items-center justify-between mb-4">
         <Button
@@ -72,7 +72,7 @@ export default function CalendarMonth({
           <HugeiconsIcon icon={ArrowLeftIcon} strokeWidth={2} className="h-4 w-4" />
         </Button>
 
-        <h2 className="text-lg font-semibold text-[#1A1A1A]">
+        <h2 className="text-lg font-semibold text-foreground">
           {format(currentMonth, "MMMM yyyy")}
         </h2>
 
@@ -91,7 +91,7 @@ export default function CalendarMonth({
         {WEEKDAY_LABELS.map((label) => (
           <div
             key={label}
-            className="text-center text-xs font-medium text-[#999999] py-1"
+            className="text-center text-xs font-medium text-muted-foreground py-1"
           >
             {label}
           </div>
@@ -122,18 +122,18 @@ export default function CalendarMonth({
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-[#E5E5E5]">
+      <div className="flex flex-wrap items-center gap-4 mt-4 pt-4 border-t border-border">
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-blue-500" />
-          <span className="text-xs text-[#666666]">Scheduled</span>
+          <span className="text-xs text-muted-foreground">Scheduled</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-green-500" />
-          <span className="text-xs text-[#666666]">Completed</span>
+          <span className="text-xs text-muted-foreground">Completed</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-amber-500" />
-          <span className="text-xs text-[#666666]">Pending</span>
+          <span className="text-xs text-muted-foreground">Pending</span>
         </div>
       </div>
     </div>

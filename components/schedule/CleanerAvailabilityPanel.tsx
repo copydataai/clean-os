@@ -53,17 +53,17 @@ export default function CleanerAvailabilityPanel({
 
   if (!availableCleaners) {
     return (
-      <div className="text-sm text-[#666666]">Loading availability...</div>
+      <div className="text-sm text-muted-foreground">Loading availability...</div>
     );
   }
 
   if (availableCleaners.length === 0) {
     return (
-      <div className="rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-4 text-center">
-        <p className="text-sm text-[#666666]">
+      <div className="rounded-lg border border-border bg-background p-4 text-center">
+        <p className="text-sm text-muted-foreground">
           No cleaners available on this date
         </p>
-        <p className="text-xs text-[#999999] mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           Check cleaner availability settings or time off requests
         </p>
       </div>
@@ -75,23 +75,23 @@ export default function CleanerAvailabilityPanel({
       {availableCleaners.map(({ cleaner, availability, assignmentCount }: AvailableCleaner) => (
         <div
           key={cleaner._id}
-          className="flex items-center justify-between gap-3 rounded-lg border border-[#E5E5E5] bg-white p-3"
+          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
         >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#1A1A1A] text-xs font-medium text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-white">
               {cleaner.firstName.charAt(0)}
               {cleaner.lastName.charAt(0)}
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-medium text-[#1A1A1A] truncate">
+              <p className="text-sm font-medium text-foreground truncate">
                 {cleaner.firstName} {cleaner.lastName}
               </p>
-              <div className="flex items-center gap-2 text-xs text-[#666666]">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>
                   {availability.startTime} - {availability.endTime}
                 </span>
                 {assignmentCount > 0 && (
-                  <span className="text-[#999999]">
+                  <span className="text-muted-foreground">
                     ({assignmentCount} job{assignmentCount !== 1 ? "s" : ""})
                   </span>
                 )}

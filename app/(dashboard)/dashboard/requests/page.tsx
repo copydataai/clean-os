@@ -50,7 +50,7 @@ export default function RequestsPage() {
         </Button>
       </PageHeader>
 
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
+      <div className="surface-card p-4">
         <QuickFilters
           options={[
             {
@@ -88,9 +88,9 @@ export default function RequestsPage() {
       </div>
 
       {!requests ? (
-        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-          <p className="mt-4 text-sm text-[#666666]">Loading requests...</p>
+        <div className="surface-card p-8 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading requests...</p>
         </div>
       ) : filteredRequests.length === 0 ? (
         <EmptyState

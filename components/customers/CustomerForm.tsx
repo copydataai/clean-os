@@ -161,7 +161,7 @@ export default function CustomerForm({
       {error ? <FieldError>{error}</FieldError> : null}
 
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-[#1A1A1A]">
+        <h3 className="text-sm font-semibold text-foreground">
           Basic Information
         </h3>
         <FieldGroup>
@@ -226,7 +226,7 @@ export default function CustomerForm({
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-[#1A1A1A]">Status</h3>
+        <h3 className="text-sm font-semibold text-foreground">Status</h3>
         <FieldGroup>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field>
@@ -264,7 +264,7 @@ export default function CustomerForm({
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-[#1A1A1A]">Property</h3>
+        <h3 className="text-sm font-semibold text-foreground">Property</h3>
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="street">Street Address</FieldLabel>
@@ -328,7 +328,7 @@ export default function CustomerForm({
 
       {mode === "edit" ? (
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-[#1A1A1A]">Notes</h3>
+          <h3 className="text-sm font-semibold text-foreground">Notes</h3>
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="notes">Customer Notes</FieldLabel>

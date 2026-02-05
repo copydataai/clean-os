@@ -11,7 +11,7 @@ export default function NewCustomerPage() {
         subtitle="Add a new customer to your database."
       />
 
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+      <div className="surface-card p-6">
         <CustomerForm mode="create" />
       </div>
     </div>

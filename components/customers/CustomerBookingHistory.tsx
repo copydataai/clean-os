@@ -47,7 +47,7 @@ export default function CustomerBookingHistory({
 
   if (displayBookings.length === 0) {
     return (
-      <p className="text-sm text-[#666666]">No booking history yet.</p>
+      <p className="text-sm text-muted-foreground">No booking history yet.</p>
     );
   }
 
@@ -56,11 +56,11 @@ export default function CustomerBookingHistory({
       {displayBookings.map((booking) => (
         <div
           key={booking._id}
-          className="flex items-center justify-between rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3"
+          className="flex items-center justify-between rounded-lg border border-border bg-background p-3"
         >
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-[#1A1A1A]">
+              <span className="text-sm font-medium text-foreground">
                 {booking.serviceType ?? "Cleaning"}
               </span>
               <Badge
@@ -71,17 +71,17 @@ export default function CustomerBookingHistory({
                 {booking.status.replace(/_/g, " ")}
               </Badge>
             </div>
-            <p className="text-xs text-[#666666]">
+            <p className="text-xs text-muted-foreground">
               {formatDate(booking.serviceDate)}
             </p>
           </div>
-          <span className="text-sm font-medium text-[#1A1A1A]">
+          <span className="text-sm font-medium text-foreground">
             {formatCurrency(booking.amount)}
           </span>
         </div>
       ))}
       {limit && bookings.length > limit && (
-        <p className="text-xs text-[#999999]">
+        <p className="text-xs text-muted-foreground">
           + {bookings.length - limit} more bookings
         </p>
       )}

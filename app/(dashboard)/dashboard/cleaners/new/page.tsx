@@ -11,7 +11,7 @@ export default function NewCleanerPage() {
         subtitle="Add a new cleaner or contractor to your team."
       />
 
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+      <div className="surface-card p-6">
         <CleanerForm mode="create" />
       </div>
     </div>

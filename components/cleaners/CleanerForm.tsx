@@ -101,7 +101,7 @@ export default function CleanerForm({
           status,
           employmentType,
         });
-        router.push("/cleaners");
+        router.push("/dashboard/cleaners");
       } else if (initialData) {
         await updateCleaner({
           cleanerId: initialData._id,
@@ -138,7 +138,7 @@ export default function CleanerForm({
       {error ? <FieldError>{error}</FieldError> : null}
 
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-[#1A1A1A]">
+        <h3 className="text-sm font-semibold text-foreground">
           Basic Information
         </h3>
         <FieldGroup>
@@ -191,7 +191,7 @@ export default function CleanerForm({
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-[#1A1A1A]">Employment</h3>
+        <h3 className="text-sm font-semibold text-foreground">Employment</h3>
         <FieldGroup>
           <div className="grid gap-4 sm:grid-cols-3">
             <Field>
@@ -240,7 +240,7 @@ export default function CleanerForm({
       {mode === "edit" ? (
         <>
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-[#1A1A1A]">Address</h3>
+            <h3 className="text-sm font-semibold text-foreground">Address</h3>
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="street">Street</FieldLabel>
@@ -284,7 +284,7 @@ export default function CleanerForm({
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-[#1A1A1A]">Additional</h3>
+            <h3 className="text-sm font-semibold text-foreground">Additional</h3>
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="bio">Bio</FieldLabel>

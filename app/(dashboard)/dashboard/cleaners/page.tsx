@@ -35,12 +35,12 @@ export default function CleanersPage() {
         title="Cleaners"
         subtitle="Manage your cleaning staff and contractors."
       >
-        <Link href="/cleaners/new">
+        <Link href="/dashboard/cleaners/new">
           <Button size="sm">Add Cleaner</Button>
         </Link>
       </PageHeader>
 
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-4">
+      <div className="surface-card p-4">
         <QuickFilters
           options={[
             {
@@ -78,9 +78,9 @@ export default function CleanersPage() {
       </div>
 
       {!cleaners ? (
-        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-          <p className="mt-4 text-sm text-[#666666]">Loading cleaners...</p>
+        <div className="surface-card p-8 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading cleaners...</p>
         </div>
       ) : filteredCleaners.length === 0 ? (
         <EmptyState
@@ -94,7 +94,7 @@ export default function CleanersPage() {
               >
                 Reset filters
               </Button>
-              <Link href="/cleaners/new">
+              <Link href="/dashboard/cleaners/new">
                 <Button>Add Cleaner</Button>
               </Link>
             </div>

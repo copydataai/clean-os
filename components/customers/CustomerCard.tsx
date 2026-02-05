@@ -42,24 +42,24 @@ export default function CustomerCard({ customer, className }: CustomerCardProps)
   return (
     <div
       className={cn(
-        "rounded-2xl border border-[#E5E5E5] bg-white p-5",
+        "surface-card p-5",
         className
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1A1A1A] text-sm font-medium text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-medium text-white">
             {initials}
           </div>
           <div>
-            <p className="text-lg font-medium text-[#1A1A1A]">{fullName}</p>
-            <p className="text-sm text-[#666666]">{customer.email}</p>
+            <p className="text-lg font-medium text-foreground">{fullName}</p>
+            <p className="text-sm text-muted-foreground">{customer.email}</p>
           </div>
         </div>
         <CustomerStatusBadge status={customer.status} />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#666666]">
+      <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
         <span>Bookings: {customer.totalBookings ?? 0}</span>
         <span>Spent: {formatCurrency(customer.totalSpent)}</span>
         {customer.lastBookingDate ? (
@@ -69,10 +69,10 @@ export default function CustomerCard({ customer, className }: CustomerCardProps)
       </div>
 
       <div className="mt-5 flex items-center justify-between">
-        <p className="text-xs text-[#999999]">ID: {customer._id}</p>
+        <p className="text-xs text-muted-foreground">ID: {customer._id}</p>
         <Link
           href={`/dashboard/customers/${customer._id}`}
-          className="text-sm font-medium text-[#1A1A1A] underline-offset-4 hover:underline"
+          className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
         >
           View
         </Link>

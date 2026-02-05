@@ -44,26 +44,26 @@ function BookingCard({
   });
 
   return (
-    <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+    <div className="surface-card p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-lg font-semibold text-[#1A1A1A]">
+          <p className="text-lg font-semibold text-foreground">
             {booking.customerName ?? booking.email}
           </p>
-          <p className="text-sm text-[#666666]">{booking.email}</p>
-          <p className="mt-1 text-xs text-[#999999]">
+          <p className="text-sm text-muted-foreground">{booking.email}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
             Booking ID: {booking._id}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <StatusBadge status={booking.status} />
-          <span className="text-sm font-semibold text-[#1A1A1A]">
+          <span className="text-sm font-semibold text-foreground">
             {formatCurrency(booking.amount)}
           </span>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#666666]">
+      <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
         <span>Service date: {booking.serviceDate ?? "TBD"}</span>
         <span>Service type: {booking.serviceType ?? "Standard"}</span>
       </div>
@@ -71,32 +71,32 @@ function BookingCard({
       {/* Assigned Cleaners */}
       {assignments && assignments.length > 0 ? (
         <div className="mt-4">
-          <p className="text-xs uppercase text-[#999999] mb-2">
+          <p className="text-xs uppercase text-muted-foreground mb-2">
             Assigned Cleaners
           </p>
           <div className="flex flex-wrap gap-2">
             {assignments.map((assignment) => (
               <div
                 key={assignment._id}
-                className="flex items-center gap-2 rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-1.5"
+                className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5"
               >
                 {assignment.cleaner ? (
                   <>
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1A1A1A] text-[10px] font-medium text-white">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-white">
                       {assignment.cleaner.firstName.charAt(0)}
                       {assignment.cleaner.lastName.charAt(0)}
                     </div>
-                    <span className="text-sm text-[#1A1A1A]">
+                    <span className="text-sm text-foreground">
                       {assignment.cleaner.firstName}{" "}
                       {assignment.cleaner.lastName}
                     </span>
                   </>
                 ) : assignment.crew ? (
-                  <span className="text-sm text-[#1A1A1A]">
+                  <span className="text-sm text-foreground">
                     {assignment.crew.name}
                   </span>
                 ) : null}
-                <Badge className="bg-[#F5F5F5] text-[#555555] text-xs">
+                <Badge className="bg-muted text-muted-foreground text-xs">
                   {assignment.role}
                 </Badge>
               </div>
@@ -139,9 +139,9 @@ export default function BookingsPage() {
 
   if (!bookings) {
     return (
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-        <p className="mt-4 text-sm text-[#666666]">Loading bookings...</p>
+      <div className="surface-card p-8 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading bookings...</p>
       </div>
     );
   }

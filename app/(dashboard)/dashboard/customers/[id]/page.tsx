@@ -107,9 +107,9 @@ export default function CustomerDetailPage() {
 
   if (!customer) {
     return (
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-        <p className="mt-4 text-sm text-[#666666]">Loading customer...</p>
+      <div className="surface-card p-8 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading customer...</p>
       </div>
     );
   }
@@ -129,32 +129,32 @@ export default function CustomerDetailPage() {
         {/* LEFT COLUMN */}
         <div className="space-y-4 lg:col-span-2">
           {/* Profile Overview */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
               Profile Overview
             </h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Email</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Email</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {customer.email}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Phone</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Phone</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {customer.phone ?? "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Source</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Source</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {customer.source?.replace(/_/g, " ") ?? "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Square Footage</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Square Footage</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {customer.squareFootage
                     ? `${customer.squareFootage.toLocaleString()} sq ft`
                     : "—"}
@@ -166,8 +166,8 @@ export default function CustomerDetailPage() {
             customer.address?.city ||
             customer.address?.state ? (
               <div className="mt-4">
-                <h3 className="text-sm font-semibold text-[#1A1A1A]">Address</h3>
-                <p className="mt-2 text-sm text-[#666666]">
+                <h3 className="text-sm font-semibold text-foreground">Address</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
                   {[
                     customer.address?.street,
                     customer.address?.addressLine2,
@@ -183,15 +183,15 @@ export default function CustomerDetailPage() {
 
             {customer.notes ? (
               <div className="mt-4">
-                <h3 className="text-sm font-semibold text-[#1A1A1A]">Notes</h3>
-                <p className="mt-2 text-sm text-[#666666]">{customer.notes}</p>
+                <h3 className="text-sm font-semibold text-foreground">Notes</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{customer.notes}</p>
               </div>
             ) : null}
           </div>
 
           {/* Booking History */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
               Booking History
             </h2>
             <div className="mt-4">
@@ -203,8 +203,8 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* Quote History */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
               Quote Requests
             </h2>
             <div className="mt-4">
@@ -219,8 +219,8 @@ export default function CustomerDetailPage() {
         {/* RIGHT COLUMN */}
         <div className="space-y-4">
           {/* Actions */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Actions</h2>
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Actions</h2>
             <div className="mt-4 space-y-3">
               <Button
                 variant="outline"
@@ -245,8 +245,8 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* Stats */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Stats</h2>
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Stats</h2>
             <div className="mt-4">
               <CustomerPaymentInfo
                 stripeCustomerId={customer.stripeCustomerId}
@@ -257,9 +257,9 @@ export default function CustomerDetailPage() {
           </div>
 
           {/* Internal Notes */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+          <div className="surface-card p-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-[#1A1A1A]">
+              <h2 className="text-lg font-semibold text-foreground">
                 Internal Notes
               </h2>
               <Button
@@ -275,9 +275,9 @@ export default function CustomerDetailPage() {
             </div>
             <div className="mt-4">
               {customer.internalNotes ? (
-                <p className="text-sm text-[#666666]">{customer.internalNotes}</p>
+                <p className="text-sm text-muted-foreground">{customer.internalNotes}</p>
               ) : (
-                <p className="text-sm text-[#999999]">No internal notes.</p>
+                <p className="text-sm text-muted-foreground">No internal notes.</p>
               )}
             </div>
           </div>
@@ -314,7 +314,7 @@ export default function CustomerDetailPage() {
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">
+              <label className="text-sm font-medium text-foreground">
                 New Status
               </label>
               <Select value={newStatus} onValueChange={(v) => v && setNewStatus(v)}>

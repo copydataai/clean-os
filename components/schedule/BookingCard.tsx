@@ -26,7 +26,7 @@ export default function BookingCard({ booking, compact = false }: BookingCardPro
   return (
     <div
       className={cn(
-        "rounded-xl border border-[#E5E5E5] bg-white transition-colors hover:border-[#CCCCCC]",
+        "rounded-xl border border-border bg-card transition-colors hover:border-border/90",
         compact ? "p-3" : "p-4"
       )}
     >
@@ -34,14 +34,14 @@ export default function BookingCard({ booking, compact = false }: BookingCardPro
         <div className="min-w-0 flex-1">
           <p
             className={cn(
-              "font-medium text-[#1A1A1A] truncate",
+              "font-medium text-foreground truncate",
               compact ? "text-sm" : "text-base"
             )}
           >
             {booking.customerName ?? booking.email}
           </p>
           {!compact && (
-            <p className="text-xs text-[#666666] truncate mt-0.5">
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
               {booking.email}
             </p>
           )}
@@ -51,12 +51,12 @@ export default function BookingCard({ booking, compact = false }: BookingCardPro
 
       <div
         className={cn(
-          "flex flex-wrap items-center gap-x-3 gap-y-1 text-[#666666]",
+          "flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground",
           compact ? "mt-2 text-xs" : "mt-3 text-sm"
         )}
       >
         {booking.serviceType && <span>{booking.serviceType}</span>}
-        <span className="font-medium text-[#1A1A1A]">
+        <span className="font-medium text-foreground">
           {formatCurrency(booking.amount)}
         </span>
       </div>

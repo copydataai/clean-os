@@ -60,7 +60,7 @@ export default function ScheduleCalendar() {
           onFiltersChange={handleFiltersChange}
         />
         {bookings && (
-          <p className="text-sm text-[#666666]">
+          <p className="text-sm text-muted-foreground">
             {bookings.length} booking{bookings.length !== 1 ? "s" : ""} in view
           </p>
         )}
@@ -68,9 +68,9 @@ export default function ScheduleCalendar() {
 
       {/* Loading state */}
       {!bookings && (
-        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-          <p className="mt-4 text-sm text-[#666666]">Loading schedule...</p>
+        <div className="surface-card p-8 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+          <p className="mt-4 text-sm text-muted-foreground">Loading schedule...</p>
         </div>
       )}
 

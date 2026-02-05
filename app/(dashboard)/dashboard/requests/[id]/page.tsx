@@ -77,9 +77,9 @@ export default function RequestDetailPage() {
 
   if (!request) {
     return (
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-        <p className="mt-4 text-sm text-[#666666]">Loading request...</p>
+      <div className="surface-card p-8 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading request...</p>
       </div>
     );
   }
@@ -93,49 +93,49 @@ export default function RequestDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={request.status} />
           {request.linkSentAt ? (
-            <Badge className="bg-[#E7F5EC] text-[#1B7A3A]">link sent</Badge>
+            <Badge className="bg-emerald-100 text-emerald-700">link sent</Badge>
           ) : null}
           {request.confirmLinkSentAt ? (
-            <Badge className="bg-[#E8F0FF] text-[#2B4AA0]">confirm link sent</Badge>
+            <Badge className="bg-sky-100 text-sky-700">confirm link sent</Badge>
           ) : null}
         </div>
       </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6 lg:col-span-2">
-          <h2 className="text-lg font-semibold text-[#1A1A1A]">Request Overview</h2>
+        <div className="surface-card p-6 lg:col-span-2">
+          <h2 className="text-lg font-semibold text-foreground">Request Overview</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {quickSummary?.map((item) => (
-              <div key={item.label} className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">{item.label}</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">{item.value}</p>
+              <div key={item.label} className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">{item.label}</p>
+                <p className="mt-2 text-sm font-medium text-foreground">{item.value}</p>
               </div>
             ))}
           </div>
 
           <div className="mt-6 space-y-4">
             <div>
-              <h3 className="text-sm font-semibold text-[#1A1A1A]">Access & Instructions</h3>
-              <p className="mt-2 text-sm text-[#666666]">{request.accessInstructions ?? "—"}</p>
-              <p className="mt-2 text-sm text-[#666666]">Parking: {request.parkingInstructions ?? "—"}</p>
+              <h3 className="text-sm font-semibold text-foreground">Access & Instructions</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{request.accessInstructions ?? "—"}</p>
+              <p className="mt-2 text-sm text-muted-foreground">Parking: {request.parkingInstructions ?? "—"}</p>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[#1A1A1A]">Home Details</h3>
-              <p className="mt-2 text-sm text-[#666666]">Finished basement: {request.finishedBasement ?? "—"}</p>
-              <p className="mt-2 text-sm text-[#666666]">Delicate surfaces: {request.delicateSurfaces ?? "—"}</p>
+              <h3 className="text-sm font-semibold text-foreground">Home Details</h3>
+              <p className="mt-2 text-sm text-muted-foreground">Finished basement: {request.finishedBasement ?? "—"}</p>
+              <p className="mt-2 text-sm text-muted-foreground">Delicate surfaces: {request.delicateSurfaces ?? "—"}</p>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[#1A1A1A]">Scheduling Preferences</h3>
-              <p className="mt-2 text-sm text-[#666666]">
+              <h3 className="text-sm font-semibold text-foreground">Scheduling Preferences</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
                 Time windows: {renderList(request.scheduleAdjustmentWindows)}
               </p>
-              <p className="mt-2 text-sm text-[#666666]">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Open to shifts: {request.timingShiftOk ?? "—"}
               </p>
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-[#1A1A1A]">Notes</h3>
-              <p className="mt-2 text-sm text-[#666666]">
+              <h3 className="text-sm font-semibold text-foreground">Notes</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
                 {request.additionalNotes ?? request.attentionAreas ?? "—"}
               </p>
             </div>
@@ -143,8 +143,8 @@ export default function RequestDetailPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Actions</h2>
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Actions</h2>
             <div className="mt-4 space-y-3">
               <Button
                 size="sm"
@@ -256,10 +256,10 @@ export default function RequestDetailPage() {
           </div>
 
           {request.quoteRequestId ? (
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <h2 className="text-lg font-semibold text-[#1A1A1A]">Linked Quote</h2>
+            <div className="surface-card p-6">
+              <h2 className="text-lg font-semibold text-foreground">Linked Quote</h2>
               {quote ? (
-                <div className="mt-4 space-y-2 text-sm text-[#666666]">
+                <div className="mt-4 space-y-2 text-sm text-muted-foreground">
                   <p>
                     Name:{" "}
                     {quote.firstName || quote.lastName
@@ -272,34 +272,34 @@ export default function RequestDetailPage() {
                   <p>Address: {quote.address ?? "—"} {quote.addressLine2 ?? ""}</p>
                 </div>
               ) : (
-                <p className="mt-3 text-sm text-[#666666]">Loading quote...</p>
+                <p className="mt-3 text-sm text-muted-foreground">Loading quote...</p>
               )}
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Booking Status</h2>
-            <div className="mt-4 space-y-2 text-sm text-[#666666]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Booking Status</h2>
+            <div className="mt-4 space-y-2 text-sm text-muted-foreground">
               <p>Status: {booking?.status ?? "Not created"}</p>
               <p>Amount: {booking?.amount ? `$${(booking.amount / 100).toLocaleString()}` : "—"}</p>
               <p>Service date: {booking?.serviceDate ?? "—"}</p>
             </div>
           </div>
 
-          <details className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <summary className="cursor-pointer text-sm font-semibold text-[#1A1A1A]">
+          <details className="surface-card p-6">
+            <summary className="cursor-pointer text-sm font-semibold text-foreground">
               Raw payloads
             </summary>
-            <div className="mt-4 space-y-4 text-xs text-[#666666]">
+            <div className="mt-4 space-y-4 text-xs text-muted-foreground">
               <div>
-                <p className="font-medium text-[#1A1A1A]">Request payload</p>
-                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-[#F5F5F5] p-3">
+                <p className="font-medium text-foreground">Request payload</p>
+                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-muted p-3">
                   {JSON.stringify(request.rawRequestPayload ?? {}, null, 2)}
                 </pre>
               </div>
               <div>
-                <p className="font-medium text-[#1A1A1A]">Confirmation payload</p>
-                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-[#F5F5F5] p-3">
+                <p className="font-medium text-foreground">Confirmation payload</p>
+                <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-muted p-3">
                   {JSON.stringify(request.rawConfirmationPayload ?? {}, null, 2)}
                 </pre>
               </div>

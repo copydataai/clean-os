@@ -17,16 +17,21 @@ export default function PageHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between",
+        "flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between",
         className
       )}
     >
       <div>
-        <h1 className="text-3xl font-medium tracking-tight text-[#1A1A1A]">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Dashboard
+        </p>
+        <h1 className="mt-1 text-3xl font-semibold text-foreground sm:text-4xl">
           {title}
         </h1>
         {subtitle ? (
-          <p className="mt-1 text-sm text-[#666666]">{subtitle}</p>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+            {subtitle}
+          </p>
         ) : null}
       </div>
       {children ? <div className="flex items-center gap-2">{children}</div> : null}

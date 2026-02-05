@@ -51,10 +51,10 @@ export default function CalendarDayCell({
       onClick={onClick}
       className={cn(
         "relative flex flex-col items-center justify-start p-1 min-h-[72px] w-full rounded-lg transition-colors",
-        "hover:bg-[#F0F0F0] focus:outline-none focus:ring-2 focus:ring-[#1A1A1A] focus:ring-offset-1",
+        "hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-1",
         isOutsideMonth && "opacity-40",
-        isToday && !isSelected && "bg-[#FAFAFA]",
-        isSelected && "bg-[#1A1A1A] text-white hover:bg-[#333333]"
+        isToday && !isSelected && "bg-background",
+        isSelected && "bg-primary text-white hover:bg-primary/90"
       )}
     >
       <span
@@ -83,7 +83,7 @@ export default function CalendarDayCell({
             <span
               className={cn(
                 "text-[10px] leading-none",
-                isSelected ? "text-white/80" : "text-[#666666]"
+                isSelected ? "text-white/80" : "text-muted-foreground"
               )}
             >
               +{extraCount}

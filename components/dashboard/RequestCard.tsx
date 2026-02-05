@@ -34,7 +34,7 @@ function formatDate(timestamp: number) {
 }
 
 function renderTag(label: string) {
-  return <Badge className="bg-[#F5F5F5] text-[#555555]">{label}</Badge>;
+  return <Badge className="bg-muted text-muted-foreground">{label}</Badge>;
 }
 
 export default function RequestCard({ request, className }: RequestCardProps) {
@@ -108,12 +108,12 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   }
 
   return (
-    <div className={cn("rounded-2xl border border-[#E5E5E5] bg-white p-5", className)}>
+    <div className={cn("surface-card p-5", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-lg font-medium text-[#1A1A1A]">{name}</p>
-          <p className="text-sm text-[#666666]">{email}</p>
-          <p className="mt-1 text-xs text-[#999999]">{formatDate(request.createdAt)}</p>
+          <p className="text-lg font-medium text-foreground">{name}</p>
+          <p className="text-sm text-muted-foreground">{email}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{formatDate(request.createdAt)}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={request.status} />
@@ -121,10 +121,10 @@ export default function RequestCard({ request, className }: RequestCardProps) {
             <StatusBadge status={request.bookingStatus ?? "booking_created"} label="booking linked" />
           ) : null}
           {request.linkSentAt ? (
-            <Badge className="bg-[#E7F5EC] text-[#1B7A3A]">link sent</Badge>
+            <Badge className="bg-emerald-100 text-emerald-700">link sent</Badge>
           ) : null}
           {request.confirmLinkSentAt ? (
-            <Badge className="bg-[#E8F0FF] text-[#2B4AA0]">confirm link sent</Badge>
+            <Badge className="bg-sky-100 text-sky-700">confirm link sent</Badge>
           ) : null}
         </div>
       </div>
@@ -138,7 +138,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
       ) : null}
 
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-[#999999]">Request ID: {request._id}</p>
+        <p className="text-xs text-muted-foreground">Request ID: {request._id}</p>
         <div className="flex flex-wrap items-center gap-3">
           <Button size="sm" variant="outline" onClick={copyBookingLink}>
             {copyState === "copied"
@@ -156,7 +156,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
           </Button>
           <Link
             href={`/dashboard/requests/${request._id}`}
-            className="text-sm font-medium text-[#1A1A1A] underline-offset-4 hover:underline"
+            className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
           >
             View
           </Link>

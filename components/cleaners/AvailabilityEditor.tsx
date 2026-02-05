@@ -103,18 +103,18 @@ export default function AvailabilityEditor({
                   "rounded-lg border p-3 text-center min-h-[100px] flex flex-col justify-center",
                   isAvailable
                     ? "border-green-200 bg-green-50"
-                    : "border-dashed border-[#E5E5E5] bg-[#FAFAFA]"
+                    : "border-dashed border-border bg-background"
                 )}
               >
-                <p className="text-xs font-medium text-[#666666]">{day}</p>
+                <p className="text-xs font-medium text-muted-foreground">{day}</p>
                 {isAvailable ? (
                   <div className="mt-1">
-                    <p className="text-xs text-[#1A1A1A]">{slot.startTime}</p>
-                    <p className="text-xs text-[#999999]">to</p>
-                    <p className="text-xs text-[#1A1A1A]">{slot.endTime}</p>
+                    <p className="text-xs text-foreground">{slot.startTime}</p>
+                    <p className="text-xs text-muted-foreground">to</p>
+                    <p className="text-xs text-foreground">{slot.endTime}</p>
                   </div>
                 ) : (
-                  <p className="mt-1 text-xs text-[#999999]">Off</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Off</p>
                 )}
               </div>
               <div className="flex gap-1">
@@ -145,13 +145,13 @@ export default function AvailabilityEditor({
       </div>
 
       {editingDay !== null ? (
-        <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-          <p className="text-sm font-medium text-[#1A1A1A] mb-3">
+        <div className="surface-soft p-4">
+          <p className="text-sm font-medium text-foreground mb-3">
             Set availability for {DAYS[editingDay]}
           </p>
           <div className="flex flex-wrap items-end gap-3">
             <div>
-              <label className="text-xs text-[#666666]">Start</label>
+              <label className="text-xs text-muted-foreground">Start</label>
               <Input
                 type="time"
                 value={startTime}
@@ -160,7 +160,7 @@ export default function AvailabilityEditor({
               />
             </div>
             <div>
-              <label className="text-xs text-[#666666]">End</label>
+              <label className="text-xs text-muted-foreground">End</label>
               <Input
                 type="time"
                 value={endTime}

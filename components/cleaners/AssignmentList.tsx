@@ -32,8 +32,8 @@ const statusStyles: Record<string, string> = {
 };
 
 const roleStyles: Record<string, string> = {
-  primary: "bg-[#1A1A1A] text-white",
-  secondary: "bg-[#F5F5F5] text-[#555555]",
+  primary: "bg-primary text-white",
+  secondary: "bg-muted text-muted-foreground",
   trainee: "bg-blue-50 text-blue-600",
 };
 
@@ -62,7 +62,7 @@ export default function AssignmentList({
 
   if (displayAssignments.length === 0) {
     return (
-      <div className={cn("text-sm text-[#666666]", className)}>
+      <div className={cn("text-sm text-muted-foreground", className)}>
         No assignments yet
       </div>
     );
@@ -73,18 +73,18 @@ export default function AssignmentList({
       {displayAssignments.map((assignment) => (
         <div
           key={assignment._id}
-          className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3"
+          className="surface-soft p-3"
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-[#1A1A1A]">
+              <p className="text-sm font-medium text-foreground">
                 Booking {assignment.bookingId.slice(-6)}
               </p>
-              <p className="text-xs text-[#666666]">
+              <p className="text-xs text-muted-foreground">
                 Assigned: {formatDate(assignment.assignedAt)}
               </p>
               {assignment.actualDurationMinutes ? (
-                <p className="text-xs text-[#999999]">
+                <p className="text-xs text-muted-foreground">
                   Duration: {formatDuration(assignment.actualDurationMinutes)}
                 </p>
               ) : null}
@@ -109,7 +109,7 @@ export default function AssignmentList({
         </div>
       ))}
       {limit && assignments.length > limit ? (
-        <p className="text-xs text-[#999999] text-center">
+        <p className="text-xs text-muted-foreground text-center">
           +{assignments.length - limit} more assignments
         </p>
       ) : null}

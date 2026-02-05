@@ -10,7 +10,7 @@ function BookCancelPageContent() {
   const tallyUrl = process.env.NEXT_PUBLIC_TALLY_REQUEST_URL ?? "/";
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
       <div className="w-full max-w-md text-center">
         <div className="mb-6 flex justify-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100">
@@ -20,22 +20,22 @@ function BookCancelPageContent() {
           </div>
         </div>
 
-        <h1 className="text-3xl font-medium text-[#1A1A1A]">Booking Incomplete</h1>
+        <h1 className="text-3xl font-medium text-foreground">Booking Incomplete</h1>
         
-        <p className="mt-4 text-lg text-[#666666]">
+        <p className="mt-4 text-lg text-muted-foreground">
           You cancelled the payment process. Your booking hasn&apos;t been confirmed yet.
         </p>
 
-        <div className="mt-6 rounded-lg bg-white p-6 shadow-sm">
-          <h2 className="font-medium text-[#1A1A1A]">Want to try again?</h2>
-          <p className="mt-2 text-sm text-[#666666]">
+        <div className="mt-6 rounded-lg bg-card p-6 shadow-sm">
+          <h2 className="font-medium text-foreground">Want to try again?</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
             You can restart the booking process by filling out the form again. 
             We won&apos;t charge your card until after the cleaning is completed.
           </p>
         </div>
 
         {bookingId && (
-          <p className="mt-4 text-xs text-[#999999]">
+          <p className="mt-4 text-xs text-muted-foreground">
             Booking reference: {bookingId}
           </p>
         )}
@@ -43,19 +43,19 @@ function BookCancelPageContent() {
         <div className="mt-8 flex flex-col gap-3">
           <a
             href={tallyUrl}
-            className="inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+            className="inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             Resume booking
           </a>
           <Link
             href="/"
-            className="inline-block rounded-full border border-[#E5E5E5] px-8 py-3 text-sm font-medium text-[#666666] hover:bg-[#F5F5F5]"
+            className="inline-block rounded-full border border-border px-8 py-3 text-sm font-medium text-muted-foreground hover:bg-muted"
           >
             Return Home
           </Link>
           <a
             href="mailto:support@cleanos.com"
-            className="text-sm text-[#666666] hover:text-[#1A1A1A]"
+            className="text-sm text-muted-foreground hover:text-foreground"
           >
             Need help? Contact support
           </a>
@@ -69,8 +69,8 @@ export default function BookCancelPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
         </div>
       }
     >

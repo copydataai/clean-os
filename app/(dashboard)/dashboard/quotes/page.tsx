@@ -15,9 +15,9 @@ export default function QuotesPage() {
 
   if (!quotes) {
     return (
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-        <p className="mt-4 text-sm text-[#666666]">Loading quotes...</p>
+      <div className="surface-card p-8 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading quotes...</p>
       </div>
     );
   }
@@ -42,34 +42,34 @@ export default function QuotesPage() {
         {quotes.map((quote) => (
           <div
             key={quote._id}
-            className="rounded-2xl border border-[#E5E5E5] bg-white p-6"
+            className="surface-card p-6"
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-lg font-semibold text-[#1A1A1A]">
+                <p className="text-lg font-semibold text-foreground">
                   {quote.firstName || quote.lastName
                     ? `${quote.firstName ?? ""} ${quote.lastName ?? ""}`.trim()
                     : quote.email ?? "New Quote"}
                 </p>
-                <p className="text-sm text-[#666666]">{quote.email ?? "No email"}</p>
-                <p className="mt-1 text-xs text-[#999999]">
+                <p className="text-sm text-muted-foreground">{quote.email ?? "No email"}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Submitted {formatDate(quote.createdAt)}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status={quote.requestStatus} />
-                <span className="text-xs text-[#999999]">
+                <span className="text-xs text-muted-foreground">
                   {quote.squareFootage ? `${quote.squareFootage} sqft` : "Sqft —"}
                 </span>
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#666666]">
+            <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
               <span>Service: {quote.service ?? "—"}</span>
               <span>Type: {quote.serviceType ?? "—"}</span>
               <span>Frequency: {quote.frequency ?? "—"}</span>
             </div>
-            <div className="mt-3 text-sm text-[#666666]">
+            <div className="mt-3 text-sm text-muted-foreground">
               Address: {quote.address ?? "—"} {quote.addressLine2 ?? ""}
             </div>
           </div>

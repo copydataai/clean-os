@@ -21,7 +21,9 @@ export default function QuickFilters({ options, className }: QuickFiltersProps) 
           key={option.key}
           variant={option.active ? "default" : "outline"}
           size="sm"
+          aria-pressed={option.active}
           onClick={option.onClick}
+          className="min-w-20"
         >
           {option.label}
         </Button>

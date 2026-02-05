@@ -35,7 +35,7 @@ export default function CustomerQuoteHistory({
 
   if (displayQuotes.length === 0) {
     return (
-      <p className="text-sm text-[#666666]">No quote requests yet.</p>
+      <p className="text-sm text-muted-foreground">No quote requests yet.</p>
     );
   }
 
@@ -44,11 +44,11 @@ export default function CustomerQuoteHistory({
       {displayQuotes.map((quote) => (
         <div
           key={quote._id}
-          className="flex items-center justify-between rounded-lg border border-[#E5E5E5] bg-[#FAFAFA] p-3"
+          className="flex items-center justify-between rounded-lg border border-border bg-background p-3"
         >
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-[#1A1A1A]">
+              <span className="text-sm font-medium text-foreground">
                 {quote.serviceType ?? "Cleaning"}{" "}
                 {quote.frequency ? `(${quote.frequency})` : ""}
               </span>
@@ -61,7 +61,7 @@ export default function CustomerQuoteHistory({
                 {quote.requestStatus}
               </Badge>
             </div>
-            <p className="text-xs text-[#666666]">
+            <p className="text-xs text-muted-foreground">
               {formatDate(quote.createdAt)}
               {quote.squareFootage ? ` • ${quote.squareFootage} sq ft` : ""}
             </p>
@@ -69,7 +69,7 @@ export default function CustomerQuoteHistory({
         </div>
       ))}
       {limit && quoteRequests.length > limit && (
-        <p className="text-xs text-[#999999]">
+        <p className="text-xs text-muted-foreground">
           + {quoteRequests.length - limit} more quotes
         </p>
       )}

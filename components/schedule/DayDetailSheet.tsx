@@ -60,13 +60,13 @@ export default function DayDetailSheet({
         <div className="mt-6 space-y-6">
           {/* Bookings Section */}
           <section>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[#999999] mb-3">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
               Bookings ({dayBookings.length})
             </h3>
 
             {dayBookings.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-[#E5E5E5] bg-[#FAFAFA] p-4 text-center">
-                <p className="text-sm text-[#666666]">No bookings for this day</p>
+              <div className="rounded-lg border border-dashed border-border bg-background p-4 text-center">
+                <p className="text-sm text-muted-foreground">No bookings for this day</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -76,7 +76,7 @@ export default function DayDetailSheet({
                     type="button"
                     className={`w-full text-left rounded-xl transition-all ${
                       selectedBookingId === booking._id
-                        ? "ring-2 ring-[#1A1A1A] ring-offset-2"
+                        ? "ring-2 ring-primary ring-offset-2"
                         : ""
                     }`}
                     onClick={() =>
@@ -94,7 +94,7 @@ export default function DayDetailSheet({
 
           {/* Available Cleaners Section */}
           <section>
-            <h3 className="text-xs font-medium uppercase tracking-wider text-[#999999] mb-3">
+            <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
               Available Cleaners
             </h3>
             <CleanerAvailabilityPanel
@@ -103,7 +103,7 @@ export default function DayDetailSheet({
               onAssigned={() => setSelectedBookingId(null)}
             />
             {!selectedBookingId && dayBookings.length > 0 && (
-              <p className="text-xs text-[#999999] mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 Select a booking above to assign a cleaner
               </p>
             )}

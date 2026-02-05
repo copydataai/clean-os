@@ -123,7 +123,7 @@ export default function CleanerDetailPage() {
         title="Cleaner not found"
         description="We couldn't locate this cleaner."
         action={
-          <Button onClick={() => router.push("/cleaners")}>
+          <Button onClick={() => router.push("/dashboard/cleaners")}>
             Back to Cleaners
           </Button>
         }
@@ -133,9 +133,9 @@ export default function CleanerDetailPage() {
 
   if (!cleaner) {
     return (
-      <div className="rounded-2xl border border-[#E5E5E5] bg-white p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-        <p className="mt-4 text-sm text-[#666666]">Loading cleaner...</p>
+      <div className="surface-card p-8 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading cleaner...</p>
       </div>
     );
   }
@@ -155,34 +155,34 @@ export default function CleanerDetailPage() {
         {/* LEFT COLUMN */}
         <div className="space-y-4 lg:col-span-2">
           {/* Profile Overview */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
               Profile Overview
             </h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Email</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Email</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {cleaner.email}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Phone</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Phone</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {cleaner.phone ?? "—"}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">
                   Employment Type
                 </p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {cleaner.employmentType}
                 </p>
               </div>
-              <div className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-4">
-                <p className="text-xs uppercase text-[#999999]">Start Date</p>
-                <p className="mt-2 text-sm font-medium text-[#1A1A1A]">
+              <div className="surface-soft p-4">
+                <p className="text-xs uppercase text-muted-foreground">Start Date</p>
+                <p className="mt-2 text-sm font-medium text-foreground">
                   {cleaner.startDate ?? "—"}
                 </p>
               </div>
@@ -190,8 +190,8 @@ export default function CleanerDetailPage() {
 
             {cleaner.bio ? (
               <div className="mt-4">
-                <h3 className="text-sm font-semibold text-[#1A1A1A]">Bio</h3>
-                <p className="mt-2 text-sm text-[#666666]">{cleaner.bio}</p>
+                <h3 className="text-sm font-semibold text-foreground">Bio</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{cleaner.bio}</p>
               </div>
             ) : null}
 
@@ -199,8 +199,8 @@ export default function CleanerDetailPage() {
             cleaner.address?.city ||
             cleaner.address?.state ? (
               <div className="mt-4">
-                <h3 className="text-sm font-semibold text-[#1A1A1A]">Address</h3>
-                <p className="mt-2 text-sm text-[#666666]">
+                <h3 className="text-sm font-semibold text-foreground">Address</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
                   {[
                     cleaner.address?.street,
                     cleaner.address?.city,
@@ -215,8 +215,8 @@ export default function CleanerDetailPage() {
           </div>
 
           {/* Weekly Availability */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
               Weekly Availability
             </h2>
             <div className="mt-4">
@@ -228,8 +228,8 @@ export default function CleanerDetailPage() {
           </div>
 
           {/* Recent Assignments */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
               Recent Assignments
             </h2>
             <div className="mt-4">
@@ -241,8 +241,8 @@ export default function CleanerDetailPage() {
         {/* RIGHT COLUMN */}
         <div className="space-y-4">
           {/* Actions */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Actions</h2>
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Actions</h2>
             <div className="mt-4 space-y-3">
               <Button
                 variant="outline"
@@ -275,24 +275,24 @@ export default function CleanerDetailPage() {
           </div>
 
           {/* Performance */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Performance</h2>
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Performance</h2>
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#666666]">Rating</span>
-                <span className="text-sm font-medium text-[#1A1A1A]">
+                <span className="text-sm text-muted-foreground">Rating</span>
+                <span className="text-sm font-medium text-foreground">
                   {formatRating(cleaner.averageRating)} ★
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#666666]">Jobs Completed</span>
-                <span className="text-sm font-medium text-[#1A1A1A]">
+                <span className="text-sm text-muted-foreground">Jobs Completed</span>
+                <span className="text-sm font-medium text-foreground">
                   {cleaner.totalJobsCompleted ?? 0}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#666666]">Reliability</span>
-                <span className="text-sm font-medium text-[#1A1A1A]">
+                <span className="text-sm text-muted-foreground">Reliability</span>
+                <span className="text-sm font-medium text-foreground">
                   {cleaner.reliabilityScore ?? 100}%
                 </span>
               </div>
@@ -300,8 +300,8 @@ export default function CleanerDetailPage() {
           </div>
 
           {/* Time Off */}
-          <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-            <h2 className="text-lg font-semibold text-[#1A1A1A]">Time Off</h2>
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Time Off</h2>
             <div className="mt-4">
               <TimeOffList timeOffRequests={timeOff ?? []} />
             </div>
@@ -309,13 +309,13 @@ export default function CleanerDetailPage() {
 
           {/* Skills */}
           {cleaner.skills && cleaner.skills.length > 0 ? (
-            <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
-              <h2 className="text-lg font-semibold text-[#1A1A1A]">Skills</h2>
+            <div className="surface-card p-6">
+              <h2 className="text-lg font-semibold text-foreground">Skills</h2>
               <div className="mt-4 flex flex-wrap gap-2">
                 {cleaner.skills.map((skill) => (
                   <Badge
                     key={skill._id}
-                    className="bg-[#F5F5F5] text-[#555555]"
+                    className="bg-muted text-muted-foreground"
                   >
                     {skill.skillType}
                   </Badge>
@@ -356,7 +356,7 @@ export default function CleanerDetailPage() {
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">
+              <label className="text-sm font-medium text-foreground">
                 Start Date
               </label>
               <Input
@@ -367,7 +367,7 @@ export default function CleanerDetailPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">
+              <label className="text-sm font-medium text-foreground">
                 End Date
               </label>
               <Input
@@ -378,7 +378,7 @@ export default function CleanerDetailPage() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">Type</label>
+              <label className="text-sm font-medium text-foreground">Type</label>
               <Select value={timeOffType} onValueChange={(v) => v && setTimeOffType(v)}>
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />
@@ -393,7 +393,7 @@ export default function CleanerDetailPage() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">
+              <label className="text-sm font-medium text-foreground">
                 Reason (optional)
               </label>
               <Textarea
@@ -428,7 +428,7 @@ export default function CleanerDetailPage() {
           </SheetHeader>
           <div className="mt-6 space-y-4">
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">
+              <label className="text-sm font-medium text-foreground">
                 New Status
               </label>
               <Select value={newStatus} onValueChange={(v) => v && setNewStatus(v)}>

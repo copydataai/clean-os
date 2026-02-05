@@ -50,7 +50,7 @@ export default function TimeOffList({
 }: TimeOffListProps) {
   if (timeOffRequests.length === 0) {
     return (
-      <div className={cn("text-sm text-[#666666]", className)}>
+      <div className={cn("text-sm text-muted-foreground", className)}>
         No time off requests
       </div>
     );
@@ -61,18 +61,18 @@ export default function TimeOffList({
       {timeOffRequests.map((request) => (
         <div
           key={request._id}
-          className="rounded-xl border border-[#E5E5E5] bg-[#FAFAFA] p-3"
+          className="surface-soft p-3"
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-[#1A1A1A]">
+              <p className="text-sm font-medium text-foreground">
                 {formatDateRange(request.startDate, request.endDate)}
               </p>
-              <p className="text-xs text-[#666666] capitalize">
+              <p className="text-xs text-muted-foreground capitalize">
                 {request.timeOffType.replace(/_/g, " ")}
               </p>
               {request.reason ? (
-                <p className="mt-1 text-xs text-[#999999]">{request.reason}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{request.reason}</p>
               ) : null}
             </div>
             <Badge

@@ -26,16 +26,16 @@ function CompletePaymentPageContent() {
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
-        <p className="mt-4 text-[#666666]">Loading payment details...</p>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
+        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <p className="mt-4 text-muted-foreground">Loading payment details...</p>
       </div>
     );
   }
 
   if (status === "error") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
         <div className="w-full max-w-md text-center">
           <div className="mb-6 flex justify-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
@@ -44,11 +44,11 @@ function CompletePaymentPageContent() {
               </svg>
             </div>
           </div>
-          <h1 className="text-2xl font-medium text-[#1A1A1A]">Payment Error</h1>
+          <h1 className="text-2xl font-medium text-foreground">Payment Error</h1>
           <p className="mt-2 text-red-600">{error}</p>
           <Link
             href="/"
-            className="mt-6 inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+            className="mt-6 inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             Go Home
           </Link>
@@ -59,7 +59,7 @@ function CompletePaymentPageContent() {
 
   if (status === "success") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
         <div className="w-full max-w-md text-center">
           <div className="mb-6 flex justify-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
@@ -68,11 +68,11 @@ function CompletePaymentPageContent() {
               </svg>
             </div>
           </div>
-          <h1 className="text-2xl font-medium text-[#1A1A1A]">Payment Complete!</h1>
-          <p className="mt-2 text-[#666666]">Thank you for your payment. Your transaction has been processed.</p>
+          <h1 className="text-2xl font-medium text-foreground">Payment Complete!</h1>
+          <p className="mt-2 text-muted-foreground">Thank you for your payment. Your transaction has been processed.</p>
           <Link
             href="/"
-            className="mt-6 inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+            className="mt-6 inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
           >
             Go Home
           </Link>
@@ -83,7 +83,7 @@ function CompletePaymentPageContent() {
 
   // Processing state - show payment form
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <div className="mb-4 flex justify-center">
@@ -93,19 +93,19 @@ function CompletePaymentPageContent() {
               </svg>
             </div>
           </div>
-          <h1 className="text-2xl font-medium text-[#1A1A1A]">Complete Your Payment</h1>
-          <p className="mt-2 text-[#666666]">
+          <h1 className="text-2xl font-medium text-foreground">Complete Your Payment</h1>
+          <p className="mt-2 text-muted-foreground">
             Your bank requires additional verification for this payment.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-[#E5E5E5] bg-white p-6">
+        <div className="surface-card p-6">
           <div id="payment-element" className="mb-6">
             <div className="rounded-lg border-2 border-dashed border-gray-200 p-8 text-center">
-              <p className="text-sm text-[#666666]">
+              <p className="text-sm text-muted-foreground">
                 Payment verification form would appear here.
               </p>
-              <p className="mt-2 text-xs text-[#999999]">
+              <p className="mt-2 text-xs text-muted-foreground">
                 In production, Stripe Elements handles 3DS authentication automatically.
               </p>
             </div>
@@ -114,20 +114,20 @@ function CompletePaymentPageContent() {
           <div className="space-y-3">
             <button
               onClick={() => setStatus("success")}
-              className="w-full rounded-full bg-[#1A1A1A] py-3 text-sm font-medium text-white hover:bg-[#333333]"
+              className="w-full rounded-full bg-primary py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Continue verification
             </button>
             <Link
               href="/"
-              className="block w-full rounded-full border border-[#E5E5E5] py-3 text-center text-sm font-medium text-[#666666] hover:bg-[#F5F5F5]"
+              className="block w-full rounded-full border border-border py-3 text-center text-sm font-medium text-muted-foreground hover:bg-muted"
             >
               Cancel
             </Link>
           </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-[#999999]">
+        <p className="mt-6 text-center text-xs text-muted-foreground">
           Secure payment powered by Stripe
         </p>
       </div>
@@ -139,9 +139,9 @@ export default function CompletePaymentPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
-          <p className="mt-4 text-[#666666]">Loading...</p>
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="mt-4 text-muted-foreground">Loading...</p>
         </div>
       }
     >

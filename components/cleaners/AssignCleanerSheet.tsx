@@ -107,13 +107,13 @@ export default function AssignCleanerSheet({
           <div className="max-h-[300px] overflow-y-auto space-y-2">
             {!filteredCleaners ? (
               <div className="text-center py-4">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#1A1A1A] border-t-transparent mx-auto" />
-                <p className="mt-2 text-xs text-[#666666]">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+                <p className="mt-2 text-xs text-muted-foreground">
                   Loading cleaners...
                 </p>
               </div>
             ) : filteredCleaners.length === 0 ? (
-              <div className="text-center py-4 text-sm text-[#666666]">
+              <div className="text-center py-4 text-sm text-muted-foreground">
                 No active cleaners found
               </div>
             ) : (
@@ -127,20 +127,20 @@ export default function AssignCleanerSheet({
                     className={cn(
                       "w-full rounded-xl border p-3 text-left transition-colors",
                       isSelected
-                        ? "border-[#1A1A1A] bg-[#FAFAFA]"
-                        : "border-[#E5E5E5] hover:border-[#CCCCCC] hover:bg-[#FAFAFA]"
+                        ? "border-primary bg-background"
+                        : "border-border hover:border-border/90 hover:bg-background"
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1A1A1A] text-xs font-medium text-white">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-white">
                         {cleaner.firstName.charAt(0)}
                         {cleaner.lastName.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#1A1A1A] truncate">
+                        <p className="text-sm font-medium text-foreground truncate">
                           {cleaner.firstName} {cleaner.lastName}
                         </p>
-                        <div className="flex gap-3 text-xs text-[#666666]">
+                        <div className="flex gap-3 text-xs text-muted-foreground">
                           <span>
                             Rating: {formatRating(cleaner.averageRating)} ★
                           </span>
@@ -150,7 +150,7 @@ export default function AssignCleanerSheet({
                         </div>
                       </div>
                       {isSelected ? (
-                        <div className="h-4 w-4 rounded-full bg-[#1A1A1A] flex items-center justify-center">
+                        <div className="h-4 w-4 rounded-full bg-primary flex items-center justify-center">
                           <svg
                             width="10"
                             height="10"
@@ -177,7 +177,7 @@ export default function AssignCleanerSheet({
 
           {selectedCleanerId ? (
             <div>
-              <label className="text-sm font-medium text-[#1A1A1A]">Role</label>
+              <label className="text-sm font-medium text-foreground">Role</label>
               <Select value={role} onValueChange={(v) => v && setRole(v)}>
                 <SelectTrigger className="mt-1 w-full">
                   <SelectValue />

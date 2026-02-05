@@ -155,26 +155,26 @@ function BookPageContent() {
   }, [bookingId, getCardOnFileStatus]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
       <div className="w-full max-w-xl text-center">
         <div className="mb-8 flex flex-col items-center gap-4">
-          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-[#999999]">
+          <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
             <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#1A1A1A]" />
+              <span className="h-2 w-2 rounded-full bg-primary" />
               Request received
             </span>
-            <span className="h-px w-6 bg-[#DDDDDD]" />
+            <span className="h-px w-6 bg-border" />
             <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#DDDDDD]" />
+              <span className="h-2 w-2 rounded-full bg-border" />
               Card saved
             </span>
-            <span className="h-px w-6 bg-[#DDDDDD]" />
+            <span className="h-px w-6 bg-border" />
             <span className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#DDDDDD]" />
+              <span className="h-2 w-2 rounded-full bg-border" />
               Scheduled
             </span>
           </div>
-          <div className="rounded-full border border-[#E5E5E5] bg-white px-4 py-1 text-xs text-[#666666]">
+          <div className="rounded-full border border-border bg-card px-4 py-1 text-xs text-muted-foreground">
             Secure by Stripe
           </div>
         </div>
@@ -182,10 +182,10 @@ function BookPageContent() {
         {status === "loading" && (
           <>
             <div className="mb-6 flex justify-center">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
-            <h1 className="text-2xl font-medium text-[#1A1A1A]">Setting up your booking...</h1>
-            <p className="mt-2 text-[#666666]">Please wait while we prepare your secure payment page.</p>
+            <h1 className="text-2xl font-medium text-foreground">Setting up your booking...</h1>
+            <p className="mt-2 text-muted-foreground">Please wait while we prepare your secure payment page.</p>
           </>
         )}
 
@@ -203,8 +203,8 @@ function BookPageContent() {
                 </svg>
               </div>
             </div>
-            <h1 className="text-2xl font-medium text-[#1A1A1A]">Card on file</h1>
-            <p className="mt-2 text-[#666666]">
+            <h1 className="text-2xl font-medium text-foreground">Card on file</h1>
+            <p className="mt-2 text-muted-foreground">
               {cardSummary?.last4
                 ? `We already have a card on file ending ${cardSummary.last4}${
                     cardSummary.brand ? ` (${cardSummary.brand})` : ""
@@ -213,7 +213,7 @@ function BookPageContent() {
             </p>
             <div className="mt-6 flex flex-col gap-3">
               <button
-                className="rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+                className="rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
                 onClick={async () => {
                   if (!bookingId || !stripeCustomerId) {
                     setError("Unable to confirm card on file. Please try again.");
@@ -234,7 +234,7 @@ function BookPageContent() {
                 Continue with card on file
               </button>
               <button
-                className="rounded-full border border-[#1A1A1A] px-8 py-3 text-sm font-medium text-[#1A1A1A] hover:bg-[#F2F2F2]"
+                className="rounded-full border border-primary px-8 py-3 text-sm font-medium text-foreground hover:bg-muted/80"
                 onClick={async () => {
                   if (!bookingId) {
                     setError("Missing booking information. Please try again.");
@@ -253,10 +253,10 @@ function BookPageContent() {
         {status === "redirecting" && (
           <>
             <div className="mb-6 flex justify-center">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
-            <h1 className="text-2xl font-medium text-[#1A1A1A]">Redirecting to payment...</h1>
-            <p className="mt-2 text-[#666666]">You&apos;ll be redirected to Stripe to securely save your card.</p>
+            <h1 className="text-2xl font-medium text-foreground">Redirecting to payment...</h1>
+            <p className="mt-2 text-muted-foreground">You&apos;ll be redirected to Stripe to securely save your card.</p>
           </>
         )}
 
@@ -269,11 +269,11 @@ function BookPageContent() {
                 </svg>
               </div>
             </div>
-            <h1 className="text-2xl font-medium text-[#1A1A1A]">Something went wrong</h1>
+            <h1 className="text-2xl font-medium text-foreground">Something went wrong</h1>
             <p className="mt-2 text-red-600">{error}</p>
             <a
               href="/"
-              className="mt-6 inline-block rounded-full bg-[#1A1A1A] px-8 py-3 text-sm font-medium text-white hover:bg-[#333333]"
+              className="mt-6 inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
             >
               Go Home
             </a>
@@ -288,12 +288,12 @@ export default function BookPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
+        <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
           <div className="w-full max-w-md text-center">
             <div className="mb-6 flex justify-center">
-              <div className="h-12 w-12 animate-spin rounded-full border-4 border-[#1A1A1A] border-t-transparent" />
+              <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
             </div>
-            <h1 className="text-2xl font-medium text-[#1A1A1A]">Loading...</h1>
+            <h1 className="text-2xl font-medium text-foreground">Loading...</h1>
           </div>
         </div>
       }
