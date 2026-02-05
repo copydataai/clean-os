@@ -4,19 +4,21 @@ import './globals.css'
 import { ClerkProvider } from '@clerk/nextjs'
 import ConvexClientProvider from '@/components/ConvexClientProvider'
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+const brandSans = Geist({
+  variable: '--font-brand-sans',
   subsets: ['latin'],
+  display: 'swap',
 })
 
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+const brandMono = Geist_Mono({
+  variable: '--font-brand-mono',
   subsets: ['latin'],
+  display: 'swap',
 })
 
 export const metadata: Metadata = {
   title: 'Clean OS',
-  description: 'Clean OS is a modern operating system for the web.',
+  description: 'Operations platform for modern cleaning teams.',
 }
 
 export default function RootLayout({
@@ -25,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <html lang="en" className="h-full">
+      <body className={`${brandSans.variable} ${brandMono.variable} min-h-full font-sans`}>
         <ClerkProvider>
           <ConvexClientProvider>{children}</ConvexClientProvider>
         </ClerkProvider>
