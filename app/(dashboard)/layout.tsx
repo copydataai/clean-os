@@ -27,6 +27,7 @@ const navItems = [
   { label: "Bookings", href: "/dashboard/bookings" },
   { label: "Schedule", href: "/dashboard/schedule" },
   { label: "Cleaners", href: "/dashboard/cleaners" },
+  { label: "Customers", href: "/dashboard/customers" },
   { label: "Payments", href: "/dashboard/payments", disabled: true },
   { label: "Settings", href: "/dashboard/settings", disabled: true },
 ];
