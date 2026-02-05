@@ -7,6 +7,7 @@ import { Suspense } from "react";
 function BookSuccessPageContent() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
+  const cardOnFile = searchParams.get("card_on_file") === "1";
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#FAFAFA] p-8">
@@ -19,10 +20,14 @@ function BookSuccessPageContent() {
           </div>
         </div>
 
-        <h1 className="text-3xl font-medium text-[#1A1A1A]">Card Saved Successfully!</h1>
+        <h1 className="text-3xl font-medium text-[#1A1A1A]">
+          {cardOnFile ? "Card Already On File" : "Card Saved Successfully!"}
+        </h1>
         
         <p className="mt-4 text-lg text-[#666666]">
-          Thank you for booking with us. Your payment method has been securely saved.
+          {cardOnFile
+            ? "Thank you for booking with us. We'll use the card you already have on file."
+            : "Thank you for booking with us. Your payment method has been securely saved."}
         </p>
 
         <div className="mt-6 rounded-2xl border border-[#E5E5E5] bg-white p-5 text-left">
@@ -30,7 +35,9 @@ function BookSuccessPageContent() {
           <div className="mt-3 space-y-2 text-sm text-[#666666]">
             <p>Booking ID: {bookingId ?? "—"}</p>
             <p>Next step: We will confirm your cleaning schedule.</p>
-            <p>Payment: Card saved, charged after service.</p>
+            <p>
+              Payment: {cardOnFile ? "Card on file, charged after service." : "Card saved, charged after service."}
+            </p>
           </div>
         </div>
 
