@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { query, mutation, internalMutation } from "./_generated/server";
 
 // ============================================================================
 // Queries
@@ -224,6 +224,28 @@ export const update = mutation({
     }
 
     return customerId;
+  },
+});
+
+export const reassignStripeCustomerId = internalMutation({
+  args: {
+    fromStripeCustomerId: v.string(),
+    toStripeCustomerId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_stripe_id", (q) =>
+        q.eq("stripeCustomerId", args.fromStripeCustomerId)
+      )
+      .collect();
+
+    for (const customer of customers) {
+      await ctx.db.patch(customer._id, {
+        stripeCustomerId: args.toStripeCustomerId,
+        updatedAt: Date.now(),
+      });
+    }
   },
 });
 

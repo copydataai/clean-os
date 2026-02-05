@@ -10,6 +10,143 @@ function getStripeClient(): Stripe {
   });
 }
 
+type StripeCustomerRecord = {
+  _id: Id<"stripeCustomers">;
+  stripeCustomerId: string;
+  createdAt?: number;
+  _creationTime?: number;
+};
+
+type CardSummary = {
+  brand?: string;
+  last4?: string;
+  expMonth?: number;
+  expYear?: number;
+};
+
+function getRecordCreatedAt(record: StripeCustomerRecord): number {
+  return record.createdAt ?? record._creationTime ?? 0;
+}
+
+function pickNewest(records: StripeCustomerRecord[]): StripeCustomerRecord {
+  return records.reduce((latest, current) => {
+    return getRecordCreatedAt(current) > getRecordCreatedAt(latest) ? current : latest;
+  });
+}
+
+async function dedupeStripeCustomersForClerkIdInternal(
+  ctx: any,
+  stripe: Stripe,
+  clerkId: string,
+  records?: StripeCustomerRecord[]
+): Promise<{ stripeCustomerId?: string; cleaned: boolean; skippedCleanup?: boolean }> {
+  const customers =
+    records ??
+    (await ctx.runQuery(internal.cardDb.listStripeCustomersByClerkId, {
+      clerkId,
+    }));
+
+  if (!customers || customers.length === 0) {
+    return { stripeCustomerId: undefined, cleaned: false };
+  }
+
+  if (customers.length === 1) {
+    return { stripeCustomerId: customers[0].stripeCustomerId, cleaned: false };
+  }
+
+  type Candidate = {
+    record: StripeCustomerRecord;
+    hasCard: boolean;
+    cardCreated: number;
+  };
+
+  const candidates: Candidate[] = [];
+
+  try {
+    for (const record of customers) {
+      const paymentMethods = await stripe.paymentMethods.list({
+        customer: record.stripeCustomerId,
+        type: "card",
+        limit: 1,
+      });
+      const card = paymentMethods.data[0]?.card;
+      const cardCreated = paymentMethods.data[0]?.created ?? 0;
+      candidates.push({
+        record,
+        hasCard: Boolean(card),
+        cardCreated,
+      });
+    }
+  } catch (err) {
+    console.error("[Stripe Dedupe] Failed to inspect payment methods", {
+      clerkId,
+      err,
+    });
+    const fallback = pickNewest(customers);
+    return { stripeCustomerId: fallback.stripeCustomerId, cleaned: false, skippedCleanup: true };
+  }
+
+  const withCard = candidates.filter((candidate) => candidate.hasCard);
+  const canonicalRecord =
+    withCard.length > 0
+      ? withCard.reduce((best, current) =>
+          current.cardCreated > best.cardCreated ? current : best
+        ).record
+      : pickNewest(customers);
+
+  const nonCanonical = customers.filter(
+    (record: StripeCustomerRecord) => record.stripeCustomerId !== canonicalRecord.stripeCustomerId
+  );
+
+  if (nonCanonical.length === 0) {
+    return { stripeCustomerId: canonicalRecord.stripeCustomerId, cleaned: false };
+  }
+
+  for (const record of nonCanonical) {
+    await ctx.runMutation(internal.bookingDb.reassignStripeCustomerId, {
+      fromStripeCustomerId: record.stripeCustomerId,
+      toStripeCustomerId: canonicalRecord.stripeCustomerId,
+    });
+
+    await ctx.runMutation(internal.customers.reassignStripeCustomerId, {
+      fromStripeCustomerId: record.stripeCustomerId,
+      toStripeCustomerId: canonicalRecord.stripeCustomerId,
+    });
+  }
+
+  await ctx.runMutation(internal.cardDb.deletePaymentMethodsByStripeCustomerIds, {
+    stripeCustomerIds: nonCanonical.map((record: StripeCustomerRecord) => record.stripeCustomerId),
+  });
+
+  for (const record of nonCanonical) {
+    await ctx.runMutation(internal.cardDb.deleteStripeCustomerById, {
+      id: record._id,
+    });
+  }
+
+  return { stripeCustomerId: canonicalRecord.stripeCustomerId, cleaned: true };
+}
+
+async function resolveStripeCustomerForClerkIdInternal(
+  ctx: any,
+  stripe: Stripe,
+  clerkId: string
+): Promise<{ stripeCustomerId?: string; cleaned?: boolean }> {
+  const customers = await ctx.runQuery(internal.cardDb.listStripeCustomersByClerkId, {
+    clerkId,
+  });
+
+  if (!customers || customers.length === 0) {
+    return { stripeCustomerId: undefined };
+  }
+
+  if (customers.length === 1) {
+    return { stripeCustomerId: customers[0].stripeCustomerId };
+  }
+
+  return await dedupeStripeCustomersForClerkIdInternal(ctx, stripe, clerkId, customers);
+}
+
 export const createCheckoutSession = action({
   args: {
     bookingId: v.id("bookings"),
@@ -27,31 +164,35 @@ export const createCheckoutSession = action({
       throw new Error("Booking not found");
     }
 
-    // Check if customer already exists
     let customerId: string | undefined;
-    const existingCustomer = await ctx.runQuery(internal.cardDb.getCustomerByClerkId, {
-      clerkId: booking.email,
-    });
-
-    if (existingCustomer) {
-      customerId = existingCustomer.stripeCustomerId;
+    if (booking.stripeCustomerId) {
+      customerId = booking.stripeCustomerId;
     } else {
-      // Create a new Stripe customer
-      const customer = await stripe.customers.create({
-        email: booking.email,
-        name: booking.customerName,
-        metadata: {
-          clerkId: booking.email,
-          bookingId: args.bookingId,
-        },
-      });
-      customerId = customer.id;
+      const resolved = await resolveStripeCustomerForClerkIdInternal(ctx, stripe, booking.email);
+      if (resolved.stripeCustomerId) {
+        customerId = resolved.stripeCustomerId;
+      } else {
+        const idempotencyKey = `stripe_customer:${booking.email}`;
+        const customer = await stripe.customers.create(
+          {
+            email: booking.email,
+            name: booking.customerName,
+            metadata: {
+              clerkId: booking.email,
+              bookingId: args.bookingId,
+            },
+          },
+          { idempotencyKey }
+        );
 
-      await ctx.runMutation(internal.cardDb.saveStripeCustomerToDb, {
-        clerkId: booking.email,
-        stripeCustomerId: customer.id,
-        email: booking.email,
-      });
+        const saved = await ctx.runMutation(internal.cardDb.saveStripeCustomerIfAbsent, {
+          clerkId: booking.email,
+          stripeCustomerId: customer.id,
+          email: booking.email,
+        });
+
+        customerId = saved?.stripeCustomerId ?? customer.id;
+      }
     }
 
     // Create Checkout Session in setup mode (save card for later)
@@ -75,6 +216,84 @@ export const createCheckoutSession = action({
     });
 
     return { checkoutUrl: session.url! };
+  },
+});
+
+export const getCardOnFileStatus = action({
+  args: {
+    bookingId: v.id("bookings"),
+  },
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    hasCard: boolean;
+    stripeCustomerId?: string;
+    cardSummary?: CardSummary;
+  }> => {
+    const stripe = getStripeClient();
+
+    const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+      id: args.bookingId,
+    });
+
+    if (!booking?.email) {
+      return { hasCard: false };
+    }
+
+    const resolved = await resolveStripeCustomerForClerkIdInternal(ctx, stripe, booking.email);
+    if (!resolved.stripeCustomerId) {
+      return { hasCard: false };
+    }
+
+    const paymentMethods = await stripe.paymentMethods.list({
+      customer: resolved.stripeCustomerId,
+      type: "card",
+      limit: 1,
+    });
+
+    if (paymentMethods.data.length === 0) {
+      return { hasCard: false };
+    }
+
+    const card = paymentMethods.data[0].card;
+    const cardSummary = card
+      ? {
+          brand: card.brand,
+          last4: card.last4,
+          expMonth: card.exp_month,
+          expYear: card.exp_year,
+        }
+      : undefined;
+
+    return {
+      hasCard: true,
+      stripeCustomerId: resolved.stripeCustomerId,
+      cardSummary,
+    };
+  },
+});
+
+export const resolveStripeCustomerForEmail = internalAction({
+  args: {
+    clerkId: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ stripeCustomerId?: string; cleaned?: boolean }> => {
+    const stripe = getStripeClient();
+    return await resolveStripeCustomerForClerkIdInternal(ctx, stripe, args.clerkId);
+  },
+});
+
+export const dedupeStripeCustomersForClerkId = internalAction({
+  args: {
+    clerkId: v.string(),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ stripeCustomerId?: string; cleaned: boolean; skippedCleanup?: boolean }> => {
+    const stripe = getStripeClient();
+    return await dedupeStripeCustomersForClerkIdInternal(ctx, stripe, args.clerkId);
   },
 });
 
@@ -306,6 +525,7 @@ export const handleCheckoutCompleted = internalAction({
           last4: paymentMethod.card.last4,
           expMonth: paymentMethod.card.exp_month,
           expYear: paymentMethod.card.exp_year,
+          fingerprint: paymentMethod.card.fingerprint ?? undefined,
         }
       : undefined;
 

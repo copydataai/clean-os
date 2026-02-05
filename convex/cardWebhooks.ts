@@ -19,31 +19,34 @@ export const createStripeCustomer = internalAction({
   },
   handler: async (ctx, args): Promise<string> => {
     const stripe = getStripeClient();
-    
-    // Check if customer exists
-    const existingCustomer = await ctx.runQuery(internal.cardDb.getCustomerByClerkId, {
+
+    const resolved = await ctx.runAction(internal.stripeActions.resolveStripeCustomerForEmail, {
       clerkId: args.clerkId,
     });
 
-    if (existingCustomer) {
-      return existingCustomer.stripeCustomerId;
+    if (resolved?.stripeCustomerId) {
+      return resolved.stripeCustomerId;
     }
 
-    const customer = await stripe.customers.create({
-      email: args.email,
-      name: args.name,
-      metadata: {
-        clerkId: args.clerkId,
+    const idempotencyKey = `stripe_customer:${args.email}`;
+    const customer = await stripe.customers.create(
+      {
+        email: args.email,
+        name: args.name,
+        metadata: {
+          clerkId: args.clerkId,
+        },
       },
-    });
+      { idempotencyKey }
+    );
 
-    await ctx.runMutation(internal.cardDb.saveStripeCustomerToDb, {
+    const saved = await ctx.runMutation(internal.cardDb.saveStripeCustomerIfAbsent, {
       clerkId: args.clerkId,
       stripeCustomerId: customer.id,
       email: args.email,
     });
 
-    return customer.id;
+    return saved?.stripeCustomerId ?? customer.id;
   },
 });
 
@@ -114,6 +117,7 @@ export const attachPaymentMethod = internalAction({
           last4: paymentMethod.card.last4,
           expMonth: paymentMethod.card.exp_month,
           expYear: paymentMethod.card.exp_year,
+          fingerprint: paymentMethod.card.fingerprint ?? undefined,
         }
       : undefined;
 
@@ -165,6 +169,7 @@ export const saveCardFromSetupIntent = internalAction({
           last4: paymentMethod.card.last4,
           expMonth: paymentMethod.card.exp_month,
           expYear: paymentMethod.card.exp_year,
+          fingerprint: paymentMethod.card.fingerprint ?? undefined,
         }
       : undefined;
 

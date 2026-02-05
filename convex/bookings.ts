@@ -70,6 +70,27 @@ export const createBookingFromRequest = mutation({
   },
 });
 
+export const markCardOnFile = mutation({
+  args: {
+    bookingId: v.id("bookings"),
+    stripeCustomerId: v.string(),
+  },
+  handler: async (ctx, args): Promise<Id<"bookings">> => {
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    await ctx.db.patch(args.bookingId, {
+      status: "card_saved",
+      stripeCustomerId: args.stripeCustomerId,
+      updatedAt: Date.now(),
+    });
+
+    return args.bookingId;
+  },
+});
+
 export const getBooking = query({
   args: { id: v.id("bookings") },
   handler: async (ctx, args) => {

@@ -111,6 +111,28 @@ export const updateBookingAmount = internalMutation({
   },
 });
 
+export const reassignStripeCustomerId = internalMutation({
+  args: {
+    fromStripeCustomerId: v.string(),
+    toStripeCustomerId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_stripe_customer", (q) =>
+        q.eq("stripeCustomerId", args.fromStripeCustomerId)
+      )
+      .collect();
+
+    for (const booking of bookings) {
+      await ctx.db.patch(booking._id, {
+        stripeCustomerId: args.toStripeCustomerId,
+        updatedAt: Date.now(),
+      });
+    }
+  },
+});
+
 export const createPaymentIntent = internalMutation({
   args: {
     bookingId: v.id("bookings"),
