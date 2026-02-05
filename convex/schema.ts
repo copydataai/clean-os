@@ -73,6 +73,7 @@ const bookings = defineTable({
   customerName: v.optional(v.string()),
   stripeCustomerId: v.optional(v.string()),
   stripeCheckoutSessionId: v.optional(v.string()),
+  customerId: v.optional(v.id("customers")),
   status: v.string(), // "pending_card", "card_saved", "scheduled", "completed", "charged", "failed"
   serviceType: v.optional(v.string()),
   serviceDate: v.optional(v.string()),
@@ -85,7 +86,8 @@ const bookings = defineTable({
 })
   .index("by_email", ["email"])
   .index("by_checkout_session", ["stripeCheckoutSessionId"])
-  .index("by_status", ["status"]);
+  .index("by_status", ["status"])
+  .index("by_customer", ["customerId"]);
 
 const bookingRequests = defineTable({
   status: v.string(), // "requested" | "confirmed"
@@ -94,6 +96,7 @@ const bookingRequests = defineTable({
   requestFormId: v.optional(v.string()),
   confirmationFormId: v.optional(v.string()),
   quoteRequestId: v.optional(v.id("quoteRequests")),
+  customerId: v.optional(v.id("customers")),
   email: v.optional(v.string()),
   contactDetails: v.optional(v.string()),
   phoneNumber: v.optional(v.string()),
@@ -113,6 +116,7 @@ const bookingRequests = defineTable({
   rawConfirmationPayload: v.optional(v.any()),
   bookingId: v.optional(v.id("bookings")),
   linkSentAt: v.optional(v.number()),
+  confirmLinkSentAt: v.optional(v.number()),
   createdAt: v.number(),
   updatedAt: v.number(),
   confirmedAt: v.optional(v.number()),
@@ -120,7 +124,8 @@ const bookingRequests = defineTable({
   .index("by_email", ["email"])
   .index("by_status", ["status"])
   .index("by_request_response_id", ["requestResponseId"])
-  .index("by_confirmation_response_id", ["confirmationResponseId"]);
+  .index("by_confirmation_response_id", ["confirmationResponseId"])
+  .index("by_customer", ["customerId"]);
 
 const quoteRequests = defineTable({
   firstName: v.optional(v.string()),
@@ -144,12 +149,14 @@ const quoteRequests = defineTable({
   status: v.optional(v.string()),
   tallyFormId: v.optional(v.string()),
   requestStatus: v.string(), // "requested" | "quoted" | "confirmed"
+  customerId: v.optional(v.id("customers")),
   bookingRequestId: v.optional(v.id("bookingRequests")),
   rawRequestPayload: v.optional(v.any()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
   .index("by_email", ["email"])
+  .index("by_customer", ["customerId"])
 
 const paymentIntents = defineTable({
   bookingId: v.id("bookings"),
@@ -167,6 +174,59 @@ const paymentIntents = defineTable({
   .index("by_booking", ["bookingId"])
   .index("by_stripe_id", ["stripePaymentIntentId"])
   .index("by_status", ["status"]);
+
+// ============================================================================
+// Customer Management
+// ============================================================================
+
+const customers = defineTable({
+  // Identity
+  organizationId: v.optional(v.id("organizations")),
+
+  // Basic Info
+  firstName: v.string(),
+  lastName: v.string(),
+  email: v.string(),
+  phone: v.optional(v.string()),
+  alternatePhone: v.optional(v.string()),
+
+  // Address
+  address: v.optional(
+    v.object({
+      street: v.optional(v.string()),
+      addressLine2: v.optional(v.string()),
+      city: v.optional(v.string()),
+      state: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+    })
+  ),
+
+  // Property
+  squareFootage: v.optional(v.number()),
+
+  // Payment
+  stripeCustomerId: v.optional(v.string()),
+
+  // Status
+  status: v.string(), // "lead" | "active" | "inactive" | "churned"
+  source: v.optional(v.string()), // "quote_request" | "booking" | "manual"
+
+  // Notes
+  notes: v.optional(v.string()),
+  internalNotes: v.optional(v.string()),
+
+  // Denormalized Stats
+  totalBookings: v.optional(v.number()),
+  totalSpent: v.optional(v.number()),
+  lastBookingDate: v.optional(v.number()),
+
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_email", ["email"])
+  .index("by_organization", ["organizationId"])
+  .index("by_status", ["status"])
+  .index("by_stripe_id", ["stripeCustomerId"]);
 
 // ============================================================================
 // Cleaner/Worker Management Tables
@@ -521,6 +581,8 @@ export default defineSchema({
   bookingRequests,
   quoteRequests,
   paymentIntents,
+  // Customer Management
+  customers,
   // Cleaner/Worker Management
   cleaners,
   cleanerPayRates,
