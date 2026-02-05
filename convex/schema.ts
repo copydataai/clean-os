@@ -61,12 +61,14 @@ const paymentMethods = defineTable({
       last4: v.string(),
       expMonth: v.number(),
       expYear: v.number(),
+      fingerprint: v.optional(v.string()),
     })
   ),
   createdAt: v.number(),
 })
   .index("by_clerk_id", ["clerkId"])
-  .index("by_stripe_id", ["stripePaymentMethodId"]);
+  .index("by_stripe_id", ["stripePaymentMethodId"])
+  .index("by_stripe_customer", ["stripeCustomerId"]);
 
 const bookings = defineTable({
   email: v.string(),
@@ -87,7 +89,8 @@ const bookings = defineTable({
   .index("by_email", ["email"])
   .index("by_checkout_session", ["stripeCheckoutSessionId"])
   .index("by_status", ["status"])
-  .index("by_customer", ["customerId"]);
+  .index("by_customer", ["customerId"])
+  .index("by_stripe_customer", ["stripeCustomerId"]);
 
 const bookingRequests = defineTable({
   status: v.string(), // "requested" | "confirmed"
