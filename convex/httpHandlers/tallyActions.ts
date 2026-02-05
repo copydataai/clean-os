@@ -85,6 +85,39 @@ function getTallyFields(data: any): any[] {
   return data?.data?.fields ?? [];
 }
 
+function deriveIdFromFieldKey(key: any): string | undefined {
+  if (typeof key !== "string") {
+    return undefined;
+  }
+  if (!key.startsWith("question_")) {
+    return undefined;
+  }
+  const withoutPrefix = key.slice("question_".length);
+  const [shortId] = withoutPrefix.split("_");
+  return shortId && shortId.length > 0 ? shortId : undefined;
+}
+
+function normalizeFieldValue(field: any): any {
+  const raw = field?.value === null ? undefined : field?.value;
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) {
+      return undefined;
+    }
+    if (Array.isArray(field?.options)) {
+      const optionById = new Map(
+        field.options
+          .filter((option: any) => option?.id !== undefined)
+          .map((option: any) => [String(option.id), option.text]),
+      );
+      const first = raw[0];
+      const mapped = optionById.get(String(first));
+      return mapped ?? String(first);
+    }
+    return raw.length === 1 ? raw[0] : raw;
+  }
+  return raw;
+}
+
 function buildFieldMaps(fields: any[]): {
   byId: Record<string, any>;
   byKey: Record<string, any>;
@@ -93,12 +126,17 @@ function buildFieldMaps(fields: any[]): {
   const byKey: Record<string, any> = {};
 
   for (const field of fields) {
+    const value = normalizeFieldValue(field);
     const id = field?.id ?? field?.questionId ?? field?.fieldId;
-    if (id) {
-      byId[id] = field.value;
+    const derivedId = deriveIdFromFieldKey(field?.key);
+    if (id && byId[id] === undefined) {
+      byId[id] = value;
+    }
+    if (!id && derivedId && byId[derivedId] === undefined) {
+      byId[derivedId] = value;
     }
     if (field?.key) {
-      byKey[field.key] = field.value;
+      byKey[field.key] = value;
     }
   }
 
@@ -106,12 +144,17 @@ function buildFieldMaps(fields: any[]): {
 }
 
 function readHiddenField(fields: any[], key: string): string | undefined {
+  const derivedKey = deriveIdFromFieldKey(key);
   for (const field of fields) {
     if (
       field?.key === key ||
       field?.id === key ||
       field?.label === key ||
-      field?.name === key
+      field?.name === key ||
+      (derivedKey &&
+        (field?.id === derivedKey ||
+          field?.questionId === derivedKey ||
+          field?.fieldId === derivedKey))
     ) {
       return field.value;
     }
@@ -166,6 +209,23 @@ function parseBookingRequestFields(fields: any[]) {
     timingShiftOk: byId[TALLY_FIELD_IDS.timingShiftOk],
     additionalNotes: byId[TALLY_FIELD_IDS.additionalNotes],
   };
+}
+
+function logMissingFields(
+  contextLabel: string,
+  fields: Record<string, any>,
+  requiredKeys: string[],
+) {
+  const missing = requiredKeys.filter((key) => {
+    const value = fields[key];
+    if (Array.isArray(value)) {
+      return value.length === 0;
+    }
+    return value === undefined || value === null || value === "";
+  });
+  if (missing.length > 0) {
+    console.warn(`[Tally Webhook] Missing ${contextLabel} fields`, { missing });
+  }
 }
 
 function parseQuoteRequestFields(fields: any[]) {
@@ -269,6 +329,19 @@ export const handleTallyRequestWebhook = internalAction({
     }
 
     const parsedFields = parseQuoteRequestFields(verified.fields);
+    logMissingFields("quote request", parsedFields, [
+      "firstName",
+      "lastName",
+      "email",
+      "phone",
+      "service",
+      "serviceType",
+      "squareFootage",
+      "address",
+      "postalCode",
+      "city",
+      "state",
+    ]);
     const contactDetails = [parsedFields.firstName, parsedFields.lastName]
       .filter(Boolean)
       .join(" ")
@@ -340,6 +413,11 @@ export const handleTallyConfirmationWebhook = internalAction({
       readHiddenField(verified.fields, "requestId") ??
       readHiddenField(verified.fields, "request_id");
     const parsedFields = parseBookingRequestFields(verified.fields);
+    logMissingFields("booking confirmation", parsedFields, [
+      "contactDetails",
+      "phoneNumber",
+      "email",
+    ]);
 
     const updatedRequestId = await ctx.runMutation(
       internal.bookingRequests.confirmRequest,
