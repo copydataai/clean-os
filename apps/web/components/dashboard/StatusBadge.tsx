@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 const statusStyles: Record<string, string> = {
   requested: "bg-amber-100 text-amber-700",
+  quoted: "bg-purple-100 text-purple-700",
   confirmed: "bg-blue-100 text-blue-700",
   booking_created: "bg-indigo-100 text-indigo-700",
   card_saved: "bg-green-100 text-green-700",

@@ -1,5 +1,10 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
 export const createQuoteRequest = internalMutation({
@@ -75,6 +80,13 @@ export const markConfirmed = internalMutation({
   },
 });
 
+export const getQuoteRequestById = internalQuery({
+  args: { id: v.id("quoteRequests") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
 export const getById = query({
   args: { id: v.id("quoteRequests") },
   handler: async (ctx, args) => {
@@ -87,5 +99,22 @@ export const listRecent = query({
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
     return await ctx.db.query("quoteRequests").order("desc").take(limit);
+  },
+});
+
+export const updateRequestStatus = mutation({
+  args: {
+    quoteRequestId: v.id("quoteRequests"),
+    requestStatus: v.union(
+      v.literal("requested"),
+      v.literal("quoted"),
+      v.literal("confirmed")
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.quoteRequestId, {
+      requestStatus: args.requestStatus,
+      updatedAt: Date.now(),
+    });
   },
 });

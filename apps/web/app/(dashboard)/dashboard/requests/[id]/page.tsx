@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -46,12 +46,14 @@ export default function RequestDetailPage() {
   const createBooking = useMutation(api.bookings.createBookingFromRequest);
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
+  const sendConfirmEmail = useAction(api.emailTriggers.sendConfirmationEmail);
 
   const [actionState, setActionState] = useState<"idle" | "loading" | "success" | "error">(
     "idle"
   );
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [emailState, setEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
   const quickSummary = useMemo(() => {
     if (!request) {
@@ -180,6 +182,31 @@ export default function RequestDetailPage() {
                   : copyState === "error"
                   ? "Copy failed"
                   : "Copy booking link"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={emailState === "sending"}
+                onClick={async () => {
+                  setEmailState("sending");
+                  try {
+                    await sendConfirmEmail({ requestId: request._id });
+                    setEmailState("sent");
+                    setTimeout(() => setEmailState("idle"), 3000);
+                  } catch (error) {
+                    console.error(error);
+                    setEmailState("error");
+                    setTimeout(() => setEmailState("idle"), 3000);
+                  }
+                }}
+              >
+                {emailState === "sending"
+                  ? "Sending..."
+                  : emailState === "sent"
+                  ? "Email sent!"
+                  : emailState === "error"
+                  ? "Failed to send"
+                  : "Send confirmation email"}
               </Button>
               <Button
                 size="sm"
