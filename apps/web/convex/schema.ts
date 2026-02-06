@@ -182,6 +182,43 @@ const paymentIntents = defineTable({
   .index("by_stripe_id", ["stripePaymentIntentId"])
   .index("by_status", ["status"]);
 
+const emailSends = defineTable({
+  idempotencyKey: v.string(),
+  to: v.string(),
+  subject: v.string(),
+  template: v.string(),
+  provider: v.string(),
+  status: v.string(), // queued|sent|failed|skipped
+  providerEmailId: v.optional(v.string()),
+  errorCode: v.optional(v.string()),
+  errorMessage: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_idempotency_key", ["idempotencyKey"])
+  .index("by_provider_email_id", ["providerEmailId"])
+  .index("by_status", ["status"]);
+
+const emailEvents = defineTable({
+  eventId: v.string(),
+  type: v.string(),
+  email: v.string(),
+  providerEmailId: v.optional(v.string()),
+  raw: v.any(),
+  processedAt: v.number(),
+})
+  .index("by_event_id", ["eventId"])
+  .index("by_type", ["type"])
+  .index("by_processed_at", ["processedAt"]);
+
+const emailSuppressions = defineTable({
+  email: v.string(),
+  reason: v.union(v.literal("hard_bounce"), v.literal("complaint")),
+  sourceEventId: v.optional(v.string()),
+  createdAt: v.number(),
+})
+  .index("by_email", ["email"]);
+
 // ============================================================================
 // Customer Management
 // ============================================================================
@@ -588,6 +625,9 @@ export default defineSchema({
   bookingRequests,
   quoteRequests,
   paymentIntents,
+  emailSends,
+  emailEvents,
+  emailSuppressions,
   // Customer Management
   customers,
   // Cleaner/Worker Management

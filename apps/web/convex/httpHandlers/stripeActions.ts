@@ -48,6 +48,20 @@ export const handleStripeWebhook = internalAction({
             await ctx.runAction(internal.stripeActions.handleCheckoutCompleted, {
               checkoutSessionId: session.id,
             });
+
+            // Send payment saved email
+            const email = session.customer_email ?? session.metadata?.email;
+            if (email) {
+              try {
+                await ctx.runAction(internal.emailRenderers.sendPaymentSavedEmail, {
+                  to: email,
+                  idempotencyKey: `payment-saved:${session.id}`,
+                  bookingRef: session.metadata?.bookingId,
+                });
+              } catch (err) {
+                console.error("[Stripe Webhook] Failed to send payment saved email", err);
+              }
+            }
           }
           break;
         }

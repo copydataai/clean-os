@@ -392,6 +392,26 @@ export const handleTallyRequestWebhook = internalAction({
       quoteRequestId,
     });
 
+    // Send quote received email
+    if (parsedFields.email) {
+      try {
+        await ctx.runAction(internal.emailRenderers.sendQuoteReceivedEmail, {
+          to: parsedFields.email,
+          idempotencyKey: `quote-received:${quoteRequestId}`,
+          firstName: parsedFields.firstName,
+          service: parsedFields.service,
+          serviceType: parsedFields.serviceType,
+          frequency: parsedFields.frequency,
+          squareFootage: parsedFields.squareFootage,
+          address: parsedFields.address,
+          city: parsedFields.city,
+          state: parsedFields.state,
+        });
+      } catch (err) {
+        console.error("[Tally Webhook] Failed to send quote received email", err);
+      }
+    }
+
     return { success: true, requestId: quoteRequestId, bookingRequestId, status: 200 };
   },
 });
@@ -447,6 +467,49 @@ export const handleTallyConfirmationWebhook = internalAction({
     if (!updatedRequestId) {
       console.error("[Tally Webhook] No matching request found for confirmation");
       return { error: "Booking request not found", status: 400 };
+    }
+
+    // Send booking confirmed email
+    const confirmEmail = parsedFields.email;
+    if (confirmEmail && updatedRequestId) {
+      try {
+        const bookingRequest = await ctx.runQuery(
+          internal.bookingRequests.getRequestById,
+          { id: updatedRequestId }
+        );
+        let quoteData: { service?: string; frequency?: string; address?: string; firstName?: string } = {};
+        if (bookingRequest?.quoteRequestId) {
+          const quote = await ctx.runQuery(
+            internal.quoteRequests.getQuoteRequestById,
+            { id: bookingRequest.quoteRequestId }
+          );
+          if (quote) {
+            quoteData = {
+              service: quote.service ?? undefined,
+              frequency: quote.frequency ?? undefined,
+              address: quote.address ?? undefined,
+              firstName: quote.firstName ?? undefined,
+            };
+          }
+        }
+
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+        const bookingLink = `${appUrl}/book?request_id=${updatedRequestId}`;
+
+        await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {
+          to: confirmEmail,
+          idempotencyKey: `booking-confirmed:${updatedRequestId}`,
+          firstName: quoteData.firstName ?? parsedFields.contactDetails,
+          service: quoteData.service,
+          frequency: quoteData.frequency,
+          address: quoteData.address,
+          accessMethod: parsedFields.accessMethod,
+          pets: parsedFields.pets,
+          bookingLink,
+        });
+      } catch (err) {
+        console.error("[Tally Webhook] Failed to send booking confirmed email", err);
+      }
     }
 
     return { success: true, requestId: updatedRequestId, status: 200 };
