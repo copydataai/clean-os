@@ -45,7 +45,13 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# agents 
+# turbo
+.turbo
+
+# lockfiles (project uses bun)
+pnpm-lock.yaml
+
+# agents
 /.codex
 /.claude
 /.windsurf
