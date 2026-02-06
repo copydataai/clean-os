@@ -3,14 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "email dev"
+    "dev": "email dev",
+    "build": "echo 'no build step'",
+    "lint": "echo 'no lint step'"
   },
   "dependencies": {
     "@react-email/components": "0.0.36",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@types/react": "^19",
     "react-email": "4.0.7"
   }
 }
