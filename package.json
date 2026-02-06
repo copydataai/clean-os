@@ -1,14 +1,19 @@
 {
   "name": "clean-os",
   "private": true,
+  "packageManager": "bun@1.3.0",
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "bun run --filter web dev",
-    "build": "bun run --filter web build",
-    "dev:email": "bun run --filter email-templates dev"
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "dev:email": "turbo dev --filter=email-templates"
   },
   "trustedDependencies": [
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "devDependencies": {
+    "turbo": "^2.8.3"
+  }
 }
