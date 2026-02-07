@@ -143,11 +143,18 @@ export default function QuotePricingPage() {
         title="Quote Pricing Rules"
         subtitle="Manage sqft/frequency pricing used for automatic draft quote suggestions."
       >
-        <Link href="/dashboard/quotes">
-          <Button variant="outline" size="sm">
-            Back to Quotes
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/dashboard/quotes/profile">
+            <Button variant="outline" size="sm">
+              Profile
+            </Button>
+          </Link>
+          <Link href="/dashboard/quotes">
+            <Button variant="outline" size="sm">
+              Back to Quotes
+            </Button>
+          </Link>
+        </div>
       </PageHeader>
 
       <div className="surface-card p-6">
