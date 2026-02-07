@@ -457,16 +457,24 @@ export const moveBoardCard = mutation({
       throw new Error("Quote request not found");
     }
 
+    const quote = await ctx.db
+      .query("quotes")
+      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .first();
+
+    const sourceBoardColumn: BoardColumn = quote
+      ? mapQuoteStatusToBoardColumn(quote.status)
+      : ((request.requestStatus as BoardColumn) ?? "requested");
+
+    if (sourceBoardColumn === "confirmed" || args.targetColumn === "confirmed") {
+      throw new Error("Confirmed status is webhook-only");
+    }
+
     const now = Date.now();
     await ctx.db.patch(args.quoteRequestId, {
       requestStatus: args.targetColumn,
       updatedAt: now,
     });
-
-    const quote = await ctx.db
-      .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
-      .first();
 
     if (!quote) {
       return { requestStatus: args.targetColumn, quoteStatus: null };
@@ -556,6 +564,58 @@ export const expireSentQuotesSweep = internalMutation({
     }
 
     return { scanned: sentQuotes.length, expiredCount };
+  },
+});
+
+export const listSentQuotesForReminderSweep = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const sentQuotes = await ctx.db
+      .query("quotes")
+      .withIndex("by_status", (q) => q.eq("status", "sent"))
+      .collect();
+
+    return await Promise.all(
+      sentQuotes.map(async (quote) => {
+        const quoteRequest = await ctx.db.get(quote.quoteRequestId);
+        const revision = quote.latestSentRevisionId
+          ? await ctx.db.get(quote.latestSentRevisionId)
+          : null;
+        const downloadUrl = revision?.pdfStorageId
+          ? await ctx.storage.getUrl(revision.pdfStorageId)
+          : null;
+
+        return {
+          _id: quote._id,
+          quoteNumber: quote.quoteNumber,
+          sentAt: quote.sentAt,
+          expiresAt: quote.expiresAt,
+          latestSentRevisionId: quote.latestSentRevisionId,
+          bookingRequestId: quote.bookingRequestId ?? quoteRequest?.bookingRequestId ?? null,
+          quoteRequestEmail: quoteRequest?.email ?? null,
+          quoteRequestFirstName: quoteRequest?.firstName ?? null,
+          recipientFirstName: revision?.recipientSnapshot?.firstName ?? null,
+          totalCents: revision?.totalCents ?? 0,
+          currency: revision?.currency ?? "usd",
+          serviceLabel: revision?.serviceLabel ?? null,
+          downloadUrl,
+        };
+      })
+    );
+  },
+});
+
+export const markQuoteRequiresReview = internalMutation({
+  args: {
+    quoteId: v.id("quotes"),
+    reason: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.quoteId, {
+      requiresReview: true,
+      reviewReason: args.reason,
+      updatedAt: Date.now(),
+    });
   },
 });
 

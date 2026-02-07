@@ -36,6 +36,7 @@ import type * as queries from "../queries.js";
 import type * as quoteContent from "../quoteContent.js";
 import type * as quotePricing from "../quotePricing.js";
 import type * as quoteProfiles from "../quoteProfiles.js";
+import type * as quoteReminderActions from "../quoteReminderActions.js";
 import type * as quoteRequests from "../quoteRequests.js";
 import type * as quoteSendActions from "../quoteSendActions.js";
 import type * as quotes from "../quotes.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   quoteContent: typeof quoteContent;
   quotePricing: typeof quotePricing;
   quoteProfiles: typeof quoteProfiles;
+  quoteReminderActions: typeof quoteReminderActions;
   quoteRequests: typeof quoteRequests;
   quoteSendActions: typeof quoteSendActions;
   quotes: typeof quotes;
