@@ -9,6 +9,10 @@ const modules: Record<string, () => Promise<any>> = {
   "../_generated/server.ts": () => import("../_generated/server"),
   "../quoteReminderActions.ts": () => import("../quoteReminderActions"),
   "../quotes.ts": () => import("../quotes"),
+  "../emailRenderers.ts": () => import("../emailRenderers"),
+  "../emailSender.ts": () => import("../emailSender"),
+  "../emailSuppressions.ts": () => import("../emailSuppressions"),
+  "../emailActions.ts": () => import("../emailActions"),
   "../emailSends.ts": () => import("../emailSends"),
 };
 
@@ -146,6 +150,13 @@ async function insertEmailSend(
 
 function reminderKey(quoteId: string, revisionId: string, stage: string) {
   return `quote-reminder:${quoteId}:${revisionId}:${stage}`;
+}
+
+async function listReminderEvents(t: ReturnType<typeof convexTest>) {
+  return await t.run(async (ctx) => {
+    const rows = await ctx.db.query("quoteReminderEvents").collect();
+    return rows.sort((a, b) => b.createdAt - a.createdAt);
+  });
 }
 
 describe.sequential("quote reminders", () => {
@@ -379,5 +390,116 @@ describe.sequential("quote reminders", () => {
     expect(result.results).toHaveLength(1);
     expect(result.results[0]?.quoteId).toBe(retryable.quoteId);
     expect(result.results[0]?.stage).toBe("r1_24h");
+  });
+
+  it("writes missing_context reminder events on cron runs", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = 1_740_000_000_000;
+    const fixture = await createQuoteFixture(t, {
+      nowMs,
+      status: "sent",
+      sentAt: nowMs - 30 * 60 * 60 * 1000,
+      expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
+      withEmail: false,
+    });
+
+    await t.action(internal.quoteReminderActions.sendDueQuoteReminders, {
+      nowMs,
+      dryRun: false,
+    });
+
+    const events = await listReminderEvents(t);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.quoteId).toBe(fixture.quoteId);
+    expect(events[0]?.status).toBe("missing_context");
+    expect(events[0]?.triggerSource).toBe("cron");
+    expect(events[0]?.stage).toBe("r1_24h");
+  });
+
+  it("writes failed reminder events when email sending fails", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = 1_740_000_000_000;
+    await createQuoteFixture(t, {
+      nowMs,
+      status: "sent",
+      sentAt: nowMs - 30 * 60 * 60 * 1000,
+      expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
+    });
+
+    const originalConfirmUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL;
+    const originalResendKey = process.env.RESEND_API_KEY;
+    process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = "https://example.com/confirm";
+    delete process.env.RESEND_API_KEY;
+
+    try {
+      await t.action(internal.quoteReminderActions.sendDueQuoteReminders, {
+        nowMs,
+        dryRun: false,
+      });
+    } finally {
+      process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = originalConfirmUrl;
+      if (originalResendKey) process.env.RESEND_API_KEY = originalResendKey;
+    }
+
+    const events = await listReminderEvents(t);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.status).toBe("failed");
+    expect(events[0]?.triggerSource).toBe("cron");
+    expect(events[0]?.stage).toBe("r1_24h");
+  });
+
+  it("manual reminder writes manual stage event with independent idempotency key", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = 1_740_000_000_000;
+    const fixture = await createQuoteFixture(t, {
+      nowMs,
+      status: "sent",
+      sentAt: nowMs - 10 * 60 * 60 * 1000,
+      expiresAt: nowMs + 2 * 24 * 60 * 60 * 1000,
+    });
+    await t.mutation(internal.emailSuppressions.suppressEmail, {
+      email: "test@example.com",
+      reason: "complaint",
+    });
+
+    const originalConfirmUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL;
+    process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = "https://example.com/confirm";
+    try {
+      const result = await t.action(internal.quoteReminderActions.sendManualReminderInternal, {
+        quoteRequestId: fixture.quoteRequestId,
+        nowMs,
+      });
+
+      expect(result.idempotencyKey.includes(":manual:")).toBe(true);
+      expect(result.status === "suppressed" || result.status === "skipped" || result.status === "sent").toBe(true);
+
+      const events = await listReminderEvents(t);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.stage).toBe("manual");
+      expect(events[0]?.triggerSource).toBe("manual");
+      expect(events[0]?.idempotencyKey.includes(":manual:")).toBe(true);
+      const scheduledKey = reminderKey(fixture.quoteId, fixture.revisionId!, "r1_24h");
+      expect(events[0]?.idempotencyKey).not.toBe(scheduledKey);
+    } finally {
+      process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = originalConfirmUrl;
+    }
+  });
+
+  it("manual reminder blocks invalid quote statuses", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = 1_740_000_000_000;
+    const accepted = await createQuoteFixture(t, {
+      nowMs,
+      status: "accepted",
+      sentAt: nowMs - 80 * 60 * 60 * 1000,
+      expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
+    });
+
+    await expect(
+      t.action(internal.quoteReminderActions.sendManualReminderInternal, {
+        quoteRequestId: accepted.quoteRequestId,
+        nowMs,
+      })
+    ).rejects.toThrow("Manual reminders are only allowed for sent quotes");
   });
 });
