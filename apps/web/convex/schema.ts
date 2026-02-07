@@ -186,6 +186,122 @@ const quoteRequests = defineTable({
   .index("by_email", ["email"])
   .index("by_customer", ["customerId"])
 
+const quoteProfiles = defineTable({
+  key: v.string(),
+  displayName: v.string(),
+  legalName: v.string(),
+  phone: v.string(),
+  email: v.string(),
+  website: v.string(),
+  addressLine1: v.string(),
+  addressLine2: v.optional(v.string()),
+  city: v.string(),
+  state: v.string(),
+  postalCode: v.string(),
+  country: v.string(),
+  defaultCurrency: v.string(),
+  defaultTaxName: v.string(),
+  defaultTaxRateBps: v.number(),
+  quoteValidityDays: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_key", ["key"]);
+
+const quotePricingRules = defineTable({
+  serviceType: v.string(),
+  frequency: v.string(),
+  minSqft: v.number(),
+  maxSqft: v.number(),
+  priceCents: v.number(),
+  isActive: v.boolean(),
+  sortOrder: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_service_frequency", ["serviceType", "frequency"])
+  .index("by_active", ["isActive"]);
+
+const quotes = defineTable({
+  quoteRequestId: v.id("quoteRequests"),
+  bookingRequestId: v.optional(v.id("bookingRequests")),
+  quoteNumber: v.number(),
+  status: v.string(), // draft|sent|accepted|expired|send_failed
+  profileKey: v.string(),
+  currentRevisionId: v.optional(v.id("quoteRevisions")),
+  latestSentRevisionId: v.optional(v.id("quoteRevisions")),
+  sentAt: v.optional(v.number()),
+  expiresAt: v.optional(v.number()),
+  acceptedAt: v.optional(v.number()),
+  requiresReview: v.boolean(),
+  reviewReason: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_quote_request", ["quoteRequestId"])
+  .index("by_quote_number", ["quoteNumber"])
+  .index("by_status", ["status"]);
+
+const quoteRevisions = defineTable({
+  quoteId: v.id("quotes"),
+  revisionNumber: v.number(),
+  source: v.string(), // grid_auto|manual_override|manual
+  serviceLabel: v.string(),
+  description: v.string(),
+  quantity: v.number(),
+  unitPriceCents: v.number(),
+  subtotalCents: v.number(),
+  taxName: v.string(),
+  taxRateBps: v.number(),
+  taxAmountCents: v.number(),
+  totalCents: v.number(),
+  currency: v.string(),
+  recipientSnapshot: v.object({
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    address: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+  }),
+  inclusionsSnapshot: v.object({
+    title: v.string(),
+    intro: v.string(),
+    includedItems: v.array(v.string()),
+    whyItWorksItems: v.array(v.string()),
+    outro: v.string(),
+  }),
+  termsSnapshot: v.object({
+    quoteValidity: v.string(),
+    serviceLimitations: v.string(),
+    access: v.string(),
+    cancellations: v.string(),
+    nonSolicitation: v.string(),
+    acceptance: v.string(),
+  }),
+  notes: v.optional(v.string()),
+  pdfStorageId: v.optional(v.id("_storage")),
+  pdfFilename: v.optional(v.string()),
+  pdfGeneratedAt: v.optional(v.number()),
+  sendStatus: v.string(), // draft|sent|failed
+  sendError: v.optional(v.string()),
+  emailSendId: v.optional(v.string()),
+  sentAt: v.optional(v.number()),
+  createdAt: v.number(),
+})
+  .index("by_quote", ["quoteId"])
+  .index("by_quote_revision", ["quoteId", "revisionNumber"]);
+
+const sequences = defineTable({
+  key: v.string(),
+  nextValue: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_key", ["key"]);
+
 const paymentIntents = defineTable({
   bookingId: v.id("bookings"),
   stripePaymentIntentId: v.string(),
@@ -645,6 +761,11 @@ export default defineSchema({
   bookings,
   bookingRequests,
   quoteRequests,
+  quoteProfiles,
+  quotePricingRules,
+  quotes,
+  quoteRevisions,
+  sequences,
   paymentIntents,
   emailSends,
   emailEvents,
