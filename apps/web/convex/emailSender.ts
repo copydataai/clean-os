@@ -11,13 +11,15 @@ import ConfirmationLinkEmail from "../../../packages/email-templates/emails/conf
 import BookingConfirmedEmail from "../../../packages/email-templates/emails/booking-confirmed";
 import PaymentSavedEmail from "../../../packages/email-templates/emails/payment-saved";
 import QuoteReadyEmail from "../../../packages/email-templates/emails/quote-ready";
+import QuoteReminderEmail from "../../../packages/email-templates/emails/quote-reminder";
 
 type SupportedTemplate =
   | "quote-received"
   | "confirmation-link"
   | "booking-confirmed"
   | "payment-saved"
-  | "quote-ready";
+  | "quote-ready"
+  | "quote-reminder";
 
 function buildTemplate(template: SupportedTemplate, templateProps: any) {
   switch (template) {
@@ -31,6 +33,8 @@ function buildTemplate(template: SupportedTemplate, templateProps: any) {
       return React.createElement(PaymentSavedEmail, templateProps);
     case "quote-ready":
       return React.createElement(QuoteReadyEmail, templateProps);
+    case "quote-reminder":
+      return React.createElement(QuoteReminderEmail, templateProps);
     default:
       throw new Error(`Unsupported template: ${template}`);
   }
@@ -65,7 +69,8 @@ export const sendTransactional = internalAction({
       v.literal("confirmation-link"),
       v.literal("booking-confirmed"),
       v.literal("payment-saved"),
-      v.literal("quote-ready")
+      v.literal("quote-ready"),
+      v.literal("quote-reminder")
     ),
     templateProps: v.any(),
     idempotencyKey: v.string(),

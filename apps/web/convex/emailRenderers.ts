@@ -161,3 +161,49 @@ export const sendQuoteReadyEmail = internalAction({
     });
   },
 });
+
+export const sendQuoteReminderEmail = internalAction({
+  args: {
+    to: v.string(),
+    idempotencyKey: v.string(),
+    firstName: v.optional(v.string()),
+    quoteNumber: v.number(),
+    totalCents: v.number(),
+    currency: v.optional(v.string()),
+    validUntilTimestamp: v.number(),
+    confirmUrl: v.string(),
+    downloadUrl: v.optional(v.string()),
+    serviceLabel: v.optional(v.string()),
+    reminderStage: v.union(
+      v.literal("r1_24h"),
+      v.literal("r2_72h"),
+      v.literal("r3_pre_expiry")
+    ),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const subject =
+      args.reminderStage === "r3_pre_expiry"
+        ? "Final Reminder: Your Kathy Clean Quote Expires Soon"
+        : args.reminderStage === "r2_72h"
+          ? "Reminder: Please Confirm Your Kathy Clean Quote"
+          : "Reminder: Your Kathy Clean Quote Is Ready";
+
+    return await ctx.runAction(internal.emailSender.sendTransactional, {
+      to: args.to,
+      subject,
+      template: "quote-reminder",
+      idempotencyKey: args.idempotencyKey,
+      templateProps: {
+        firstName: args.firstName,
+        quoteNumber: args.quoteNumber,
+        totalCents: args.totalCents,
+        currency: args.currency,
+        validUntilTimestamp: args.validUntilTimestamp,
+        confirmUrl: args.confirmUrl,
+        downloadUrl: args.downloadUrl,
+        serviceLabel: args.serviceLabel,
+        reminderStage: args.reminderStage,
+      },
+    });
+  },
+});
