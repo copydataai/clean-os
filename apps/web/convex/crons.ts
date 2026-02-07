@@ -10,5 +10,11 @@ crons.interval(
   {}
 );
 
-export default crons;
+crons.interval(
+  "send-due-quote-reminders",
+  { hours: 1 },
+  internal.quoteReminderActions.sendDueQuoteReminders,
+  {}
+);
 
+export default crons;
