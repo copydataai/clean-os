@@ -4,6 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Doc } from "@/convex/_generated/dataModel";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { useRouter } from "next/navigation";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -21,6 +22,7 @@ type QuoteKanbanCardProps = {
 };
 
 export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
+  const router = useRouter();
   const {
     attributes,
     listeners,
@@ -46,6 +48,11 @@ export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
       style={style}
       {...attributes}
       {...listeners}
+      onClick={() => {
+        if (!isDragging) {
+          router.push(`/dashboard/quotes/${quote._id}`);
+        }
+      }}
       className={`surface-card p-3 cursor-grab active:cursor-grabbing ${
         isDragging ? "opacity-50" : ""
       }`}

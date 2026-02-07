@@ -1,12 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import PageHeader from "@/components/dashboard/PageHeader";
 import EmptyState from "@/components/dashboard/EmptyState";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import QuoteKanbanBoard from "@/components/quotes/QuoteKanbanBoard";
+import { Button } from "@/components/ui/button";
 
 function formatDate(timestamp: number) {
   return new Date(timestamp).toLocaleString();
@@ -40,7 +42,13 @@ export default function QuotesPage() {
         title="Quote Requests"
         subtitle="Incoming quote requests from the PdOzde form."
       >
-        <div className="flex rounded-lg border border-border overflow-hidden text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/dashboard/quotes/pricing">
+            <Button variant="outline" size="sm">
+              Pricing rules
+            </Button>
+          </Link>
+          <div className="flex rounded-lg border border-border overflow-hidden text-sm">
           <button
             onClick={() => setView("kanban")}
             className={`px-3 py-1.5 font-medium transition-colors ${
@@ -61,6 +69,7 @@ export default function QuotesPage() {
           >
             List
           </button>
+          </div>
         </div>
       </PageHeader>
 
