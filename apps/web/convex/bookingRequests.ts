@@ -129,6 +129,9 @@ export const confirmRequest = internalMutation({
           quoteRequestId: args.quoteRequestId,
         });
       }
+      await ctx.runMutation(internal.quotes.onBookingRequestConfirmed, {
+        bookingRequestId: createdId,
+      });
       return createdId;
     }
 
@@ -162,6 +165,10 @@ export const confirmRequest = internalMutation({
         quoteRequestId: request.quoteRequestId,
       });
     }
+
+    await ctx.runMutation(internal.quotes.onBookingRequestConfirmed, {
+      bookingRequestId: request._id,
+    });
 
     return request._id;
   },

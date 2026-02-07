@@ -118,3 +118,20 @@ export const updateRequestStatus = mutation({
     });
   },
 });
+
+export const updateRequestStatusInternal = internalMutation({
+  args: {
+    quoteRequestId: v.id("quoteRequests"),
+    requestStatus: v.union(
+      v.literal("requested"),
+      v.literal("quoted"),
+      v.literal("confirmed")
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.quoteRequestId, {
+      requestStatus: args.requestStatus,
+      updatedAt: Date.now(),
+    });
+  },
+});

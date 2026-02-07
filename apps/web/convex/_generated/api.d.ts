@@ -30,10 +30,17 @@ import type * as http from "../http.js";
 import type * as httpHandlers_clerkActions from "../httpHandlers/clerkActions.js";
 import type * as httpHandlers_stripeActions from "../httpHandlers/stripeActions.js";
 import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js";
+import type * as pdf_quotePdf from "../pdf/quotePdf.js";
 import type * as queries from "../queries.js";
+import type * as quoteContent from "../quoteContent.js";
+import type * as quotePricing from "../quotePricing.js";
+import type * as quoteProfiles from "../quoteProfiles.js";
 import type * as quoteRequests from "../quoteRequests.js";
+import type * as quoteSendActions from "../quoteSendActions.js";
+import type * as quotes from "../quotes.js";
 import type * as resend from "../resend.js";
 import type * as schedule from "../schedule.js";
+import type * as sequences from "../sequences.js";
 import type * as stripeActions from "../stripeActions.js";
 
 import type {
@@ -65,10 +72,17 @@ declare const fullApi: ApiFromModules<{
   "httpHandlers/clerkActions": typeof httpHandlers_clerkActions;
   "httpHandlers/stripeActions": typeof httpHandlers_stripeActions;
   "httpHandlers/tallyActions": typeof httpHandlers_tallyActions;
+  "pdf/quotePdf": typeof pdf_quotePdf;
   queries: typeof queries;
+  quoteContent: typeof quoteContent;
+  quotePricing: typeof quotePricing;
+  quoteProfiles: typeof quoteProfiles;
   quoteRequests: typeof quoteRequests;
+  quoteSendActions: typeof quoteSendActions;
+  quotes: typeof quotes;
   resend: typeof resend;
   schedule: typeof schedule;
+  sequences: typeof sequences;
   stripeActions: typeof stripeActions;
 }>;
 
