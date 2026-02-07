@@ -83,6 +83,25 @@ const bookings = defineTable({
   status: v.string(), // "pending_card", "card_saved", "scheduled", "completed", "charged", "failed"
   serviceType: v.optional(v.string()),
   serviceDate: v.optional(v.string()),
+  serviceWindowStart: v.optional(v.string()), // "HH:mm"
+  serviceWindowEnd: v.optional(v.string()), // "HH:mm"
+  estimatedDurationMinutes: v.optional(v.number()),
+  dispatchPriority: v.optional(v.string()), // low|normal|high|urgent
+  dispatchOrder: v.optional(v.number()),
+  locationSnapshot: v.optional(
+    v.object({
+      street: v.optional(v.string()),
+      addressLine2: v.optional(v.string()),
+      city: v.optional(v.string()),
+      state: v.optional(v.string()),
+      postalCode: v.optional(v.string()),
+      latitude: v.optional(v.number()),
+      longitude: v.optional(v.number()),
+      geocodeStatus: v.optional(v.string()), // pending|geocoded|failed|missing_address
+      geocodedAt: v.optional(v.number()),
+      provider: v.optional(v.string()),
+    })
+  ),
   amount: v.optional(v.number()), // Amount in cents
   notes: v.optional(v.string()),
   tallyResponseId: v.optional(v.string()),
@@ -93,6 +112,8 @@ const bookings = defineTable({
   .index("by_email", ["email"])
   .index("by_checkout_session", ["stripeCheckoutSessionId"])
   .index("by_status", ["status"])
+  .index("by_service_date", ["serviceDate"])
+  .index("by_service_date_status", ["serviceDate", "status"])
   .index("by_customer", ["customerId"])
   .index("by_stripe_customer", ["stripeCustomerId"]);
 
