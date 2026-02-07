@@ -87,6 +87,7 @@ function buildRecipientSnapshot(quoteRequest: any) {
 }
 
 type BoardColumn = "requested" | "quoted" | "confirmed";
+type UrgencyLevel = "normal" | "warning" | "critical" | "expired";
 
 function mapQuoteStatusToBoardColumn(quoteStatus: string): BoardColumn {
   if (quoteStatus === "accepted") {
@@ -106,6 +107,40 @@ function mapBoardColumnToQuoteStatus(column: BoardColumn): "draft" | "sent" | "a
     return "sent";
   }
   return "draft";
+}
+
+function getMedian(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return Math.round((sorted[middle - 1] + sorted[middle]) / 2);
+  }
+  return sorted[middle];
+}
+
+function computeUrgency(
+  status: string | null,
+  expiresAt?: number | null
+): { urgencyLevel: UrgencyLevel; hoursUntilExpiry: number | null } {
+  if (!status || !expiresAt) {
+    return { urgencyLevel: "normal", hoursUntilExpiry: null };
+  }
+  const now = Date.now();
+  if (status === "expired" || (status === "sent" && now > expiresAt)) {
+    return { urgencyLevel: "expired", hoursUntilExpiry: 0 };
+  }
+  if (status !== "sent") {
+    return { urgencyLevel: "normal", hoursUntilExpiry: null };
+  }
+  const hoursUntilExpiry = Math.max(0, Math.ceil((expiresAt - now) / (60 * 60 * 1000)));
+  if (hoursUntilExpiry <= 24) {
+    return { urgencyLevel: "critical", hoursUntilExpiry };
+  }
+  if (hoursUntilExpiry <= 72) {
+    return { urgencyLevel: "warning", hoursUntilExpiry };
+  }
+  return { urgencyLevel: "normal", hoursUntilExpiry };
 }
 
 async function getProfileByKeyOrDefault(ctx: any, key?: string | null) {
@@ -414,7 +449,7 @@ export const listQuoteBoard = query({
     const now = Date.now();
     const requests = await ctx.db.query("quoteRequests").order("desc").take(limit);
 
-    return await Promise.all(
+    const rows = await Promise.all(
       requests.map(async (request) => {
         const quote = await ctx.db
           .query("quotes")
@@ -428,21 +463,42 @@ export const listQuoteBoard = query({
             quoteStatus: null,
             quoteId: null,
             isQuoteExpired: false,
+            sentAt: null,
+            expiresAt: null,
+            hoursUntilExpiry: null,
+            urgencyLevel: "normal" as UrgencyLevel,
           };
         }
 
         const isQuoteExpired =
           quote.status === "sent" && Boolean(quote.expiresAt) && now > (quote.expiresAt ?? 0);
         const effectiveQuoteStatus = isQuoteExpired ? "expired" : quote.status;
+        const urgency = computeUrgency(effectiveQuoteStatus, quote.expiresAt ?? null);
         return {
           ...request,
           boardColumn: mapQuoteStatusToBoardColumn(effectiveQuoteStatus),
           quoteStatus: effectiveQuoteStatus,
           quoteId: quote._id,
           isQuoteExpired,
+          sentAt: quote.sentAt ?? null,
+          expiresAt: quote.expiresAt ?? null,
+          hoursUntilExpiry: urgency.hoursUntilExpiry,
+          urgencyLevel: urgency.urgencyLevel,
         };
       })
     );
+
+    return rows.sort((a, b) => {
+      if (a.boardColumn === "quoted" && b.boardColumn === "quoted") {
+        const aExpires = typeof a.expiresAt === "number" ? a.expiresAt : Number.MAX_SAFE_INTEGER;
+        const bExpires = typeof b.expiresAt === "number" ? b.expiresAt : Number.MAX_SAFE_INTEGER;
+        if (aExpires !== bExpires) return aExpires - bExpires;
+        const aSent = typeof a.sentAt === "number" ? a.sentAt : Number.MAX_SAFE_INTEGER;
+        const bSent = typeof b.sentAt === "number" ? b.sentAt : Number.MAX_SAFE_INTEGER;
+        if (aSent !== bSent) return aSent - bSent;
+      }
+      return b.createdAt - a.createdAt;
+    });
   },
 });
 
@@ -587,6 +643,7 @@ export const listSentQuotesForReminderSweep = internalQuery({
 
         return {
           _id: quote._id,
+          quoteRequestId: quote.quoteRequestId,
           quoteNumber: quote.quoteNumber,
           sentAt: quote.sentAt,
           expiresAt: quote.expiresAt,
@@ -615,6 +672,39 @@ export const markQuoteRequiresReview = internalMutation({
       requiresReview: true,
       reviewReason: args.reason,
       updatedAt: Date.now(),
+    });
+  },
+});
+
+export const createQuoteReminderEvent = internalMutation({
+  args: {
+    quoteId: v.id("quotes"),
+    quoteRequestId: v.id("quoteRequests"),
+    bookingRequestId: v.optional(v.id("bookingRequests")),
+    revisionId: v.optional(v.id("quoteRevisions")),
+    stage: v.union(
+      v.literal("r1_24h"),
+      v.literal("r2_72h"),
+      v.literal("r3_pre_expiry"),
+      v.literal("manual")
+    ),
+    triggerSource: v.union(v.literal("cron"), v.literal("manual")),
+    idempotencyKey: v.string(),
+    status: v.union(
+      v.literal("sent"),
+      v.literal("failed"),
+      v.literal("skipped"),
+      v.literal("suppressed"),
+      v.literal("missing_context")
+    ),
+    emailSendId: v.optional(v.id("emailSends")),
+    errorMessage: v.optional(v.string()),
+    sentAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("quoteReminderEvents", {
+      ...args,
+      createdAt: Date.now(),
     });
   },
 });
@@ -729,6 +819,105 @@ export const sendRevision = action({
       quoteRequestId: args.quoteRequestId,
       revisionId: args.revisionId,
     });
+  },
+});
+
+export const sendManualReminder = action({
+  args: {
+    quoteRequestId: v.id("quoteRequests"),
+  },
+  handler: async (ctx, args): Promise<{
+    eventId: Id<"quoteReminderEvents">;
+    status: "sent" | "failed" | "skipped" | "suppressed" | "missing_context";
+    idempotencyKey: string;
+  }> => {
+    return await ctx.runAction(internal.quoteReminderActions.sendManualReminderInternal, {
+      quoteRequestId: args.quoteRequestId,
+    });
+  },
+});
+
+export const getQuoteReminderTimeline = query({
+  args: {
+    quoteRequestId: v.id("quoteRequests"),
+  },
+  handler: async (ctx, args) => {
+    const quote = await ctx.db
+      .query("quotes")
+      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .first();
+    if (!quote) {
+      return [];
+    }
+
+    const events = await ctx.db
+      .query("quoteReminderEvents")
+      .withIndex("by_quote_created", (q) => q.eq("quoteId", quote._id))
+      .collect();
+
+    return events.sort((a, b) => b.createdAt - a.createdAt);
+  },
+});
+
+export const getQuoteFunnelMetrics = query({
+  args: {
+    days: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const days = args.days ?? 30;
+    const now = Date.now();
+    const cutoff = now - days * 24 * 60 * 60 * 1000;
+
+    const quoteRequests = (await ctx.db.query("quoteRequests").collect()).filter(
+      (request) => request.createdAt >= cutoff
+    );
+    const quotes = await ctx.db.query("quotes").collect();
+    const quotesByRequestId = new Map<string, (typeof quotes)[number]>();
+    for (const quote of quotes) {
+      if (!quotesByRequestId.has(quote.quoteRequestId)) {
+        quotesByRequestId.set(quote.quoteRequestId, quote);
+      }
+    }
+
+    const requestedCount = quoteRequests.length;
+    let quotedCount = 0;
+    let confirmedCount = 0;
+    const timeToQuoteValues: number[] = [];
+    const timeToConfirmValues: number[] = [];
+
+    for (const request of quoteRequests) {
+      const quote = quotesByRequestId.get(request._id);
+      if (!quote) continue;
+
+      if (typeof quote.sentAt === "number") {
+        quotedCount += 1;
+        const timeToQuote = quote.sentAt - request.createdAt;
+        if (timeToQuote >= 0) {
+          timeToQuoteValues.push(timeToQuote);
+        }
+      }
+
+      if (typeof quote.acceptedAt === "number") {
+        confirmedCount += 1;
+        if (typeof quote.sentAt === "number") {
+          const timeToConfirm = quote.acceptedAt - quote.sentAt;
+          if (timeToConfirm >= 0) {
+            timeToConfirmValues.push(timeToConfirm);
+          }
+        }
+      }
+    }
+
+    return {
+      windowDays: days,
+      requestedCount,
+      quotedCount,
+      confirmedCount,
+      quotedRate: requestedCount > 0 ? quotedCount / requestedCount : 0,
+      confirmedRate: requestedCount > 0 ? confirmedCount / requestedCount : 0,
+      medianTimeToQuoteMs: getMedian(timeToQuoteValues),
+      medianTimeToConfirmMs: getMedian(timeToConfirmValues),
+    };
   },
 });
 

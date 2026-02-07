@@ -184,7 +184,7 @@ const quoteRequests = defineTable({
   updatedAt: v.number(),
 })
   .index("by_email", ["email"])
-  .index("by_customer", ["customerId"])
+  .index("by_customer", ["customerId"]);
 
 const quoteProfiles = defineTable({
   key: v.string(),
@@ -294,6 +294,24 @@ const quoteRevisions = defineTable({
 })
   .index("by_quote", ["quoteId"])
   .index("by_quote_revision", ["quoteId", "revisionNumber"]);
+
+const quoteReminderEvents = defineTable({
+  quoteId: v.id("quotes"),
+  quoteRequestId: v.id("quoteRequests"),
+  bookingRequestId: v.optional(v.id("bookingRequests")),
+  revisionId: v.optional(v.id("quoteRevisions")),
+  stage: v.string(), // r1_24h|r2_72h|r3_pre_expiry|manual
+  triggerSource: v.string(), // cron|manual
+  idempotencyKey: v.string(),
+  status: v.string(), // sent|failed|skipped|suppressed|missing_context
+  emailSendId: v.optional(v.id("emailSends")),
+  errorMessage: v.optional(v.string()),
+  sentAt: v.optional(v.number()),
+  createdAt: v.number(),
+})
+  .index("by_quote_created", ["quoteId", "createdAt"])
+  .index("by_quote_stage", ["quoteId", "stage"])
+  .index("by_idempotency_key", ["idempotencyKey"]);
 
 const sequences = defineTable({
   key: v.string(),
@@ -765,6 +783,7 @@ export default defineSchema({
   quotePricingRules,
   quotes,
   quoteRevisions,
+  quoteReminderEvents,
   sequences,
   paymentIntents,
   emailSends,

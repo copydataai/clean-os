@@ -2,7 +2,7 @@ import { Text, Button, Section, Row, Column } from "@react-email/components";
 import * as React from "react";
 import EmailLayout from "./components/layout";
 
-type ReminderStage = "r1_24h" | "r2_72h" | "r3_pre_expiry";
+type ReminderStage = "r1_24h" | "r2_72h" | "r3_pre_expiry" | "manual";
 
 interface QuoteReminderEmailProps {
   firstName?: string;
@@ -32,6 +32,9 @@ function formatDate(timestamp: number): string {
 }
 
 function reminderCopy(stage: ReminderStage): string {
+  if (stage === "manual") {
+    return "Here is your quote again in case you need it before confirming.";
+  }
   if (stage === "r3_pre_expiry") {
     return "Final reminder: your quote expires soon.";
   }

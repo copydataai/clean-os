@@ -177,7 +177,8 @@ export const sendQuoteReminderEmail = internalAction({
     reminderStage: v.union(
       v.literal("r1_24h"),
       v.literal("r2_72h"),
-      v.literal("r3_pre_expiry")
+      v.literal("r3_pre_expiry"),
+      v.literal("manual")
     ),
   },
   handler: async (ctx, args): Promise<any> => {
@@ -186,6 +187,8 @@ export const sendQuoteReminderEmail = internalAction({
         ? "Final Reminder: Your Kathy Clean Quote Expires Soon"
         : args.reminderStage === "r2_72h"
           ? "Reminder: Please Confirm Your Kathy Clean Quote"
+          : args.reminderStage === "manual"
+            ? "Reminder: Please Confirm Your Kathy Clean Quote"
           : "Reminder: Your Kathy Clean Quote Is Ready";
 
     return await ctx.runAction(internal.emailSender.sendTransactional, {
