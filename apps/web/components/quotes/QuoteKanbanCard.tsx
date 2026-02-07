@@ -28,9 +28,45 @@ type QuoteKanbanCardProps = {
     serviceType?: string | null;
     frequency?: string | null;
     squareFootage?: number | null;
+    sentAt?: number | null;
+    expiresAt?: number | null;
+    hoursUntilExpiry?: number | null;
+    urgencyLevel?: "normal" | "warning" | "critical" | "expired";
     createdAt: number;
   };
 };
+
+function urgencyLabel(quote: QuoteKanbanCardProps["quote"]): string | null {
+  if (quote.urgencyLevel === "expired") {
+    return "Expired";
+  }
+  if (quote.urgencyLevel === "critical") {
+    return quote.hoursUntilExpiry !== null && quote.hoursUntilExpiry !== undefined
+      ? `Critical · Expires in ${quote.hoursUntilExpiry}h`
+      : "Critical";
+  }
+  if (quote.urgencyLevel === "warning") {
+    if (quote.hoursUntilExpiry !== null && quote.hoursUntilExpiry !== undefined) {
+      const days = Math.max(1, Math.ceil(quote.hoursUntilExpiry / 24));
+      return `Warning · Expires in ${days}d`;
+    }
+    return "Warning";
+  }
+  return null;
+}
+
+function urgencyClass(urgencyLevel?: QuoteKanbanCardProps["quote"]["urgencyLevel"]): string {
+  if (urgencyLevel === "expired") {
+    return "bg-rose-100 text-rose-700";
+  }
+  if (urgencyLevel === "critical") {
+    return "bg-red-100 text-red-700";
+  }
+  if (urgencyLevel === "warning") {
+    return "bg-amber-100 text-amber-700";
+  }
+  return "bg-slate-100 text-slate-700";
+}
 
 export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
   const router = useRouter();
@@ -52,6 +88,7 @@ export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
     quote.firstName || quote.lastName
       ? `${quote.firstName ?? ""} ${quote.lastName ?? ""}`.trim()
       : quote.email ?? "Unknown";
+  const urgency = urgencyLabel(quote);
 
   return (
     <div
@@ -85,6 +122,11 @@ export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
         {quote.frequency && <span>{quote.frequency}</span>}
         {quote.squareFootage && <span>{quote.squareFootage} sqft</span>}
       </div>
+      {urgency ? (
+        <p className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${urgencyClass(quote.urgencyLevel)}`}>
+          {urgency}
+        </p>
+      ) : null}
 
       <p className="mt-2 text-[11px] text-muted-foreground">
         {timeAgo(quote.createdAt)}

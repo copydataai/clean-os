@@ -35,6 +35,10 @@ type QuoteBoardRow = {
   serviceType?: string | null;
   frequency?: string | null;
   squareFootage?: number | null;
+  sentAt?: number | null;
+  expiresAt?: number | null;
+  hoursUntilExpiry?: number | null;
+  urgencyLevel?: "normal" | "warning" | "critical" | "expired";
   createdAt: number;
   requestStatus: string;
   boardColumn: RequestStatus;
@@ -69,6 +73,15 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
         map.requested.push(q);
       }
     }
+    map.quoted.sort((a, b) => {
+      const aExpires = typeof a.expiresAt === "number" ? a.expiresAt : Number.MAX_SAFE_INTEGER;
+      const bExpires = typeof b.expiresAt === "number" ? b.expiresAt : Number.MAX_SAFE_INTEGER;
+      if (aExpires !== bExpires) return aExpires - bExpires;
+      const aSent = typeof a.sentAt === "number" ? a.sentAt : Number.MAX_SAFE_INTEGER;
+      const bSent = typeof b.sentAt === "number" ? b.sentAt : Number.MAX_SAFE_INTEGER;
+      if (aSent !== bSent) return aSent - bSent;
+      return b.createdAt - a.createdAt;
+    });
     return map;
   }, [quotes]);
 

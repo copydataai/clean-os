@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -14,9 +14,59 @@ function formatDate(timestamp: number) {
   return new Date(timestamp).toLocaleString();
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatDuration(durationMs?: number | null): string {
+  if (!durationMs || durationMs <= 0) return "—";
+  const hours = Math.round(durationMs / (60 * 60 * 1000));
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  return `${days}d`;
+}
+
+function urgencyText(quote: {
+  urgencyLevel?: "normal" | "warning" | "critical" | "expired";
+  hoursUntilExpiry?: number | null;
+}): string | null {
+  if (quote.urgencyLevel === "expired") return "Expired";
+  if (quote.urgencyLevel === "critical") {
+    return quote.hoursUntilExpiry ? `Critical · ${quote.hoursUntilExpiry}h left` : "Critical";
+  }
+  if (quote.urgencyLevel === "warning") {
+    const days = quote.hoursUntilExpiry ? Math.max(1, Math.ceil(quote.hoursUntilExpiry / 24)) : null;
+    return days ? `Warning · ${days}d left` : "Warning";
+  }
+  return null;
+}
+
+function urgencyClass(urgencyLevel?: "normal" | "warning" | "critical" | "expired"): string {
+  if (urgencyLevel === "expired") return "bg-rose-100 text-rose-700";
+  if (urgencyLevel === "critical") return "bg-red-100 text-red-700";
+  if (urgencyLevel === "warning") return "bg-amber-100 text-amber-700";
+  return "bg-slate-100 text-slate-700";
+}
+
 export default function QuotesPage() {
   const quotes = useQuery(api.quotes.listQuoteBoard, { limit: 50 });
+  const funnel = useQuery(api.quotes.getQuoteFunnelMetrics, { days: 30 });
   const [view, setView] = useState<"kanban" | "list">("kanban");
+
+  const listRows = useMemo(() => {
+    if (!quotes) return [];
+    return [...quotes].sort((a, b) => {
+      if (a.boardColumn === "quoted" && b.boardColumn === "quoted") {
+        const aExpires = typeof a.expiresAt === "number" ? a.expiresAt : Number.MAX_SAFE_INTEGER;
+        const bExpires = typeof b.expiresAt === "number" ? b.expiresAt : Number.MAX_SAFE_INTEGER;
+        if (aExpires !== bExpires) return aExpires - bExpires;
+        const aSent = typeof a.sentAt === "number" ? a.sentAt : Number.MAX_SAFE_INTEGER;
+        const bSent = typeof b.sentAt === "number" ? b.sentAt : Number.MAX_SAFE_INTEGER;
+        if (aSent !== bSent) return aSent - bSent;
+      }
+      return b.createdAt - a.createdAt;
+    });
+  }, [quotes]);
 
   if (!quotes) {
     return (
@@ -78,11 +128,42 @@ export default function QuotesPage() {
         </div>
       </PageHeader>
 
+      {funnel ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">Requested (30d)</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{funnel.requestedCount}</p>
+          </div>
+          <div className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">Quoted (30d)</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{funnel.quotedCount}</p>
+          </div>
+          <div className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">Confirmed (30d)</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{funnel.confirmedCount}</p>
+          </div>
+          <div className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">Quote Rate</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{formatPercent(funnel.quotedRate)}</p>
+          </div>
+          <div className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">Confirm Rate</p>
+            <p className="mt-1 text-2xl font-semibold text-foreground">{formatPercent(funnel.confirmedRate)}</p>
+          </div>
+          <div className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">Median Quote / Confirm</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">
+              {formatDuration(funnel.medianTimeToQuoteMs)} / {formatDuration(funnel.medianTimeToConfirmMs)}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {view === "kanban" ? (
         <QuoteKanbanBoard quotes={quotes} />
       ) : (
         <div className="grid gap-4">
-          {quotes.map((quote) => (
+          {listRows.map((quote) => (
             <div
               key={quote._id}
               className="surface-card p-6"
@@ -103,6 +184,11 @@ export default function QuotesPage() {
                   <StatusBadge status={quote.requestStatus} />
                   {quote.quoteStatus === "expired" || quote.quoteStatus === "send_failed" ? (
                     <StatusBadge status={quote.quoteStatus} />
+                  ) : null}
+                  {urgencyText(quote) ? (
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${urgencyClass(quote.urgencyLevel)}`}>
+                      {urgencyText(quote)}
+                    </span>
                   ) : null}
                   <span className="text-xs text-muted-foreground">
                     {quote.squareFootage ? `${quote.squareFootage} sqft` : "Sqft —"}

@@ -26,6 +26,10 @@ type QuoteKanbanColumnProps = {
     serviceType?: string | null;
     frequency?: string | null;
     squareFootage?: number | null;
+    sentAt?: number | null;
+    expiresAt?: number | null;
+    hoursUntilExpiry?: number | null;
+    urgencyLevel?: "normal" | "warning" | "critical" | "expired";
     createdAt: number;
   }[];
 };

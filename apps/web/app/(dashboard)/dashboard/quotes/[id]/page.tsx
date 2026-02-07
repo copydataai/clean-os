@@ -32,6 +32,22 @@ function statusLabel(status?: string, isExpired?: boolean): string {
   return status ?? "draft";
 }
 
+function reminderStageLabel(stage: string): string {
+  if (stage === "r1_24h") return "24h Reminder";
+  if (stage === "r2_72h") return "72h Reminder";
+  if (stage === "r3_pre_expiry") return "Pre-expiry Reminder";
+  if (stage === "manual") return "Manual Reminder";
+  return stage;
+}
+
+function reminderStatusClass(status: string): string {
+  if (status === "sent") return "bg-emerald-100 text-emerald-700";
+  if (status === "failed" || status === "missing_context") return "bg-red-100 text-red-700";
+  if (status === "suppressed") return "bg-orange-100 text-orange-700";
+  if (status === "skipped") return "bg-slate-100 text-slate-700";
+  return "bg-slate-100 text-slate-700";
+}
+
 export default function QuoteDetailPage() {
   const params = useParams();
   const quoteRequestId = params?.id as Id<"quoteRequests"> | undefined;
@@ -45,11 +61,20 @@ export default function QuoteDetailPage() {
   const saveDraft = useMutation(api.quotes.saveDraftRevision);
   const sendRevision = useAction(api.quotes.sendRevision);
   const retryRevision = useAction(api.quotes.retrySendRevision);
+  const sendManualReminder = useAction(api.quotes.sendManualReminder);
+  const reminderTimeline = useQuery(
+    api.quotes.getQuoteReminderTimeline,
+    quoteRequestId ? { quoteRequestId } : "skip"
+  );
 
   const [ensureState, setEnsureState] = useState<"idle" | "creating">("idle");
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [retryState, setRetryState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [quickActionState, setQuickActionState] = useState<
+    "idle" | "sending_reminder" | "reminder_sent" | "copied" | "error"
+  >("idle");
+  const [quickActionMessage, setQuickActionMessage] = useState<string>("");
   const [selectedRevisionId, setSelectedRevisionId] = useState<Id<"quoteRevisions"> | null>(
     null
   );
@@ -108,6 +133,18 @@ export default function QuoteDetailPage() {
     api.quotes.getRevisionPdfUrl,
     selectedRevision?._id ? { revisionId: selectedRevision._id } : "skip"
   );
+  const bookingRequestId = detail?.quote?.bookingRequestId ?? detail?.quoteRequest?.bookingRequestId;
+  const confirmBaseUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL?.trim() ?? "";
+  const confirmUrl = useMemo(() => {
+    if (!confirmBaseUrl || !bookingRequestId) return null;
+    try {
+      const url = new URL(confirmBaseUrl);
+      url.searchParams.set("request_id", bookingRequestId);
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }, [bookingRequestId, confirmBaseUrl]);
 
   const currentStatus = statusLabel(detail?.quote?.status, detail?.isExpired);
 
@@ -357,6 +394,15 @@ export default function QuoteDetailPage() {
                 {retryState === "error" ? (
                   <p className="text-sm text-red-600">Quote resend failed.</p>
                 ) : null}
+                {quickActionState !== "idle" ? (
+                  <p
+                    className={`text-sm ${
+                      quickActionState === "error" ? "text-red-600" : "text-emerald-600"
+                    }`}
+                  >
+                    {quickActionMessage}
+                  </p>
+                ) : null}
               </div>
             )}
           </div>
@@ -377,6 +423,111 @@ export default function QuoteDetailPage() {
               </div>
             ) : (
               <p className="mt-3 text-sm text-muted-foreground">Draft quote pending creation.</p>
+            )}
+          </div>
+
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Quick Follow-up Actions</h2>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                disabled={!detail.quote || detail.quote.status !== "sent" || quickActionState === "sending_reminder"}
+                onClick={async () => {
+                  if (!quoteRequestId) return;
+                  setQuickActionState("sending_reminder");
+                  setQuickActionMessage("");
+                  try {
+                    const result = await sendManualReminder({ quoteRequestId });
+                    setQuickActionState("reminder_sent");
+                    setQuickActionMessage(
+                      result.status === "sent"
+                        ? "Manual reminder sent."
+                        : `Manual reminder recorded as ${result.status}.`
+                    );
+                  } catch (error) {
+                    setQuickActionState("error");
+                    setQuickActionMessage(
+                      error instanceof Error ? error.message : "Failed to send manual reminder."
+                    );
+                  } finally {
+                    setTimeout(() => setQuickActionState("idle"), 3000);
+                  }
+                }}
+              >
+                {quickActionState === "sending_reminder" ? "Sending Reminder..." : "Send Reminder Now"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!confirmUrl}
+                onClick={async () => {
+                  if (!confirmUrl) return;
+                  try {
+                    await navigator.clipboard.writeText(confirmUrl);
+                    setQuickActionState("copied");
+                    setQuickActionMessage("Confirmation link copied.");
+                    setTimeout(() => setQuickActionState("idle"), 2000);
+                  } catch {
+                    setQuickActionState("error");
+                    setQuickActionMessage("Failed to copy confirmation link.");
+                    setTimeout(() => setQuickActionState("idle"), 2500);
+                  }
+                }}
+              >
+                Copy Confirm Link
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!pdfUrl}
+                onClick={async () => {
+                  if (!pdfUrl) return;
+                  try {
+                    await navigator.clipboard.writeText(pdfUrl);
+                    setQuickActionState("copied");
+                    setQuickActionMessage("PDF link copied.");
+                    setTimeout(() => setQuickActionState("idle"), 2000);
+                  } catch {
+                    setQuickActionState("error");
+                    setQuickActionMessage("Failed to copy PDF link.");
+                    setTimeout(() => setQuickActionState("idle"), 2500);
+                  }
+                }}
+              >
+                Copy PDF Link
+              </Button>
+            </div>
+          </div>
+
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Reminder Timeline</h2>
+            {!reminderTimeline ? (
+              <p className="mt-3 text-sm text-muted-foreground">Loading reminders...</p>
+            ) : reminderTimeline.length === 0 ? (
+              <p className="mt-3 text-sm text-muted-foreground">No reminder events yet.</p>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {reminderTimeline.map((event) => (
+                  <div key={event._id} className="rounded-lg border border-border bg-background p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {reminderStageLabel(event.stage)}
+                      </p>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${reminderStatusClass(event.status)}`}
+                      >
+                        {event.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Source: {event.triggerSource} · {formatDate(event.sentAt ?? event.createdAt)}
+                    </p>
+                    {event.errorMessage ? (
+                      <p className="mt-1 text-xs text-red-600">{event.errorMessage}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
