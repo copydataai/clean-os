@@ -1,0 +1,156 @@
+import { Text, Button, Section, Row, Column } from "@react-email/components";
+import * as React from "react";
+import EmailLayout from "./components/layout";
+
+interface QuoteReadyEmailProps {
+  firstName?: string;
+  quoteNumber: number;
+  totalCents: number;
+  currency?: string;
+  validUntilTimestamp: number;
+  confirmUrl: string;
+  downloadUrl?: string;
+  serviceLabel?: string;
+}
+
+function formatCurrency(cents: number, currency = "usd"): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+  }).format(cents / 100);
+}
+
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+}
+
+export default function QuoteReadyEmail({
+  firstName = "there",
+  quoteNumber,
+  totalCents,
+  currency = "usd",
+  validUntilTimestamp,
+  confirmUrl,
+  downloadUrl,
+  serviceLabel,
+}: QuoteReadyEmailProps) {
+  return (
+    <EmailLayout preview={`Your Kathy Clean Quote #${quoteNumber}`}>
+      <Text style={heading}>Your Kathy Clean Quote</Text>
+      <Text style={paragraph}>
+        Hi {firstName}, thank you for reaching out to Kathy Clean. Your quote is ready.
+      </Text>
+
+      <Section style={detailsBox}>
+        <Row style={detailRow}>
+          <Column style={detailLabel}>Quote</Column>
+          <Column style={detailValue}>#{quoteNumber}</Column>
+        </Row>
+        {serviceLabel ? (
+          <Row style={detailRow}>
+            <Column style={detailLabel}>Service</Column>
+            <Column style={detailValue}>{serviceLabel}</Column>
+          </Row>
+        ) : null}
+        <Row style={detailRow}>
+          <Column style={detailLabel}>Total</Column>
+          <Column style={detailValue}>{formatCurrency(totalCents, currency)}</Column>
+        </Row>
+        <Row style={detailRow}>
+          <Column style={detailLabel}>Valid until</Column>
+          <Column style={detailValue}>{formatDate(validUntilTimestamp)}</Column>
+        </Row>
+      </Section>
+
+      <Text style={paragraph}>
+        To continue, please confirm your booking details using the button below.
+      </Text>
+
+      <Section style={ctaSection}>
+        <Button href={confirmUrl} style={ctaButton}>
+          Confirm Your Booking
+        </Button>
+      </Section>
+
+      {downloadUrl ? (
+        <Text style={paragraph}>
+          You can also download your quote PDF here:{" "}
+          <a href={downloadUrl} style={linkStyle}>
+            Download Quote PDF
+          </a>
+        </Text>
+      ) : null}
+
+      <Text style={smallText}>
+        This quote is valid for 30 days. If you have any questions, reply to this email.
+      </Text>
+    </EmailLayout>
+  );
+}
+
+const heading = {
+  fontSize: "20px",
+  fontWeight: "600" as const,
+  color: "#111827",
+  margin: "0 0 16px",
+};
+
+const paragraph = {
+  fontSize: "14px",
+  lineHeight: "24px",
+  color: "#374151",
+  margin: "0 0 16px",
+};
+
+const detailsBox = {
+  backgroundColor: "#f9fafb",
+  borderRadius: "6px",
+  padding: "16px",
+  margin: "16px 0",
+};
+
+const detailRow = {
+  marginBottom: "8px",
+};
+
+const detailLabel = {
+  fontSize: "13px",
+  color: "#6b7280",
+  width: "110px",
+};
+
+const detailValue = {
+  fontSize: "13px",
+  color: "#111827",
+  fontWeight: "500" as const,
+};
+
+const ctaSection = {
+  textAlign: "center" as const,
+  margin: "24px 0",
+};
+
+const ctaButton = {
+  backgroundColor: "#111827",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: "600" as const,
+  padding: "12px 32px",
+  borderRadius: "6px",
+  textDecoration: "none",
+};
+
+const smallText = {
+  fontSize: "12px",
+  color: "#9ca3af",
+  margin: "16px 0 0",
+};
+
+const linkStyle = {
+  color: "#111827",
+};
+

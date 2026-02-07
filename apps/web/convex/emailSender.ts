@@ -10,12 +10,14 @@ import QuoteReceivedEmail from "../../../packages/email-templates/emails/quote-r
 import ConfirmationLinkEmail from "../../../packages/email-templates/emails/confirmation-link";
 import BookingConfirmedEmail from "../../../packages/email-templates/emails/booking-confirmed";
 import PaymentSavedEmail from "../../../packages/email-templates/emails/payment-saved";
+import QuoteReadyEmail from "../../../packages/email-templates/emails/quote-ready";
 
 type SupportedTemplate =
   | "quote-received"
   | "confirmation-link"
   | "booking-confirmed"
-  | "payment-saved";
+  | "payment-saved"
+  | "quote-ready";
 
 function buildTemplate(template: SupportedTemplate, templateProps: any) {
   switch (template) {
@@ -27,6 +29,8 @@ function buildTemplate(template: SupportedTemplate, templateProps: any) {
       return React.createElement(BookingConfirmedEmail, templateProps);
     case "payment-saved":
       return React.createElement(PaymentSavedEmail, templateProps);
+    case "quote-ready":
+      return React.createElement(QuoteReadyEmail, templateProps);
     default:
       throw new Error(`Unsupported template: ${template}`);
   }
@@ -60,15 +64,25 @@ export const sendTransactional = internalAction({
       v.literal("quote-received"),
       v.literal("confirmation-link"),
       v.literal("booking-confirmed"),
-      v.literal("payment-saved")
+      v.literal("payment-saved"),
+      v.literal("quote-ready")
     ),
     templateProps: v.any(),
     idempotencyKey: v.string(),
     from: v.optional(v.string()),
+    attachments: v.optional(
+      v.array(
+        v.object({
+          filename: v.string(),
+          contentBase64: v.string(),
+          contentType: v.optional(v.string()),
+        })
+      )
+    ),
   },
   handler: async (ctx, args): Promise<SendResult> => {
     const to = normalizeEmail(args.to);
-    const provider = readProvider();
+    const provider = args.template === "quote-ready" ? "legacy_resend" : readProvider();
 
     const existing = await ctx.runQuery(internal.emailSends.getByIdempotencyKey, {
       idempotencyKey: args.idempotencyKey,
@@ -134,6 +148,7 @@ export const sendTransactional = internalAction({
           subject: args.subject,
           html,
           from: fromAddress,
+          attachments: args.attachments,
         });
         providerEmailId = result?.emailId;
       }

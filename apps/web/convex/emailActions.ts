@@ -17,8 +17,17 @@ export const sendEmail = internalAction({
     subject: v.string(),
     html: v.string(),
     from: v.optional(v.string()),
+    attachments: v.optional(
+      v.array(
+        v.object({
+          filename: v.string(),
+          contentBase64: v.string(),
+          contentType: v.optional(v.string()),
+        })
+      )
+    ),
   },
-  handler: async (_ctx, { to, subject, html, from }) => {
+  handler: async (_ctx, { to, subject, html, from, attachments }) => {
     const resend = getResendClient();
     const fromAddress = from ?? process.env.RESEND_FROM_ADDRESS ?? "Clean OS <noreply@cleanos.com>";
 
@@ -27,6 +36,11 @@ export const sendEmail = internalAction({
       to,
       subject,
       html,
+      attachments: attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        content: Buffer.from(attachment.contentBase64, "base64"),
+      })),
     });
 
     if (error) {

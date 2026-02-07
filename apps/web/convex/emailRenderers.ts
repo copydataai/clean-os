@@ -118,3 +118,46 @@ export const sendPaymentSavedEmail = internalAction({
     });
   },
 });
+
+export const sendQuoteReadyEmail = internalAction({
+  args: {
+    to: v.string(),
+    idempotencyKey: v.string(),
+    firstName: v.optional(v.string()),
+    quoteNumber: v.number(),
+    totalCents: v.number(),
+    currency: v.optional(v.string()),
+    validUntilTimestamp: v.number(),
+    confirmUrl: v.string(),
+    downloadUrl: v.optional(v.string()),
+    serviceLabel: v.optional(v.string()),
+    attachmentFilename: v.string(),
+    attachmentContentBase64: v.string(),
+    attachmentContentType: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runAction(internal.emailSender.sendTransactional, {
+      to: args.to,
+      subject: "Your Kathy Clean Quote",
+      template: "quote-ready",
+      idempotencyKey: args.idempotencyKey,
+      templateProps: {
+        firstName: args.firstName,
+        quoteNumber: args.quoteNumber,
+        totalCents: args.totalCents,
+        currency: args.currency,
+        validUntilTimestamp: args.validUntilTimestamp,
+        confirmUrl: args.confirmUrl,
+        downloadUrl: args.downloadUrl,
+        serviceLabel: args.serviceLabel,
+      },
+      attachments: [
+        {
+          filename: args.attachmentFilename,
+          contentBase64: args.attachmentContentBase64,
+          contentType: args.attachmentContentType,
+        },
+      ],
+    });
+  },
+});
