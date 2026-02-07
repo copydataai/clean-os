@@ -86,6 +86,28 @@ function buildRecipientSnapshot(quoteRequest: any) {
   };
 }
 
+type BoardColumn = "requested" | "quoted" | "confirmed";
+
+function mapQuoteStatusToBoardColumn(quoteStatus: string): BoardColumn {
+  if (quoteStatus === "accepted") {
+    return "confirmed";
+  }
+  if (quoteStatus === "sent" || quoteStatus === "expired") {
+    return "quoted";
+  }
+  return "requested";
+}
+
+function mapBoardColumnToQuoteStatus(column: BoardColumn): "draft" | "sent" | "accepted" {
+  if (column === "confirmed") {
+    return "accepted";
+  }
+  if (column === "quoted") {
+    return "sent";
+  }
+  return "draft";
+}
+
 async function getProfileByKeyOrDefault(ctx: any, key?: string | null) {
   if (key) {
     const byKey = await ctx.db
@@ -383,6 +405,107 @@ export const getRevisionPdfUrl = query({
   },
 });
 
+export const listQuoteBoard = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 50;
+    const now = Date.now();
+    const requests = await ctx.db.query("quoteRequests").order("desc").take(limit);
+
+    return await Promise.all(
+      requests.map(async (request) => {
+        const quote = await ctx.db
+          .query("quotes")
+          .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", request._id))
+          .first();
+
+        if (!quote) {
+          return {
+            ...request,
+            boardColumn: (request.requestStatus as BoardColumn) ?? "requested",
+            quoteStatus: null,
+            quoteId: null,
+            isQuoteExpired: false,
+          };
+        }
+
+        const isQuoteExpired =
+          quote.status === "sent" && Boolean(quote.expiresAt) && now > (quote.expiresAt ?? 0);
+        const effectiveQuoteStatus = isQuoteExpired ? "expired" : quote.status;
+        return {
+          ...request,
+          boardColumn: mapQuoteStatusToBoardColumn(effectiveQuoteStatus),
+          quoteStatus: effectiveQuoteStatus,
+          quoteId: quote._id,
+          isQuoteExpired,
+        };
+      })
+    );
+  },
+});
+
+export const moveBoardCard = mutation({
+  args: {
+    quoteRequestId: v.id("quoteRequests"),
+    targetColumn: v.union(v.literal("requested"), v.literal("quoted"), v.literal("confirmed")),
+  },
+  handler: async (ctx, args) => {
+    const request = await ctx.db.get(args.quoteRequestId);
+    if (!request) {
+      throw new Error("Quote request not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.quoteRequestId, {
+      requestStatus: args.targetColumn,
+      updatedAt: now,
+    });
+
+    const quote = await ctx.db
+      .query("quotes")
+      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .first();
+
+    if (!quote) {
+      return { requestStatus: args.targetColumn, quoteStatus: null };
+    }
+
+    const targetQuoteStatus = mapBoardColumnToQuoteStatus(args.targetColumn);
+    const patch: Record<string, any> = {
+      status: targetQuoteStatus,
+      updatedAt: now,
+    };
+
+    if (targetQuoteStatus === "accepted") {
+      patch.acceptedAt = now;
+    } else {
+      patch.acceptedAt = undefined;
+      patch.requiresReview = false;
+      patch.reviewReason = undefined;
+    }
+
+    if (targetQuoteStatus === "sent") {
+      if (!quote.sentAt) {
+        patch.sentAt = now;
+      }
+      if (!quote.expiresAt) {
+        const profile = await getProfileByKeyOrDefault(ctx, quote.profileKey);
+        const validityDays = profile?.quoteValidityDays ?? 30;
+        patch.expiresAt = now + validityDays * 24 * 60 * 60 * 1000;
+      }
+    }
+
+    if (targetQuoteStatus === "draft") {
+      patch.expiresAt = quote.expiresAt;
+    }
+
+    await ctx.db.patch(quote._id, patch);
+    return { requestStatus: args.targetColumn, quoteStatus: targetQuoteStatus };
+  },
+});
+
 export const refreshExpiryStatus = mutation({
   args: {
     quoteRequestId: v.id("quoteRequests"),
@@ -409,6 +532,30 @@ export const refreshExpiryStatus = mutation({
     }
 
     return quote.status;
+  },
+});
+
+export const expireSentQuotesSweep = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const sentQuotes = await ctx.db
+      .query("quotes")
+      .withIndex("by_status", (q) => q.eq("status", "sent"))
+      .collect();
+
+    const now = Date.now();
+    let expiredCount = 0;
+    for (const quote of sentQuotes) {
+      if (quote.expiresAt && quote.expiresAt < now) {
+        await ctx.db.patch(quote._id, {
+          status: "expired",
+          updatedAt: now,
+        });
+        expiredCount += 1;
+      }
+    }
+
+    return { scanned: sentQuotes.length, expiredCount };
   },
 });
 

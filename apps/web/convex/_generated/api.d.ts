@@ -16,6 +16,7 @@ import type * as cardWebhooks from "../cardWebhooks.js";
 import type * as cleanerDb from "../cleanerDb.js";
 import type * as cleaners from "../cleaners.js";
 import type * as clerkWebhooks from "../clerkWebhooks.js";
+import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as dashboard from "../dashboard.js";
 import type * as emailActions from "../emailActions.js";
@@ -58,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   cleanerDb: typeof cleanerDb;
   cleaners: typeof cleaners;
   clerkWebhooks: typeof clerkWebhooks;
+  crons: typeof crons;
   customers: typeof customers;
   dashboard: typeof dashboard;
   emailActions: typeof emailActions;
