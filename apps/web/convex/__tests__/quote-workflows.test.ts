@@ -106,7 +106,7 @@ describe.sequential("quote workflows", () => {
     await insertQuote(t, acceptedRequest, { status: "accepted", acceptedAt: now });
 
     const board = await t.query(api.quotes.listQuoteBoard, { limit: 50 });
-    const byId = new Map(board.map((row) => [row._id, row]));
+    const byId = new Map<Id<"quoteRequests">, any>(board.map((row: any) => [row._id, row]));
 
     expect(byId.get(fallbackRequested)?.boardColumn).toBe("quoted");
     expect(byId.get(draftRequest)?.boardColumn).toBe("requested");
@@ -116,7 +116,7 @@ describe.sequential("quote workflows", () => {
     expect(byId.get(acceptedRequest)?.boardColumn).toBe("confirmed");
   });
 
-  it("syncs quoteRequests and quotes when a board card is moved", async () => {
+  it("syncs requested/quoted state and blocks manual confirmed moves", async () => {
     const t = convexTest(schema, modules);
 
     const quoteRequestId = await insertQuoteRequest(t);
@@ -139,20 +139,22 @@ describe.sequential("quote workflows", () => {
     expect(typeof afterQuoted.quote?.expiresAt).toBe("number");
     expect(afterQuoted.quote?.acceptedAt).toBeUndefined();
 
-    await t.mutation(api.quotes.moveBoardCard, {
-      quoteRequestId,
-      targetColumn: "confirmed",
-    });
+    await expect(
+      t.mutation(api.quotes.moveBoardCard, {
+        quoteRequestId,
+        targetColumn: "confirmed",
+      })
+    ).rejects.toThrow("Confirmed status is webhook-only");
 
-    const afterConfirmed = await t.run(async (ctx) => {
+    const afterBlockedConfirmed = await t.run(async (ctx) => {
       const quoteRequest = await ctx.db.get(quoteRequestId);
       const quote = await ctx.db.get(quoteId);
       return { quoteRequest, quote };
     });
 
-    expect(afterConfirmed.quoteRequest?.requestStatus).toBe("confirmed");
-    expect(afterConfirmed.quote?.status).toBe("accepted");
-    expect(typeof afterConfirmed.quote?.acceptedAt).toBe("number");
+    expect(afterBlockedConfirmed.quoteRequest?.requestStatus).toBe("quoted");
+    expect(afterBlockedConfirmed.quote?.status).toBe("sent");
+    expect(afterBlockedConfirmed.quote?.acceptedAt).toBeUndefined();
   });
 
   it("expires sent quotes with past expiry timestamps in the sweep", async () => {
