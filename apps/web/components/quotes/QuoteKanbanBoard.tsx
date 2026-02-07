@@ -89,6 +89,7 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
     const quoteId = active.id as Id<"quoteRequests">;
     const quote = quotes.find((q) => q._id === quoteId);
     if (!quote) return;
+    if (quote.boardColumn === "confirmed") return;
 
     // Determine target status: over.id could be a column ID or another card ID
     let targetStatus: string;
@@ -101,6 +102,7 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
     }
 
     if (targetStatus !== quote.boardColumn) {
+      if (targetStatus === "confirmed") return;
       moveBoardCard({
         quoteRequestId: quoteId,
         targetColumn: targetStatus as RequestStatus,
