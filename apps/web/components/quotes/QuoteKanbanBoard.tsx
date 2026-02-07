@@ -12,7 +12,7 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useMutation } from "convex/react";
-import { Doc, Id } from "@/convex/_generated/dataModel";
+import { Id } from "@/convex/_generated/dataModel";
 import { api } from "@/convex/_generated/api";
 import QuoteKanbanColumn, { ColumnConfig } from "./QuoteKanbanColumn";
 import QuoteKanbanCard from "./QuoteKanbanCard";
@@ -26,12 +26,27 @@ const COLUMNS: ColumnConfig[] = [
 type RequestStatus = "requested" | "quoted" | "confirmed";
 const STATUS_SET = new Set<string>(["requested", "quoted", "confirmed"]);
 
+type QuoteBoardRow = {
+  _id: Id<"quoteRequests">;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  service?: string | null;
+  serviceType?: string | null;
+  frequency?: string | null;
+  squareFootage?: number | null;
+  createdAt: number;
+  requestStatus: string;
+  boardColumn: RequestStatus;
+  quoteStatus?: string | null;
+};
+
 type QuoteKanbanBoardProps = {
-  quotes: Doc<"quoteRequests">[];
+  quotes: QuoteBoardRow[];
 };
 
 export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
-  const updateStatus = useMutation(api.quoteRequests.updateRequestStatus);
+  const moveBoardCard = useMutation(api.quotes.moveBoardCard);
   const [activeId, setActiveId] = useState<Id<"quoteRequests"> | null>(null);
 
   const sensors = useSensors(
@@ -41,13 +56,13 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
   );
 
   const buckets = useMemo(() => {
-    const map: Record<RequestStatus, Doc<"quoteRequests">[]> = {
+    const map: Record<RequestStatus, QuoteBoardRow[]> = {
       requested: [],
       quoted: [],
       confirmed: [],
     };
     for (const q of quotes) {
-      const status = q.requestStatus as RequestStatus;
+      const status = q.boardColumn as RequestStatus;
       if (map[status]) {
         map[status].push(q);
       } else {
@@ -82,13 +97,13 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
     } else {
       // It's a card ID — find which bucket that card is in
       const targetQuote = quotes.find((q) => q._id === over.id);
-      targetStatus = targetQuote?.requestStatus ?? quote.requestStatus;
+      targetStatus = targetQuote?.boardColumn ?? quote.boardColumn;
     }
 
-    if (targetStatus !== quote.requestStatus) {
-      updateStatus({
+    if (targetStatus !== quote.boardColumn) {
+      moveBoardCard({
         quoteRequestId: quoteId,
-        requestStatus: targetStatus as RequestStatus,
+        targetColumn: targetStatus as RequestStatus,
       });
     }
   }

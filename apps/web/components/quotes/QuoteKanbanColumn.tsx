@@ -5,7 +5,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Doc } from "@/convex/_generated/dataModel";
+import { Id } from "@/convex/_generated/dataModel";
 import QuoteKanbanCard from "./QuoteKanbanCard";
 
 export type ColumnConfig = {
@@ -16,7 +16,18 @@ export type ColumnConfig = {
 
 type QuoteKanbanColumnProps = {
   config: ColumnConfig;
-  quotes: Doc<"quoteRequests">[];
+  quotes: {
+    _id: Id<"quoteRequests">;
+    firstName?: string | null;
+    lastName?: string | null;
+    email?: string | null;
+    requestStatus: string;
+    quoteStatus?: string | null;
+    serviceType?: string | null;
+    frequency?: string | null;
+    squareFootage?: number | null;
+    createdAt: number;
+  }[];
 };
 
 export default function QuoteKanbanColumn({

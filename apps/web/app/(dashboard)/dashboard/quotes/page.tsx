@@ -15,7 +15,7 @@ function formatDate(timestamp: number) {
 }
 
 export default function QuotesPage() {
-  const quotes = useQuery(api.quoteRequests.listRecent, { limit: 50 });
+  const quotes = useQuery(api.quotes.listQuoteBoard, { limit: 50 });
   const [view, setView] = useState<"kanban" | "list">("kanban");
 
   if (!quotes) {
@@ -46,6 +46,11 @@ export default function QuotesPage() {
           <Link href="/dashboard/quotes/pricing">
             <Button variant="outline" size="sm">
               Pricing rules
+            </Button>
+          </Link>
+          <Link href="/dashboard/quotes/profile">
+            <Button variant="outline" size="sm">
+              Profile
             </Button>
           </Link>
           <div className="flex rounded-lg border border-border overflow-hidden text-sm">
@@ -96,6 +101,9 @@ export default function QuotesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={quote.requestStatus} />
+                  {quote.quoteStatus === "expired" || quote.quoteStatus === "send_failed" ? (
+                    <StatusBadge status={quote.quoteStatus} />
+                  ) : null}
                   <span className="text-xs text-muted-foreground">
                     {quote.squareFootage ? `${quote.squareFootage} sqft` : "Sqft —"}
                   </span>
