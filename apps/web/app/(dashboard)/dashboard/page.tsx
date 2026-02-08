@@ -11,29 +11,6 @@ function formatCurrency(cents: number): string {
   return `$${(cents / 100).toLocaleString()}`;
 }
 
-function formatStatus(status: string): string {
-  return status.replace(/_/g, " ");
-}
-
-function getStatusColor(status: string): string {
-  switch (status) {
-    case "completed":
-    case "charged":
-      return "bg-green-100 text-green-700";
-    case "in-progress":
-    case "card_saved":
-      return "bg-blue-100 text-blue-700";
-    case "scheduled":
-      return "bg-yellow-100 text-yellow-700";
-    case "pending_card":
-      return "bg-orange-100 text-orange-700";
-    case "failed":
-      return "bg-red-100 text-red-700";
-    default:
-      return "bg-gray-100 text-gray-700";
-  }
-}
-
 export default function DashboardPage() {
   const currentUser = useQuery(api.queries.getCurrentUser);
   const organizations = useQuery(api.queries.getUserOrganizations);
@@ -121,11 +98,7 @@ export default function DashboardPage() {
                         <p className="text-sm text-muted-foreground">{job.serviceType || "Standard Cleaning"}</p>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusColor(job.status)}`}
-                        >
-                          {formatStatus(job.status)}
-                        </span>
+                        <StatusBadge status={job.status} />
                         <span className="font-semibold text-foreground">
                           {job.amount ? formatCurrency(job.amount) : "—"}
                         </span>
@@ -172,9 +145,7 @@ export default function DashboardPage() {
                       <p className="mt-2 font-semibold text-foreground">{job.customerName || job.email}</p>
                       <div className="mt-2 flex items-center justify-between text-sm">
                         <span className="text-muted-foreground">{job.serviceType || "Standard"}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs ${getStatusColor(job.status)}`}>
-                          {formatStatus(job.status)}
-                        </span>
+                        <StatusBadge status={job.status} />
                       </div>
                     </div>
                   ))

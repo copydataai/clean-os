@@ -27,8 +27,12 @@ const STATUS_OPTIONS = [
   { value: "pending_card", label: "Pending Card" },
   { value: "card_saved", label: "Card Saved" },
   { value: "scheduled", label: "Scheduled" },
+  { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
+  { value: "payment_failed", label: "Payment Failed" },
   { value: "charged", label: "Charged" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "failed", label: "Failed (Legacy)" },
 ];
 
 export default function ScheduleFilters({

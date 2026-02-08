@@ -14,19 +14,35 @@ const statusStyles: Record<string, string> = {
   card_saved: "bg-green-100 text-green-700",
   pending_card: "bg-orange-100 text-orange-700",
   scheduled: "bg-yellow-100 text-yellow-700",
+  in_progress: "bg-cyan-100 text-cyan-700",
   completed: "bg-green-100 text-green-700",
+  service_completed: "bg-green-100 text-green-700",
+  payment_failed: "bg-red-100 text-red-700",
   charged: "bg-green-100 text-green-700",
   failed: "bg-red-100 text-red-700",
+  cancelled: "bg-zinc-200 text-zinc-700",
 };
 
 type StatusBadgeProps = {
   status: string;
   label?: string;
   className?: string;
+  context?: "default" | "funnel";
 };
 
-export default function StatusBadge({ status, label, className }: StatusBadgeProps) {
+function getStatusLabel(status: string, context: "default" | "funnel") {
+  if (status === "failed") return "failed (legacy)";
+  if (context === "funnel" && status === "completed") return "service completed";
+  return status.replace(/_/g, " ");
+}
+
+export default function StatusBadge({
+  status,
+  label,
+  className,
+  context = "default",
+}: StatusBadgeProps) {
   const classes = statusStyles[status] ?? "bg-gray-100 text-gray-700";
-  const text = label ?? status.replace(/_/g, " ");
+  const text = label ?? getStatusLabel(status, context);
   return <Badge className={cn(classes, className)}>{text}</Badge>;
 }

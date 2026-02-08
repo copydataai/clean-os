@@ -21,8 +21,11 @@ const statusStyles: Record<string, string> = {
   pending_card: "bg-amber-100 text-amber-700",
   card_saved: "bg-blue-100 text-blue-700",
   scheduled: "bg-purple-100 text-purple-700",
+  in_progress: "bg-cyan-100 text-cyan-700",
   completed: "bg-green-100 text-green-700",
+  payment_failed: "bg-red-100 text-red-700",
   charged: "bg-green-100 text-green-700",
+  cancelled: "bg-zinc-200 text-zinc-700",
   failed: "bg-red-100 text-red-700",
 };
 

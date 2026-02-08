@@ -20,11 +20,14 @@ type CalendarDayCellProps = {
 
 const statusColors: Record<string, string> = {
   scheduled: "bg-blue-500",
+  in_progress: "bg-cyan-500",
   card_saved: "bg-green-500",
   completed: "bg-green-500",
+  payment_failed: "bg-red-500",
   pending_card: "bg-amber-500",
   pending: "bg-amber-500",
   charged: "bg-purple-500",
+  cancelled: "bg-zinc-500",
   failed: "bg-red-500",
 };
 
