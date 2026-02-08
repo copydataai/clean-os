@@ -11,9 +11,13 @@ import CleanerForm from "@/components/cleaners/CleanerForm";
 import AvailabilityEditor from "@/components/cleaners/AvailabilityEditor";
 import TimeOffList from "@/components/cleaners/TimeOffList";
 import AssignmentList from "@/components/cleaners/AssignmentList";
+import CleanerInsightsHeader from "@/components/cleaners/CleanerInsightsHeader";
+import SkillsManager from "@/components/cleaners/SkillsManager";
+import ServiceQualificationsManager from "@/components/cleaners/ServiceQualificationsManager";
+import PayRatePanel from "@/components/cleaners/PayRatePanel";
+import RatingsInsightsPanel from "@/components/cleaners/RatingsInsightsPanel";
 import EmptyState from "@/components/dashboard/EmptyState";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
   SheetContent,
@@ -30,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { computeReadinessInsights } from "@/lib/cleanerInsights";
 
 function formatDate(timestamp?: number | null) {
   if (!timestamp) {
@@ -58,6 +63,10 @@ export default function CleanerDetailPage() {
   );
   const timeOff = useQuery(
     api.cleaners.getTimeOffRequests,
+    cleanerId ? { cleanerId } : "skip"
+  );
+  const ratingsSummary = useQuery(
+    api.cleaners.getRatingsSummary,
     cleanerId ? { cleanerId } : "skip"
   );
   const updateCleaner = useMutation(api.cleaners.update);
@@ -141,6 +150,14 @@ export default function CleanerDetailPage() {
   }
 
   const fullName = `${cleaner.firstName} ${cleaner.lastName}`;
+  const readinessInsights = computeReadinessInsights({
+    serviceQualifications: cleaner.serviceTypes ?? [],
+    hasActivePayRate: Boolean(cleaner.activePayRate),
+    ratingHealth: {
+      average: ratingsSummary?.average ?? null,
+      delta30d: ratingsSummary?.delta30d ?? null,
+    },
+  });
 
   return (
     <div className="space-y-6">
@@ -150,6 +167,8 @@ export default function CleanerDetailPage() {
       >
         <CleanerStatusBadge status={cleaner.status} />
       </PageHeader>
+
+      <CleanerInsightsHeader insights={readinessInsights} />
 
       <div className="grid gap-4 lg:grid-cols-3">
         {/* LEFT COLUMN */}
@@ -227,6 +246,31 @@ export default function CleanerDetailPage() {
             </div>
           </div>
 
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">Skills Management</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Track skill proficiency and update capabilities used for assignment decisions.
+            </p>
+            <div className="mt-4">
+              <SkillsManager cleanerId={cleaner._id} skills={cleaner.skills ?? []} />
+            </div>
+          </div>
+
+          <div className="surface-card p-6">
+            <h2 className="text-lg font-semibold text-foreground">
+              Service Qualifications
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Keep required services qualified to avoid dispatch bottlenecks.
+            </p>
+            <div className="mt-4">
+              <ServiceQualificationsManager
+                cleanerId={cleaner._id}
+                qualifications={cleaner.serviceTypes ?? []}
+              />
+            </div>
+          </div>
+
           {/* Recent Assignments */}
           <div className="surface-card p-6">
             <h2 className="text-lg font-semibold text-foreground">
@@ -299,6 +343,10 @@ export default function CleanerDetailPage() {
             </div>
           </div>
 
+          <PayRatePanel cleanerId={cleaner._id} />
+
+          <RatingsInsightsPanel cleanerId={cleaner._id} />
+
           {/* Time Off */}
           <div className="surface-card p-6">
             <h2 className="text-lg font-semibold text-foreground">Time Off</h2>
@@ -306,23 +354,6 @@ export default function CleanerDetailPage() {
               <TimeOffList timeOffRequests={timeOff ?? []} />
             </div>
           </div>
-
-          {/* Skills */}
-          {cleaner.skills && cleaner.skills.length > 0 ? (
-            <div className="surface-card p-6">
-              <h2 className="text-lg font-semibold text-foreground">Skills</h2>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {cleaner.skills.map((skill) => (
-                  <Badge
-                    key={skill._id}
-                    className="bg-muted text-muted-foreground"
-                  >
-                    {skill.skillType}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
       </div>
 
