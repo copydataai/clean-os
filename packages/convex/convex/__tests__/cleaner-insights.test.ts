@@ -3,7 +3,7 @@ import {
   computeRatingsWindowSummary,
   computeReadinessInsights,
   formatPayRate,
-} from "../../lib/cleanerInsights";
+} from "../cleanerInsights";
 
 describe("cleaner insights helpers", () => {
   it("flags missing pay rate and missing service qualifications in readiness", () => {

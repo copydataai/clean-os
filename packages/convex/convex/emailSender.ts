@@ -6,12 +6,12 @@ import { render } from "@react-email/render";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { resend } from "./resend";
-import QuoteReceivedEmail from "../../../packages/email-templates/emails/quote-received";
-import ConfirmationLinkEmail from "../../../packages/email-templates/emails/confirmation-link";
-import BookingConfirmedEmail from "../../../packages/email-templates/emails/booking-confirmed";
-import PaymentSavedEmail from "../../../packages/email-templates/emails/payment-saved";
-import QuoteReadyEmail from "../../../packages/email-templates/emails/quote-ready";
-import QuoteReminderEmail from "../../../packages/email-templates/emails/quote-reminder";
+import QuoteReceivedEmail from "../../email-templates/emails/quote-received";
+import ConfirmationLinkEmail from "../../email-templates/emails/confirmation-link";
+import BookingConfirmedEmail from "../../email-templates/emails/booking-confirmed";
+import PaymentSavedEmail from "../../email-templates/emails/payment-saved";
+import QuoteReadyEmail from "../../email-templates/emails/quote-ready";
+import QuoteReminderEmail from "../../email-templates/emails/quote-reminder";
 
 type SupportedTemplate =
   | "quote-received"

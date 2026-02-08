@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
-import { computeRatingsWindowSummary } from "../lib/cleanerInsights";
+import { computeRatingsWindowSummary } from "./cleanerInsights";
 import { internal } from "./_generated/api";
 
 // ============================================================================

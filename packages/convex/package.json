@@ -1,0 +1,41 @@
+{
+	"name": "@clean-os/convex",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		"./api": {
+			"types": "./api.d.ts",
+			"default": "./api.js"
+		},
+		"./data-model": {
+			"types": "./data-model.d.ts",
+			"default": "./data-model.js"
+		}
+	},
+	"scripts": {
+		"dev": "convex dev",
+		"deploy": "convex deploy",
+		"codegen": "convex codegen",
+		"test": "vitest run",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@convex-dev/resend": "^0.2.3",
+		"@react-email/render": "^1.4.0",
+		"@react-pdf/renderer": "^4.3.2",
+		"convex": "^1.31.6",
+		"email-templates": "workspace:*",
+		"react": "19.2.3",
+		"resend": "^6.9.1",
+		"stripe": "^20.2.0",
+		"svix": "^1.84.1"
+	},
+	"devDependencies": {
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"convex-test": "^0.0.41",
+		"typescript": "^5",
+		"vitest": "^4.0.18"
+	}
+}
