@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 // ============================================================================
 // Internal Queries
@@ -762,13 +763,21 @@ export const createBookingAssignment = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    return await ctx.db.insert("bookingAssignments", {
+    const assignmentId = await ctx.db.insert("bookingAssignments", {
       ...args,
       status: "pending",
       assignedAt: now,
       createdAt: now,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: args.bookingId,
+      source: "cleanerDb.createBookingAssignment",
+      actorUserId: args.assignedBy,
+    });
+
+    return assignmentId;
   },
 });
 
@@ -780,6 +789,11 @@ export const updateAssignmentStatus = internalMutation({
     supervisorNotes: v.optional(v.string()),
   },
   handler: async (ctx, { assignmentId, status, cleanerNotes, supervisorNotes }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     const updates: Record<string, unknown> = {
       status,
@@ -800,6 +814,12 @@ export const updateAssignmentStatus = internalMutation({
     }
 
     await ctx.db.patch(assignmentId, updates);
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: assignment.bookingId,
+      source: "cleanerDb.updateAssignmentStatus",
+    });
+
     return assignmentId;
   },
 });
@@ -809,12 +829,24 @@ export const clockIn = internalMutation({
     assignmentId: v.id("bookingAssignments"),
   },
   handler: async (ctx, { assignmentId }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
       status: "in_progress",
       clockedInAt: now,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.transitionBookingStatus, {
+      bookingId: assignment.bookingId,
+      toStatus: "in_progress",
+      source: "cleanerDb.clockIn",
+    });
+
     return assignmentId;
   },
 });
@@ -856,6 +888,11 @@ export const cancelAssignment = internalMutation({
     cancellationReason: v.optional(v.string()),
   },
   handler: async (ctx, { assignmentId, cancelledBy, cancellationReason }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
       status: "cancelled",
@@ -864,6 +901,13 @@ export const cancelAssignment = internalMutation({
       cancellationReason,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: assignment.bookingId,
+      source: "cleanerDb.cancelAssignment",
+      actorUserId: cancelledBy,
+    });
+
     return assignmentId;
   },
 });

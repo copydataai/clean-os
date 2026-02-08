@@ -479,6 +479,7 @@ export const getDispatchDay = query({
 export const updateDispatchMeta = mutation({
   args: {
     bookingId: v.id("bookings"),
+    serviceDate: v.optional(v.string()),
     serviceWindowStart: v.optional(v.string()),
     serviceWindowEnd: v.optional(v.string()),
     estimatedDurationMinutes: v.optional(v.number()),
@@ -492,6 +493,9 @@ export const updateDispatchMeta = mutation({
     }
 
     const updates: Record<string, string | number> = {};
+    if (args.serviceDate !== undefined) {
+      updates.serviceDate = args.serviceDate;
+    }
     if (args.serviceWindowStart !== undefined) {
       updates.serviceWindowStart = args.serviceWindowStart;
     }
@@ -516,6 +520,18 @@ export const updateDispatchMeta = mutation({
       ...updates,
       updatedAt: Date.now(),
     });
+
+    const scheduleFieldsChanged =
+      args.serviceDate !== undefined ||
+      args.serviceWindowStart !== undefined ||
+      args.serviceWindowEnd !== undefined;
+    if (scheduleFieldsChanged) {
+      await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+        bookingId: args.bookingId,
+        source: "schedule.updateDispatchMeta",
+      });
+    }
+
     return args.bookingId;
   },
 });

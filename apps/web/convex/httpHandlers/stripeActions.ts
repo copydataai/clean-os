@@ -175,6 +175,8 @@ export const handleStripeWebhook = internalAction({
             await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
               id: paymentIntent.metadata.bookingId as any,
               status: "charged",
+              source: "httpHandlers.stripeActions.webhook",
+              reason: "payment_intent.succeeded",
             });
           }
           break;
@@ -191,6 +193,15 @@ export const handleStripeWebhook = internalAction({
             status: "failed",
             errorMessage: errorMessage,
           });
+
+          if (paymentIntent.metadata?.bookingId) {
+            await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
+              id: paymentIntent.metadata.bookingId as any,
+              status: "payment_failed",
+              source: "httpHandlers.stripeActions.webhook",
+              reason: "payment_intent.payment_failed",
+            });
+          }
           break;
         }
 
@@ -204,6 +215,15 @@ export const handleStripeWebhook = internalAction({
             stripePaymentIntentId: paymentIntent.id,
             status: "requires_action",
           });
+
+          if (paymentIntent.metadata?.bookingId) {
+            await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
+              id: paymentIntent.metadata.bookingId as any,
+              status: "payment_failed",
+              source: "httpHandlers.stripeActions.webhook",
+              reason: "payment_intent.requires_action",
+            });
+          }
           break;
         }
 

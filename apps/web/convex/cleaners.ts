@@ -1,5 +1,7 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
+import { computeRatingsWindowSummary } from "../lib/cleanerInsights";
+import { internal } from "./_generated/api";
 
 // ============================================================================
 // Public Queries
@@ -187,6 +189,41 @@ export const getRatings = query({
       .query("cleanerRatings")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
       .collect();
+  },
+});
+
+export const getRatingsSummary = query({
+  args: { cleanerId: v.id("cleaners") },
+  handler: async (ctx, { cleanerId }) => {
+    const ratings = await ctx.db
+      .query("cleanerRatings")
+      .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
+      .collect();
+    const summary = computeRatingsWindowSummary(
+      ratings.map((rating) => ({
+        overallRating: rating.overallRating,
+        createdAt: rating.createdAt,
+      })),
+      Date.now()
+    );
+
+    return {
+      ...summary,
+      latestRatings: ratings
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, 20),
+    };
+  },
+});
+
+export const getPayRateHistory = query({
+  args: { cleanerId: v.id("cleaners") },
+  handler: async (ctx, { cleanerId }) => {
+    const rates = await ctx.db
+      .query("cleanerPayRates")
+      .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
+      .collect();
+    return rates.sort((a, b) => b.effectiveFrom - a.effectiveFrom);
   },
 });
 
@@ -504,12 +541,59 @@ export const addServiceTypeQualification = mutation({
     isPreferred: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("cleanerServiceTypes")
+      .withIndex("by_cleaner_service", (q) =>
+        q.eq("cleanerId", args.cleanerId).eq("serviceType", args.serviceType)
+      )
+      .first();
+
     const now = Date.now();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        ...args,
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+
     return await ctx.db.insert("cleanerServiceTypes", {
       ...args,
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+export const updateServiceTypeQualification = mutation({
+  args: {
+    qualificationId: v.id("cleanerServiceTypes"),
+    isQualified: v.optional(v.boolean()),
+    isPreferred: v.optional(v.boolean()),
+    qualifiedAt: v.optional(v.number()),
+    qualifiedBy: v.optional(v.id("users")),
+  },
+  handler: async (ctx, { qualificationId, ...updates }) => {
+    const filteredUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    );
+
+    if (Object.keys(filteredUpdates).length > 0) {
+      await ctx.db.patch(qualificationId, {
+        ...filteredUpdates,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return qualificationId;
+  },
+});
+
+export const removeServiceTypeQualification = mutation({
+  args: { qualificationId: v.id("cleanerServiceTypes") },
+  handler: async (ctx, { qualificationId }) => {
+    await ctx.db.delete(qualificationId);
+    return qualificationId;
   },
 });
 
@@ -801,7 +885,7 @@ export const assignToBooking = mutation({
     }
 
     const now = Date.now();
-    return await ctx.db.insert("bookingAssignments", {
+    const assignmentId = await ctx.db.insert("bookingAssignments", {
       bookingId: args.bookingId,
       cleanerId: args.cleanerId,
       crewId: args.crewId,
@@ -813,6 +897,14 @@ export const assignToBooking = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: args.bookingId,
+      source: "cleaners.assignToBooking",
+      actorUserId: args.assignedBy,
+    });
+
+    return assignmentId;
   },
 });
 
@@ -823,6 +915,11 @@ export const respondToAssignment = mutation({
     cleanerNotes: v.optional(v.string()),
   },
   handler: async (ctx, { assignmentId, response, cleanerNotes }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
       status: response,
@@ -830,6 +927,12 @@ export const respondToAssignment = mutation({
       cleanerNotes,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: assignment.bookingId,
+      source: "cleaners.respondToAssignment",
+    });
+
     return assignmentId;
   },
 });
@@ -837,12 +940,23 @@ export const respondToAssignment = mutation({
 export const confirmAssignment = mutation({
   args: { assignmentId: v.id("bookingAssignments") },
   handler: async (ctx, { assignmentId }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
       status: "confirmed",
       confirmedAt: now,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: assignment.bookingId,
+      source: "cleaners.confirmAssignment",
+    });
+
     return assignmentId;
   },
 });
@@ -850,12 +964,24 @@ export const confirmAssignment = mutation({
 export const clockIn = mutation({
   args: { assignmentId: v.id("bookingAssignments") },
   handler: async (ctx, { assignmentId }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
       status: "in_progress",
       clockedInAt: now,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.transitionBookingStatus, {
+      bookingId: assignment.bookingId,
+      toStatus: "in_progress",
+      source: "cleaners.clockIn",
+    });
+
     return assignmentId;
   },
 });
@@ -909,6 +1035,11 @@ export const cancelAssignment = mutation({
     cancellationReason: v.optional(v.string()),
   },
   handler: async (ctx, { assignmentId, cancelledBy, cancellationReason }) => {
+    const assignment = await ctx.db.get(assignmentId);
+    if (!assignment) {
+      throw new Error("Assignment not found");
+    }
+
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
       status: "cancelled",
@@ -917,6 +1048,13 @@ export const cancelAssignment = mutation({
       cancellationReason,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId: assignment.bookingId,
+      source: "cleaners.cancelAssignment",
+      actorUserId: cancelledBy,
+    });
+
     return assignmentId;
   },
 });

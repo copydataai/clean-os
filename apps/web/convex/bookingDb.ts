@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 
 export const createBooking = internalMutation({
   args: {
@@ -15,7 +16,7 @@ export const createBooking = internalMutation({
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
     const now = Date.now();
-    return await ctx.db.insert("bookings", {
+    const bookingId = await ctx.db.insert("bookings", {
       email: args.email,
       customerName: args.customerName,
       status: "pending_card",
@@ -28,6 +29,15 @@ export const createBooking = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    await ctx.runMutation(internal.bookingStateMachine.appendLifecycleEvent, {
+      bookingId,
+      eventType: "created",
+      toStatus: "pending_card",
+      source: "bookingDb.createBooking",
+    });
+
+    return bookingId;
   },
 });
 
@@ -88,11 +98,59 @@ export const updateBookingCheckoutSession = internalMutation({
 export const updateBookingStatus = internalMutation({
   args: {
     id: v.id("bookings"),
-    status: v.string(),
+    status: v.union(
+      v.literal("pending_card"),
+      v.literal("card_saved"),
+      v.literal("scheduled"),
+      v.literal("in_progress"),
+      v.literal("completed"),
+      v.literal("payment_failed"),
+      v.literal("charged"),
+      v.literal("cancelled")
+    ),
+    source: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    actorUserId: v.optional(v.id("users")),
+    metadata: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
+    await ctx.runMutation(internal.bookingStateMachine.transitionBookingStatus, {
+      bookingId: args.id,
+      toStatus: args.status,
+      source: args.source ?? "bookingDb.updateBookingStatus",
+      reason: args.reason,
+      actorUserId: args.actorUserId,
+      metadata: args.metadata,
+    });
+  },
+});
+
+export const updateBookingScheduleFields = internalMutation({
+  args: {
+    id: v.id("bookings"),
+    serviceDate: v.optional(v.string()),
+    serviceWindowStart: v.optional(v.string()),
+    serviceWindowEnd: v.optional(v.string()),
+    estimatedDurationMinutes: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const updates: Record<string, string | number | undefined> = {
+      serviceDate: args.serviceDate,
+      serviceWindowStart: args.serviceWindowStart,
+      serviceWindowEnd: args.serviceWindowEnd,
+      estimatedDurationMinutes: args.estimatedDurationMinutes,
+    };
+
+    const patch = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    );
+
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+
     await ctx.db.patch(args.id, {
-      status: args.status,
+      ...patch,
       updatedAt: Date.now(),
     });
   },

@@ -324,6 +324,13 @@ export const chargeBooking = internalAction({
       return { success: false, error: "No Stripe customer linked to booking" };
     }
 
+    if (!["completed", "payment_failed"].includes(booking.status)) {
+      return {
+        success: false,
+        error: `Booking must be completed before charging (current: ${booking.status})`,
+      };
+    }
+
     // Get the customer's default payment method
     const paymentMethods = await stripe.paymentMethods.list({
       customer: booking.stripeCustomerId,
@@ -368,6 +375,8 @@ export const chargeBooking = internalAction({
         await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
           id: args.bookingId,
           status: "charged",
+          source: "stripeActions.chargeBooking",
+          reason: "payment_intent_succeeded",
         });
         return { success: true, paymentIntentId: paymentIntent.id };
       }
@@ -380,6 +389,13 @@ export const chargeBooking = internalAction({
           stripePaymentIntentId: paymentIntent.id,
           status: "requires_action",
           paymentLinkUrl: paymentLink,
+        });
+
+        await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
+          id: args.bookingId,
+          status: "payment_failed",
+          source: "stripeActions.chargeBooking",
+          reason: "payment_intent_requires_action",
         });
 
         return {
@@ -420,6 +436,13 @@ export const chargeBooking = internalAction({
             paymentLinkUrl: paymentLink,
           });
 
+          await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
+            id: args.bookingId,
+            status: "payment_failed",
+            source: "stripeActions.chargeBooking",
+            reason: "authentication_required",
+          });
+
           return {
             success: false,
             paymentIntentId: paymentIntentId,
@@ -430,7 +453,13 @@ export const chargeBooking = internalAction({
 
         await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
           id: args.bookingId,
-          status: "failed",
+          status: "payment_failed",
+          source: "stripeActions.chargeBooking",
+          reason: "stripe_card_error",
+          metadata: {
+            errorCode: err.code,
+            errorType: err.type,
+          },
         });
 
         return {
@@ -552,6 +581,13 @@ export const handleCheckoutCompleted = internalAction({
     await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
       id: bookingId,
       status: "card_saved",
+      source: "stripeActions.handleCheckoutCompleted",
+      reason: "checkout_session_completed",
+    });
+
+    await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
+      bookingId,
+      source: "stripeActions.handleCheckoutCompleted",
     });
 
     console.log(`Checkout completed for booking ${bookingId}, card saved`);

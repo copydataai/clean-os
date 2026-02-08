@@ -9,7 +9,9 @@
  */
 
 import type * as bookingDb from "../bookingDb.js";
+import type * as bookingLifecycle from "../bookingLifecycle.js";
 import type * as bookingRequests from "../bookingRequests.js";
+import type * as bookingStateMachine from "../bookingStateMachine.js";
 import type * as bookings from "../bookings.js";
 import type * as cardDb from "../cardDb.js";
 import type * as cardWebhooks from "../cardWebhooks.js";
@@ -53,7 +55,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   bookingDb: typeof bookingDb;
+  bookingLifecycle: typeof bookingLifecycle;
   bookingRequests: typeof bookingRequests;
+  bookingStateMachine: typeof bookingStateMachine;
   bookings: typeof bookings;
   cardDb: typeof cardDb;
   cardWebhooks: typeof cardWebhooks;

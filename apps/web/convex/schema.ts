@@ -80,7 +80,7 @@ const bookings = defineTable({
   stripeCustomerId: v.optional(v.string()),
   stripeCheckoutSessionId: v.optional(v.string()),
   customerId: v.optional(v.id("customers")),
-  status: v.string(), // "pending_card", "card_saved", "scheduled", "completed", "charged", "failed"
+  status: v.string(), // "pending_card", "card_saved", "scheduled", "in_progress", "completed", "payment_failed", "charged", "cancelled", legacy: "failed"
   serviceType: v.optional(v.string()),
   serviceDate: v.optional(v.string()),
   serviceWindowStart: v.optional(v.string()), // "HH:mm"
@@ -104,6 +104,9 @@ const bookings = defineTable({
   ),
   amount: v.optional(v.number()), // Amount in cents
   notes: v.optional(v.string()),
+  cancelledAt: v.optional(v.number()),
+  cancelledBy: v.optional(v.id("users")),
+  cancellationReason: v.optional(v.string()),
   tallyResponseId: v.optional(v.string()),
   bookingRequestId: v.optional(v.id("bookingRequests")),
   createdAt: v.number(),
@@ -116,6 +119,23 @@ const bookings = defineTable({
   .index("by_service_date_status", ["serviceDate", "status"])
   .index("by_customer", ["customerId"])
   .index("by_stripe_customer", ["stripeCustomerId"]);
+
+const bookingLifecycleEvents = defineTable({
+  bookingId: v.id("bookings"),
+  eventType: v.string(),
+  fromStatus: v.optional(v.string()),
+  toStatus: v.optional(v.string()),
+  reason: v.optional(v.string()),
+  source: v.string(),
+  actorUserId: v.optional(v.id("users")),
+  fromServiceDate: v.optional(v.string()),
+  toServiceDate: v.optional(v.string()),
+  metadata: v.optional(v.any()),
+  createdAt: v.number(),
+})
+  .index("by_booking", ["bookingId"])
+  .index("by_booking_created", ["bookingId", "createdAt"])
+  .index("by_event_type", ["eventType"]);
 
 const bookingRequests = defineTable({
   status: v.string(), // "requested" | "confirmed"
@@ -777,6 +797,7 @@ export default defineSchema({
   setupIntents,
   paymentMethods,
   bookings,
+  bookingLifecycleEvents,
   bookingRequests,
   quoteRequests,
   quoteProfiles,
