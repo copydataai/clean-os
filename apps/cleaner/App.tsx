@@ -379,6 +379,23 @@ function HomeScreen({ styles }: { styles: AppStyles }) {
   const { user } = useUser();
   const { signOut } = useClerk();
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const operationButtons = [
+    {
+      key: "job",
+      label: "Job",
+      description: "Open and manage assigned cleaning jobs.",
+    },
+    {
+      key: "checklist",
+      label: "Checklist",
+      description: "Step-by-step room and task checklist flow.",
+    },
+    {
+      key: "record",
+      label: "Record",
+      description: "Capture completion notes and proof records.",
+    },
+  ];
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -392,15 +409,33 @@ function HomeScreen({ styles }: { styles: AppStyles }) {
 
   return (
     <AppFrame styles={styles}>
-      <View style={styles.homeCard}>
-        <Text style={styles.title}>Cleaner</Text>
-        <Text style={styles.subtitle}>
-          Signed in as {user?.primaryEmailAddress?.emailAddress ?? "your account"}.
-        </Text>
-        <Pressable onPress={handleSignOut} style={styles.primaryButton}>
-          <Text style={styles.primaryButtonText}>{isSigningOut ? "Signing out..." : "Sign Out"}</Text>
-        </Pressable>
-      </View>
+      <ScrollView contentContainerStyle={styles.homeScrollBody} showsVerticalScrollIndicator={false}>
+        <View style={styles.homeCard}>
+          <Text style={styles.title}>Cleaner</Text>
+          <Text style={styles.subtitle}>
+            Signed in as {user?.primaryEmailAddress?.emailAddress ?? "your account"}.
+          </Text>
+
+          <View style={styles.operationsSection}>
+            <Text style={styles.operationsTitle}>Core Operations</Text>
+            <Text style={styles.operationsSubtitle}>
+              Mockup entry points for the main mobile workflows.
+            </Text>
+            <View style={styles.operationsList}>
+              {operationButtons.map((operation) => (
+                <Pressable key={operation.key} style={styles.operationButton}>
+                  <Text style={styles.operationButtonLabel}>{operation.label}</Text>
+                  <Text style={styles.operationButtonDescription}>{operation.description}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          <Pressable onPress={handleSignOut} style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{isSigningOut ? "Signing out..." : "Sign Out"}</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
     </AppFrame>
   );
 }
@@ -622,6 +657,45 @@ function createStyles(theme: ThemeTokens) {
       shadowOpacity: 0.24,
       shadowRadius: 14,
       elevation: 2,
+    },
+    homeScrollBody: {
+      paddingBottom: 30,
+    },
+    operationsSection: {
+      marginTop: 6,
+      gap: 10,
+    },
+    operationsTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.cardForeground,
+    },
+    operationsSubtitle: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.mutedForeground,
+    },
+    operationsList: {
+      gap: 10,
+    },
+    operationButton: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.accent,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 4,
+    },
+    operationButtonLabel: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.secondaryForeground,
+    },
+    operationButtonDescription: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.mutedForeground,
     },
   });
 }
