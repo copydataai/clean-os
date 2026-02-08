@@ -1,4 +1,4 @@
-import type { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 export type LifecycleRow = {
   rowType: "booking" | "pre_booking";

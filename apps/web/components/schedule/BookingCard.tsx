@@ -1,6 +1,6 @@
 "use client";
 
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { cn } from "@/lib/utils";
 

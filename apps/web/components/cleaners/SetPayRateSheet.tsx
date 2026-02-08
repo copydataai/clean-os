@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { Id } from "@/convex/_generated/dataModel";
-import { api } from "@/convex/_generated/api";
+import type { Id } from "@clean-os/convex/data-model";
+import { api } from "@clean-os/convex/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -99,7 +99,10 @@ export default function SetPayRateSheet({
         <div className="mt-6 space-y-4">
           <div>
             <label className="text-sm font-medium text-foreground">Pay type</label>
-            <Select value={payType} onValueChange={setPayType}>
+            <Select
+              value={payType}
+              onValueChange={(value) => setPayType(value ?? "hourly")}
+            >
               <SelectTrigger className="mt-1">
                 <SelectValue />
               </SelectTrigger>

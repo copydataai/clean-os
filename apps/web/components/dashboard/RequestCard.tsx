@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { api } from "@clean-os/convex/api";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
 
 type RequestCardProps = {

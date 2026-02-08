@@ -5,7 +5,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 import QuoteKanbanCard from "./QuoteKanbanCard";
 
 export type ColumnConfig = {

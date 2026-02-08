@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
-import { Id } from "@/convex/_generated/dataModel";
-import { api } from "@/convex/_generated/api";
+import type { Id } from "@clean-os/convex/data-model";
+import { api } from "@clean-os/convex/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,7 +107,10 @@ export default function SkillsManager({ cleanerId, skills }: SkillsManagerProps)
       <div className="surface-soft p-4">
         <p className="text-sm font-medium text-foreground">Add skill</p>
         <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <Select value={newSkillType} onValueChange={setNewSkillType}>
+          <Select
+            value={newSkillType}
+            onValueChange={(value) => setNewSkillType(value ?? SKILL_OPTIONS[0])}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -123,7 +126,10 @@ export default function SkillsManager({ cleanerId, skills }: SkillsManagerProps)
               ))}
             </SelectContent>
           </Select>
-          <Select value={newProficiency} onValueChange={setNewProficiency}>
+          <Select
+            value={newProficiency}
+            onValueChange={(value) => setNewProficiency(value ?? PROFICIENCY_OPTIONS[1])}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -178,7 +184,12 @@ export default function SkillsManager({ cleanerId, skills }: SkillsManagerProps)
 
               {editingId === skill._id ? (
                 <div className="mt-3 grid gap-3 md:grid-cols-3">
-                  <Select value={editProficiency} onValueChange={setEditProficiency}>
+                  <Select
+                    value={editProficiency}
+                    onValueChange={(value) =>
+                      setEditProficiency(value ?? PROFICIENCY_OPTIONS[1])
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

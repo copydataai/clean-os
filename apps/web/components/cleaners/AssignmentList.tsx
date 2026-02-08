@@ -2,7 +2,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 type Assignment = {
   _id: Id<"bookingAssignments">;

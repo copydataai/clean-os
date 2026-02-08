@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowLeftIcon, ArrowRightIcon } from "@hugeicons/core-free-icons";
 import CalendarDayCell from "./CalendarDayCell";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 type Booking = {
   _id: Id<"bookings">;

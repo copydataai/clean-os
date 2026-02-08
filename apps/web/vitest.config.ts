@@ -3,7 +3,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["convex/__tests__/**/*.test.ts"],
+    include: ["**/*.test.ts", "**/*.test.tsx"],
+    passWithNoTests: true,
     fileParallelism: false,
   },
 });

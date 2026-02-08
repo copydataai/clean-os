@@ -1,6 +1,6 @@
 "use client";
 
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 export type DispatchPriority = "low" | "normal" | "high" | "urgent";
 export type DispatchPriorityFilter = "all" | DispatchPriority;

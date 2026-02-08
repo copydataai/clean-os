@@ -1,4 +1,4 @@
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 export function getBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {

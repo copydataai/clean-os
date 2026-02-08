@@ -12,8 +12,8 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { useMutation } from "convex/react";
-import { Id } from "@/convex/_generated/dataModel";
-import { api } from "@/convex/_generated/api";
+import type { Id } from "@clean-os/convex/data-model";
+import { api } from "@clean-os/convex/api";
 import QuoteKanbanColumn, { ColumnConfig } from "./QuoteKanbanColumn";
 import QuoteKanbanCard from "./QuoteKanbanCard";
 

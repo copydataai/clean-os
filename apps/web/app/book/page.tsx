@@ -1,10 +1,10 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { api } from "@clean-os/convex/api";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 function BookPageContent() {
   const searchParams = useSearchParams();

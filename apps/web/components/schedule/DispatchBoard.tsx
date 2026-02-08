@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { api } from "@clean-os/convex/api";
+import type { Id } from "@clean-os/convex/data-model";
 import {
   Sheet,
   SheetContent,

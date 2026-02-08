@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { api } from "@clean-os/convex/api";
 import PageHeader from "@/components/dashboard/PageHeader";
 import RequestCard from "@/components/dashboard/RequestCard";
 import QuickFilters from "@/components/dashboard/QuickFilters";

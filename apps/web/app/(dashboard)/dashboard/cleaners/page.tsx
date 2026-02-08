@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import Link from "next/link";
-import { api } from "@/convex/_generated/api";
+import { api } from "@clean-os/convex/api";
 import PageHeader from "@/components/dashboard/PageHeader";
 import CleanerCard from "@/components/cleaners/CleanerCard";
 import QuickFilters from "@/components/dashboard/QuickFilters";

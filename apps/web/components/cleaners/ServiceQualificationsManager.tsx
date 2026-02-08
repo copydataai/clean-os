@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useMutation } from "convex/react";
-import { Id } from "@/convex/_generated/dataModel";
-import { api } from "@/convex/_generated/api";
+import type { Id } from "@clean-os/convex/data-model";
+import { api } from "@clean-os/convex/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +42,7 @@ export default function ServiceQualificationsManager({
   const addQualification = useMutation(api.cleaners.addServiceTypeQualification);
   const updateQualification = useMutation(api.cleaners.updateServiceTypeQualification);
   const removeQualification = useMutation(api.cleaners.removeServiceTypeQualification);
-  const [newServiceType, setNewServiceType] = useState(REQUIRED_SERVICE_TYPES[0]);
+  const [newServiceType, setNewServiceType] = useState<string>(REQUIRED_SERVICE_TYPES[0]);
   const [isSaving, setIsSaving] = useState(false);
 
   const availableServiceTypes = useMemo(
@@ -132,7 +132,10 @@ export default function ServiceQualificationsManager({
       <div className="surface-soft p-4">
         <p className="text-sm font-medium text-foreground">Add service qualification</p>
         <div className="mt-3 flex flex-wrap gap-3">
-          <Select value={newServiceType} onValueChange={setNewServiceType}>
+          <Select
+            value={newServiceType}
+            onValueChange={(value) => setNewServiceType(value ?? REQUIRED_SERVICE_TYPES[0])}
+          >
             <SelectTrigger className="w-[220px]">
               <SelectValue />
             </SelectTrigger>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import CustomerStatusBadge from "@/components/customers/CustomerStatusBadge";
 import { cn } from "@/lib/utils";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 type CustomerCardProps = {
   customer: {

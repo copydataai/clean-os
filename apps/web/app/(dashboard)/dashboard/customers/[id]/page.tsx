@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { api } from "@clean-os/convex/api";
+import type { Id } from "@clean-os/convex/data-model";
 import PageHeader from "@/components/dashboard/PageHeader";
 import CustomerStatusBadge from "@/components/customers/CustomerStatusBadge";
 import CustomerForm from "@/components/customers/CustomerForm";

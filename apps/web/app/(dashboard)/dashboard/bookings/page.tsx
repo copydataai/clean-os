@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { api } from "@clean-os/convex/api";
+import type { Id } from "@clean-os/convex/data-model";
 import PageHeader from "@/components/dashboard/PageHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import EmptyState from "@/components/dashboard/EmptyState";

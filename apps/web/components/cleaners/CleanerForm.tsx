@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
-import { api } from "@/convex/_generated/api";
-import { Id } from "@/convex/_generated/dataModel";
+import { api } from "@clean-os/convex/api";
+import type { Id } from "@clean-os/convex/data-model";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

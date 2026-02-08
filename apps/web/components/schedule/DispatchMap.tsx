@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Map, { Marker, ViewState } from "react-map-gl/mapbox";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 import { DispatchBooking } from "./types";
 
 type DispatchMapProps = {

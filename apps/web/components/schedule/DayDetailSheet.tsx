@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 import {
   Sheet,
   SheetContent,

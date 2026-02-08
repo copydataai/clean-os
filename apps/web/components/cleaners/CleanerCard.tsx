@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import CleanerStatusBadge from "@/components/cleaners/CleanerStatusBadge";
 import { cn } from "@/lib/utils";
-import { Id } from "@/convex/_generated/dataModel";
+import type { Id } from "@clean-os/convex/data-model";
 
 type CleanerCardProps = {
   cleaner: {

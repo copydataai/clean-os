@@ -5,7 +5,7 @@
 - `CLERK_JWT_ISSUER_DOMAIN` - Clerk JWT issuer domain for Convex auth.
 
 ## Stripe
-- `STRIPE_SECRET_KEY` - Stripe secret key used in `convex/stripeActions.ts` and `convex/cardWebhooks.ts`.
+- `STRIPE_SECRET_KEY` - Stripe secret key used in `packages/convex/convex/stripeActions.ts` and `packages/convex/convex/cardWebhooks.ts`.
 - `STRIPE_WEBHOOK_SECRET` - Stripe webhook secret for `/stripe-webhook`.
 
 ## Tally
