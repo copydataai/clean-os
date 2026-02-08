@@ -6,6 +6,7 @@ A React Native app in the monorepo for the **Cleaner** product, built with Expo 
 
 - Expo TypeScript app in `apps/cleaner`
 - Clerk authentication with:
+  - Continue with Google (OAuth)
   - Email + password sign in
   - Email + password sign up
   - Email code verification
@@ -56,11 +57,15 @@ Then press:
 
 Use this as the visual/product brief for next UI iterations:
 
-- Tone: calm, tidy, practical
-- Color direction:
-  - Primary: deep green accents
-  - Background: soft neutral/green-tinted surfaces
-  - Feedback: warm but clear error states
+- Tone: calm, clean, practical
+- Color system: mirrored from `apps/web/app/globals.css` tokens
+  - `background`: `#f5fcfc`
+  - `foreground`: `#192b39`
+  - `primary`: `#007fa0`
+  - `secondary`: `#e3f1f6`
+  - `accent`: `#d2eef1`
+  - `destructive`: `#df2225`
+- Supports light and dark token sets consistent with web theme values
 - UX direction:
   - Keep forms short and obvious
   - Prefer one primary action per screen
@@ -75,3 +80,4 @@ Use this as the visual/product brief for next UI iterations:
 
 - Convex is intentionally **not** configured yet.
 - Current app is auth-first so product flows can be added behind a signed-in state.
+- Expo deep link scheme is set to `cleaner` for OAuth redirects.
