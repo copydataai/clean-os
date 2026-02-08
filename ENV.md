@@ -18,3 +18,7 @@
 - `NEXT_PUBLIC_APP_URL` - Base URL used to build redirects and payment links.
 - `NEXT_PUBLIC_TALLY_REQUEST_URL` - Public URL for the Tally request form (used in cancel/resume flows).
 - `NEXT_PUBLIC_TALLY_CONFIRM_URL` - Public URL for the Tally confirmation form (used for operator copy link).
+
+## Dispatch Map
+- `NEXT_PUBLIC_MAPBOX_TOKEN` - Public token used by the dashboard schedule map.
+- `MAPBOX_GEOCODING_TOKEN` - Server-side token used by Convex dispatch geocoding backfill.
