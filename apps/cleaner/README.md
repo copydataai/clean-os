@@ -10,8 +10,9 @@ A React Native app in the monorepo for the **Cleaner** product, built with Expo 
   - Email + password sign in
   - Email + password sign up
   - Email code verification
-  - Signed-in home state + sign out
+  - Signed-in cleaner workspace + sign out
 - Secure Clerk session token storage using Expo Secure Store
+- Convex live data integration for cleaner operations
 
 ## Requirements
 
@@ -27,10 +28,11 @@ A React Native app in the monorepo for the **Cleaner** product, built with Expo 
 cp .env.example .env.local
 ```
 
-2. Add your key in `.env.local`:
+2. Add your keys in `.env.local`:
 
 ```bash
 EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_your_key_here
+EXPO_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 ```
 
 ## Run the app
@@ -70,14 +72,19 @@ Use this as the visual/product brief for next UI iterations:
   - Keep forms short and obvious
   - Prefer one primary action per screen
   - Avoid visual clutter and dense blocks of text
-- Core future screens:
-  - Task list (today, upcoming)
-  - Room checklist templates
-  - Supplies inventory
-  - Cleaning streak/progress summary
+- Current production-oriented areas:
+  - Overview validation (qualification coverage, availability, pay rate, readiness checks)
+  - Service qualification and skill management
+  - Weekly availability editor with time validation
+  - Assignment action workflow (accept/decline, confirm, clock in/out)
 
 ## Notes
 
-- Convex is intentionally **not** configured yet.
-- Current app is auth-first so product flows can be added behind a signed-in state.
+- Convex runtime wiring is now configured with Clerk auth integration.
+- Shared Convex API/types are now available via `@clean-os/convex`.
+- Mobile uses:
+  - `import { api } from "@clean-os/convex/api"`
+  - `useQuery(api.dashboard.getTodaysSchedule)` for the first live panel on Home
+- If `EXPO_PUBLIC_CONVEX_URL` is missing, app remains usable and shows a non-blocking setup warning.
+- Current app is a cleaner-first operational UI (not mock flow screens).
 - Expo deep link scheme is set to `cleaner` for OAuth redirects.

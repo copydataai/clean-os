@@ -1,9 +1,13 @@
+import { api } from "@clean-os/convex/api";
+import type { Id } from "@clean-os/convex/data-model";
 import { ClerkProvider, useAuth, useClerk, useSSO, useSignIn, useSignUp, useUser } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
+import { ConvexReactClient, useMutation, useQuery } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
 import * as AuthSession from "expo-auth-session";
 import { StatusBar } from "expo-status-bar";
 import * as WebBrowser from "expo-web-browser";
-import { type ReactNode, useMemo, useReducer, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -19,69 +23,11 @@ import {
 } from "react-native";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
+const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 WebBrowser.maybeCompleteAuthSession();
 
 type AuthMode = "sign-in" | "sign-up";
-type AppRoute =
-  | "home"
-  | "job:list"
-  | "job:details"
-  | "job:complete"
-  | "checklist:template"
-  | "checklist:run"
-  | "checklist:submit"
-  | "record:entry"
-  | "record:review"
-  | "record:saved";
-
-type MockJob = {
-  id: string;
-  address: string;
-  time: string;
-  status: string;
-  service: string;
-  duration: string;
-  contactNote: string;
-};
-
-type MockChecklistTemplate = {
-  id: string;
-  name: string;
-  rooms: number;
-  duration: string;
-  highlight: string;
-};
-
-type MockRecordDraft = {
-  notes: string;
-  photoCount: number;
-};
-
-type AppState = {
-  route: AppRoute;
-  selectedJobId: string | null;
-  selectedTemplateId: string | null;
-  checklistCheckedIds: string[];
-  recordDraft: MockRecordDraft;
-  toast: string | null;
-};
-
-type AppAction =
-  | { type: "OPEN_FLOW"; flow: "job" | "checklist" | "record" }
-  | { type: "BACK" }
-  | { type: "JOB_OPEN"; jobId: string }
-  | { type: "JOB_START" }
-  | { type: "JOB_COMPLETE" }
-  | { type: "CHECKLIST_SELECT_TEMPLATE"; templateId: string }
-  | { type: "CHECKLIST_TOGGLE_ITEM"; itemId: string }
-  | { type: "CHECKLIST_REVIEW" }
-  | { type: "CHECKLIST_SUBMIT" }
-  | { type: "RECORD_UPDATE_NOTES"; notes: string }
-  | { type: "RECORD_SET_PHOTO_COUNT"; photoCount: number }
-  | { type: "RECORD_CONTINUE" }
-  | { type: "RECORD_SAVE" }
-  | { type: "RECORD_DONE" }
-  | { type: "DISMISS_TOAST" };
+type CleanerTab = "overview" | "qualifications" | "availability" | "assignments";
 
 type ThemeTokens = {
   background: string;
@@ -103,6 +49,57 @@ type ThemeTokens = {
   gradientAccent: string;
   shadowColor: string;
 };
+
+type CleanerServiceQualification = {
+  _id: Id<"cleanerServiceTypes">;
+  serviceType: string;
+  isQualified: boolean;
+  isPreferred?: boolean;
+  qualifiedAt?: number;
+};
+
+type CleanerSkill = {
+  _id: Id<"cleanerSkills">;
+  skillType: string;
+  proficiencyLevel: string;
+  notes?: string;
+  isVerified?: boolean;
+};
+
+type CleanerAvailability = {
+  _id: Id<"cleanerAvailability">;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+};
+
+type CleanerAssignment = {
+  _id: Id<"bookingAssignments">;
+  bookingId: Id<"bookings">;
+  role: string;
+  status: string;
+  assignedAt: number;
+  cleanerNotes?: string;
+  clockedInAt?: number;
+  clockedOutAt?: number;
+  actualDurationMinutes?: number;
+};
+
+const REQUIRED_SERVICE_TYPES = ["standard", "deep", "move_out"] as const;
+const EXTRA_SERVICE_TYPES = ["move_in", "post_construction", "airbnb"] as const;
+const SKILL_OPTIONS = [
+  "deep_cleaning",
+  "window",
+  "carpet",
+  "hardwood",
+  "appliances",
+  "organizing",
+  "laundry",
+  "pet_safe",
+] as const;
+const PROFICIENCY_OPTIONS = ["beginner", "intermediate", "advanced", "expert"] as const;
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 const LIGHT_THEME: ThemeTokens = {
   background: "#f5fcfc",
@@ -146,94 +143,25 @@ const DARK_THEME: ThemeTokens = {
   shadowColor: "#000000",
 };
 
-const MOCK_JOBS: MockJob[] = [
-  {
-    id: "job-1",
-    address: "1024 Pine Street",
-    time: "9:00 AM",
-    status: "Assigned",
-    service: "Standard Clean",
-    duration: "2h 00m",
-    contactNote: "Customer prefers non-scented products.",
-  },
-  {
-    id: "job-2",
-    address: "88 Harbor Lane",
-    time: "11:30 AM",
-    status: "Scheduled",
-    service: "Deep Clean",
-    duration: "3h 30m",
-    contactNote: "Ring bell at side entrance.",
-  },
-  {
-    id: "job-3",
-    address: "451 Maple Avenue",
-    time: "2:15 PM",
-    status: "Priority",
-    service: "Move-Out",
-    duration: "4h 00m",
-    contactNote: "Take before/after photos of kitchen and bath.",
-  },
-];
-
-const MOCK_TEMPLATES: MockChecklistTemplate[] = [
-  {
-    id: "template-standard",
-    name: "Standard Clean",
-    rooms: 5,
-    duration: "45 min",
-    highlight: "Weekly maintenance with essential tasks.",
-  },
-  {
-    id: "template-deep",
-    name: "Deep Clean",
-    rooms: 7,
-    duration: "75 min",
-    highlight: "Detailed pass with baseboards and high-touch surfaces.",
-  },
-  {
-    id: "template-move",
-    name: "Move-Out",
-    rooms: 9,
-    duration: "95 min",
-    highlight: "Turnover-ready checklist with appliance detailing.",
-  },
-];
-
-const CHECKLIST_ITEMS = [
-  { id: "kitchen", label: "Kitchen sanitized and counters polished" },
-  { id: "bathroom", label: "Bathroom surfaces disinfected" },
-  { id: "floors", label: "Floors vacuumed and mopped" },
-  { id: "trash", label: "Trash removed and liners replaced" },
-];
-
-const INITIAL_APP_STATE: AppState = {
-  route: "home",
-  selectedJobId: null,
-  selectedTemplateId: null,
-  checklistCheckedIds: [],
-  recordDraft: {
-    notes: "",
-    photoCount: 2,
-  },
-  toast: null,
-};
-
 type AppStyles = ReturnType<typeof createStyles>;
 
 export default function App() {
   const { statusBarStyle, styles, theme } = useAppTheme();
+  const convexClient = useMemo(() => {
+    if (!convexUrl) return null;
+    return new ConvexReactClient(convexUrl);
+  }, []);
 
   if (!publishableKey) {
     return (
       <AppFrame styles={styles}>
         <StatusBar style={statusBarStyle} />
-        <View style={styles.missingKeyContainer}>
+        <SurfaceCard styles={styles}>
           <Text style={styles.title}>Cleaner</Text>
           <Text style={styles.subtitle}>
             Add EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY in your environment before starting the app.
           </Text>
-        </View>
+        </SurfaceCard>
       </AppFrame>
     );
   }
@@ -241,12 +169,20 @@ export default function App() {
   return (
     <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
       <StatusBar style={statusBarStyle} />
-      <Root styles={styles} theme={theme} />
+      <Root styles={styles} theme={theme} convexClient={convexClient} />
     </ClerkProvider>
   );
 }
 
-function Root({ styles, theme }: { styles: AppStyles; theme: ThemeTokens }) {
+function Root({
+  styles,
+  theme,
+  convexClient,
+}: {
+  styles: AppStyles;
+  theme: ThemeTokens;
+  convexClient: ConvexReactClient | null;
+}) {
   const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded) {
@@ -260,21 +196,22 @@ function Root({ styles, theme }: { styles: AppStyles; theme: ThemeTokens }) {
   }
 
   if (isSignedIn) {
-    return <SignedInMockApp styles={styles} />;
+    if (convexClient) {
+      return (
+        <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
+          <SignedInCleanerApp styles={styles} />
+        </ConvexProviderWithClerk>
+      );
+    }
+    return <SignedInConvexDisabled styles={styles} />;
   }
 
   return <AuthScreen styles={styles} theme={theme} />;
 }
 
-function SignedInMockApp({ styles }: { styles: AppStyles }) {
-  const { user } = useUser();
+function SignedInConvexDisabled({ styles }: { styles: AppStyles }) {
   const { signOut } = useClerk();
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [state, dispatch] = useReducer(appReducer, INITIAL_APP_STATE);
-
-  const selectedJob = state.selectedJobId ? MOCK_JOBS.find((job) => job.id === state.selectedJobId) ?? null : null;
-  const selectedTemplate =
-    state.selectedTemplateId ? MOCK_TEMPLATES.find((template) => template.id === state.selectedTemplateId) ?? null : null;
 
   const handleSignOut = async () => {
     if (isSigningOut) return;
@@ -288,115 +225,983 @@ function SignedInMockApp({ styles }: { styles: AppStyles }) {
 
   return (
     <AppFrame styles={styles}>
-      <ScrollView contentContainerStyle={styles.homeScrollBody} showsVerticalScrollIndicator={false}>
-        {state.toast ? (
+      <ScrollView contentContainerStyle={styles.pageBody} showsVerticalScrollIndicator={false}>
+        <SurfaceCard styles={styles}>
+          <Text style={styles.sectionTitle}>Convex Setup Required</Text>
+          <Text style={styles.subtitle}>
+            Convex is not configured. Add EXPO_PUBLIC_CONVEX_URL to enable live cleaner validation and operational data.
+          </Text>
+          <PrimaryCTA title={isSigningOut ? "Signing out..." : "Sign Out"} onPress={handleSignOut} styles={styles} />
+        </SurfaceCard>
+      </ScrollView>
+    </AppFrame>
+  );
+}
+
+function SignedInCleanerApp({ styles }: { styles: AppStyles }) {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  const [activeTab, setActiveTab] = useState<CleanerTab>("overview");
+  const [notice, setNotice] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
+
+  const email = user?.primaryEmailAddress?.emailAddress ?? null;
+  const cleaner = useQuery(api.cleaners.getByEmail, email ? { email } : "skip");
+  const cleanerDetails = useQuery(
+    api.cleaners.getWithDetails,
+    cleaner ? { cleanerId: cleaner._id } : "skip"
+  );
+  const assignments = useQuery(
+    api.cleaners.getAssignments,
+    cleaner ? { cleanerId: cleaner._id } : "skip"
+  );
+
+  const handleSignOut = async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setIsSigningOut(false);
+    }
+  };
+
+  const cleanerName = cleaner
+    ? `${cleaner.firstName ?? ""} ${cleaner.lastName ?? ""}`.trim() || cleaner.email
+    : email ?? "Cleaner";
+
+  return (
+    <AppFrame styles={styles}>
+      <ScrollView contentContainerStyle={styles.pageBody} showsVerticalScrollIndicator={false}>
+        {notice ? (
           <SurfaceCard styles={styles}>
-            <View style={styles.toastRow}>
-              <Text style={styles.toastText}>{state.toast}</Text>
-              <SecondaryCTA title="Dismiss" onPress={() => dispatch({ type: "DISMISS_TOAST" })} styles={styles} />
+            <View style={styles.noticeRow}>
+              <Text style={styles.noticeText}>{notice}</Text>
+              <SecondaryCTA title="Dismiss" onPress={() => setNotice(null)} styles={styles} />
             </View>
           </SurfaceCard>
         ) : null}
 
-        {state.route === "home" ? (
-          <HomeHubScreen
-            styles={styles}
-            userEmail={user?.primaryEmailAddress?.emailAddress ?? "your account"}
-            onOpenFlow={(flow) => dispatch({ type: "OPEN_FLOW", flow })}
-            onSignOut={handleSignOut}
-            isSigningOut={isSigningOut}
-          />
+        <SurfaceCard styles={styles}>
+          <Text style={styles.title}>Cleaner Workspace</Text>
+          <Text style={styles.subtitle}>Signed in as {email ?? "no email found"}</Text>
+          <View style={styles.metaRow}>
+            <MetaPill styles={styles} label={cleaner?.status ?? "status unknown"} tone="info" />
+            <MetaPill styles={styles} label={cleaner?.employmentType ?? "employment unknown"} tone="neutral" />
+            <MetaPill styles={styles} label={cleanerName} tone="neutral" />
+          </View>
+          <PrimaryCTA title={isSigningOut ? "Signing out..." : "Sign Out"} onPress={handleSignOut} styles={styles} />
+        </SurfaceCard>
+
+        {email === null ? (
+          <SurfaceCard styles={styles}>
+            <Text style={styles.sectionTitle}>Missing account email</Text>
+            <Text style={styles.subtitle}>Clerk did not return a primary email for this user.</Text>
+          </SurfaceCard>
         ) : null}
 
-        {state.route === "job:list" ? (
-          <JobListMockScreen
-            styles={styles}
-            jobs={MOCK_JOBS}
-            onBack={() => dispatch({ type: "BACK" })}
-            onOpenJob={(jobId) => dispatch({ type: "JOB_OPEN", jobId })}
-          />
+        {email !== null && cleaner === undefined ? (
+          <SurfaceCard styles={styles}>
+            <Text style={styles.sectionTitle}>Loading cleaner profile...</Text>
+          </SurfaceCard>
         ) : null}
 
-        {state.route === "job:details" ? (
-          <JobDetailsMockScreen
-            styles={styles}
-            job={selectedJob}
-            onBack={() => dispatch({ type: "BACK" })}
-            onStart={() => dispatch({ type: "JOB_START" })}
-          />
+        {email !== null && cleaner === null ? (
+          <SurfaceCard styles={styles}>
+            <Text style={styles.sectionTitle}>Cleaner profile not linked</Text>
+            <Text style={styles.subtitle}>
+              No cleaner record was found for {email}. Create or link a cleaner profile in admin to continue.
+            </Text>
+          </SurfaceCard>
         ) : null}
 
-        {state.route === "job:complete" ? (
-          <JobCompleteMockScreen
-            styles={styles}
-            job={selectedJob}
-            onBack={() => dispatch({ type: "BACK" })}
-            onComplete={() => dispatch({ type: "JOB_COMPLETE" })}
-          />
-        ) : null}
+        {cleaner ? (
+          <>
+            <TabBar styles={styles} activeTab={activeTab} onChange={setActiveTab} />
 
-        {state.route === "checklist:template" ? (
-          <ChecklistTemplateMockScreen
-            styles={styles}
-            templates={MOCK_TEMPLATES}
-            selectedTemplateId={state.selectedTemplateId}
-            onBack={() => dispatch({ type: "BACK" })}
-            onSelectTemplate={(templateId) => dispatch({ type: "CHECKLIST_SELECT_TEMPLATE", templateId })}
-          />
-        ) : null}
+            {cleanerDetails === undefined ? (
+              <SurfaceCard styles={styles}>
+                <Text style={styles.sectionTitle}>Loading cleaner details...</Text>
+              </SurfaceCard>
+            ) : cleanerDetails === null ? (
+              <SurfaceCard styles={styles}>
+                <Text style={styles.sectionTitle}>Cleaner details unavailable</Text>
+                <Text style={styles.subtitle}>
+                  The cleaner profile exists but extended detail records could not be loaded.
+                </Text>
+              </SurfaceCard>
+            ) : (
+              <>
+                {activeTab === "overview" ? (
+                  <CleanerOverviewPanel
+                    styles={styles}
+                    cleaner={cleaner}
+                    cleanerDetails={cleanerDetails}
+                    assignments={assignments ?? []}
+                  />
+                ) : null}
 
-        {state.route === "checklist:run" ? (
-          <ChecklistRunMockScreen
-            styles={styles}
-            selectedTemplate={selectedTemplate}
-            checkedIds={state.checklistCheckedIds}
-            onBack={() => dispatch({ type: "BACK" })}
-            onToggleItem={(itemId) => dispatch({ type: "CHECKLIST_TOGGLE_ITEM", itemId })}
-            onReview={() => dispatch({ type: "CHECKLIST_REVIEW" })}
-          />
-        ) : null}
+                {activeTab === "qualifications" ? (
+                  <CleanerQualificationsPanel
+                    styles={styles}
+                    cleanerId={cleaner._id}
+                    cleanerDetails={cleanerDetails}
+                    onNotice={setNotice}
+                  />
+                ) : null}
 
-        {state.route === "checklist:submit" ? (
-          <ChecklistSubmitMockScreen
-            styles={styles}
-            selectedTemplate={selectedTemplate}
-            checkedCount={state.checklistCheckedIds.length}
-            totalCount={CHECKLIST_ITEMS.length}
-            onBack={() => dispatch({ type: "BACK" })}
-            onSubmit={() => dispatch({ type: "CHECKLIST_SUBMIT" })}
-          />
-        ) : null}
+                {activeTab === "availability" ? (
+                  <CleanerAvailabilityPanel
+                    styles={styles}
+                    cleanerId={cleaner._id}
+                    availability={cleanerDetails.availability ?? []}
+                    onNotice={setNotice}
+                  />
+                ) : null}
 
-        {state.route === "record:entry" ? (
-          <RecordEntryMockScreen
-            styles={styles}
-            draft={state.recordDraft}
-            onBack={() => dispatch({ type: "BACK" })}
-            onChangeNotes={(notes) => dispatch({ type: "RECORD_UPDATE_NOTES", notes })}
-            onSetPhotoCount={(photoCount) => dispatch({ type: "RECORD_SET_PHOTO_COUNT", photoCount })}
-            onContinue={() => dispatch({ type: "RECORD_CONTINUE" })}
-          />
-        ) : null}
-
-        {state.route === "record:review" ? (
-          <RecordReviewMockScreen
-            styles={styles}
-            draft={state.recordDraft}
-            onBack={() => dispatch({ type: "BACK" })}
-            onSave={() => dispatch({ type: "RECORD_SAVE" })}
-          />
-        ) : null}
-
-        {state.route === "record:saved" ? (
-          <RecordSavedMockScreen
-            styles={styles}
-            draft={state.recordDraft}
-            onBack={() => dispatch({ type: "BACK" })}
-            onDone={() => dispatch({ type: "RECORD_DONE" })}
-          />
+                {activeTab === "assignments" ? (
+                  <CleanerAssignmentsPanel
+                    styles={styles}
+                    assignments={assignments ?? []}
+                    onNotice={setNotice}
+                  />
+                ) : null}
+              </>
+            )}
+          </>
         ) : null}
       </ScrollView>
     </AppFrame>
+  );
+}
+
+function CleanerOverviewPanel({
+  styles,
+  cleaner,
+  cleanerDetails,
+  assignments,
+}: {
+  styles: AppStyles;
+  cleaner: {
+    hasOwnTransportation?: boolean;
+    hasOwnEquipment?: boolean;
+    willingToTravel?: boolean;
+  };
+  cleanerDetails: {
+    serviceTypes?: CleanerServiceQualification[];
+    availability?: CleanerAvailability[];
+    activePayRate?: { payType: string; baseRate: number; currency?: string } | null;
+  };
+  assignments: CleanerAssignment[];
+}) {
+  const serviceTypes = cleanerDetails.serviceTypes ?? [];
+  const qualifiedSet = new Set(
+    serviceTypes
+      .filter((item) => item.isQualified)
+      .map((item) => item.serviceType.toLowerCase())
+  );
+  const missingRequired = REQUIRED_SERVICE_TYPES.filter((serviceType) => !qualifiedSet.has(serviceType));
+  const activeAvailability = (cleanerDetails.availability ?? []).filter((slot) => slot.isActive);
+  const hasValidAvailability = activeAvailability.length > 0;
+  const hasPayRate = Boolean(cleanerDetails.activePayRate);
+
+  const checks = [
+    {
+      label: "Required service qualifications",
+      valid: missingRequired.length === 0,
+      detail:
+        missingRequired.length === 0
+          ? "All required services are qualified"
+          : `Missing: ${missingRequired.join(", ")}`,
+    },
+    {
+      label: "Availability configured",
+      valid: hasValidAvailability,
+      detail: hasValidAvailability
+        ? `${activeAvailability.length} active day(s)`
+        : "No active availability slots",
+    },
+    {
+      label: "Active pay rate",
+      valid: hasPayRate,
+      detail: hasPayRate
+        ? formatPayRate(
+            cleanerDetails.activePayRate?.baseRate ?? 0,
+            cleanerDetails.activePayRate?.payType ?? "hourly",
+            cleanerDetails.activePayRate?.currency
+          )
+        : "Set an active pay rate",
+    },
+    {
+      label: "Transportation",
+      valid: cleaner.hasOwnTransportation === true,
+      detail: cleaner.hasOwnTransportation ? "Own transportation" : "Transportation not confirmed",
+    },
+    {
+      label: "Equipment",
+      valid: cleaner.hasOwnEquipment === true,
+      detail: cleaner.hasOwnEquipment ? "Own equipment" : "Equipment not confirmed",
+    },
+  ];
+
+  const pendingAssignments = assignments.filter((item) => item.status === "pending").length;
+  const activeAssignments = assignments.filter((item) => item.status === "in_progress").length;
+  const confirmedAssignments = assignments.filter((item) => item.status === "confirmed").length;
+
+  return (
+    <>
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Readiness Validation</Text>
+        <View style={styles.checkList}>
+          {checks.map((check) => (
+            <View key={check.label} style={styles.checkItem}>
+              <MetaPill
+                styles={styles}
+                label={check.valid ? "Pass" : "Action Required"}
+                tone={check.valid ? "success" : "danger"}
+              />
+              <View style={styles.checkBody}>
+                <Text style={styles.checkTitle}>{check.label}</Text>
+                <Text style={styles.checkDetail}>{check.detail}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </SurfaceCard>
+
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Operational Snapshot</Text>
+        <View style={styles.metricGrid}>
+          <MetricCard styles={styles} label="Pending" value={String(pendingAssignments)} />
+          <MetricCard styles={styles} label="Confirmed" value={String(confirmedAssignments)} />
+          <MetricCard styles={styles} label="In Progress" value={String(activeAssignments)} />
+          <MetricCard styles={styles} label="Total Assignments" value={String(assignments.length)} />
+        </View>
+      </SurfaceCard>
+    </>
+  );
+}
+
+function CleanerQualificationsPanel({
+  styles,
+  cleanerId,
+  cleanerDetails,
+  onNotice,
+}: {
+  styles: AppStyles;
+  cleanerId: Id<"cleaners">;
+  cleanerDetails: {
+    serviceTypes?: CleanerServiceQualification[];
+    skills?: CleanerSkill[];
+  };
+  onNotice: (value: string | null) => void;
+}) {
+  const addQualification = useMutation(api.cleaners.addServiceTypeQualification);
+  const updateQualification = useMutation(api.cleaners.updateServiceTypeQualification);
+  const removeQualification = useMutation(api.cleaners.removeServiceTypeQualification);
+  const addSkill = useMutation(api.cleaners.addSkill);
+  const updateSkill = useMutation(api.cleaners.updateSkill);
+  const removeSkill = useMutation(api.cleaners.removeSkill);
+
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [selectedServiceType, setSelectedServiceType] = useState<string>(REQUIRED_SERVICE_TYPES[0]);
+  const [selectedSkillType, setSelectedSkillType] = useState<string>(SKILL_OPTIONS[0]);
+  const [selectedSkillProficiency, setSelectedSkillProficiency] = useState<string>(PROFICIENCY_OPTIONS[1]);
+  const [skillNotes, setSkillNotes] = useState("");
+
+  const qualifications = cleanerDetails.serviceTypes ?? [];
+  const skills = cleanerDetails.skills ?? [];
+
+  const qualificationByType = Object.fromEntries(
+    qualifications.map((item) => [item.serviceType.toLowerCase(), item])
+  );
+  const allServiceTypes = Array.from(
+    new Set([
+      ...REQUIRED_SERVICE_TYPES,
+      ...EXTRA_SERVICE_TYPES,
+      ...qualifications.map((item) => item.serviceType.toLowerCase()),
+    ])
+  );
+
+  const missingRequired = REQUIRED_SERVICE_TYPES.filter((serviceType) => {
+    const qualification = qualificationByType[serviceType];
+    return !qualification || !qualification.isQualified;
+  });
+
+  const existingSkills = new Set(skills.map((skill) => skill.skillType));
+
+  const runMutation = async (key: string, fn: () => Promise<unknown>, successMessage: string) => {
+    setSavingKey(key);
+    try {
+      await fn();
+      onNotice(successMessage);
+    } catch (error) {
+      onNotice(getErrorMessage(error));
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  return (
+    <>
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Service Qualification Validation</Text>
+        {missingRequired.length > 0 ? (
+          <Text style={styles.validationError}>Missing required types: {missingRequired.join(", ")}</Text>
+        ) : (
+          <Text style={styles.validationSuccess}>All required service types are covered.</Text>
+        )}
+
+        <Text style={styles.blockLabel}>Quick add qualification</Text>
+        <OptionGrid
+          styles={styles}
+          options={allServiceTypes}
+          selected={selectedServiceType}
+          onSelect={setSelectedServiceType}
+          disabledLookup={qualificationByType}
+        />
+
+        <PrimaryCTA
+          title={savingKey === "qualification-add" ? "Saving..." : "Add Qualification"}
+          onPress={() =>
+            runMutation(
+              "qualification-add",
+              () =>
+                addQualification({
+                  cleanerId,
+                  serviceType: selectedServiceType,
+                  isQualified: true,
+                  isPreferred: false,
+                  qualifiedAt: Date.now(),
+                }),
+              "Qualification added"
+            )
+          }
+          styles={styles}
+          disabled={Boolean(qualificationByType[selectedServiceType]) || savingKey !== null}
+        />
+      </SurfaceCard>
+
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Service Types</Text>
+        <View style={styles.listColumn}>
+          {allServiceTypes.map((serviceType) => {
+            const qualification = qualificationByType[serviceType];
+
+            return (
+              <View key={serviceType} style={styles.rowCard}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.rowTitle}>{serviceType}</Text>
+                  {qualification?.isPreferred ? (
+                    <MetaPill styles={styles} label="preferred" tone="info" />
+                  ) : null}
+                </View>
+                <Text style={styles.rowSubtitle}>
+                  {qualification
+                    ? qualification.isQualified
+                      ? "Qualified"
+                      : "Not qualified"
+                    : "Not configured"}
+                </Text>
+
+                <View style={styles.actionRow}>
+                  {qualification ? (
+                    <SecondaryCTA
+                      title={qualification.isQualified ? "Unqualify" : "Qualify"}
+                      onPress={() =>
+                        runMutation(
+                          `qualify-${qualification._id}`,
+                          () =>
+                            updateQualification({
+                              qualificationId: qualification._id,
+                              isQualified: !qualification.isQualified,
+                              qualifiedAt: !qualification.isQualified ? Date.now() : undefined,
+                            }),
+                          "Qualification updated"
+                        )
+                      }
+                      styles={styles}
+                      disabled={savingKey !== null}
+                    />
+                  ) : (
+                    <SecondaryCTA
+                      title="Create"
+                      onPress={() =>
+                        runMutation(
+                          `create-${serviceType}`,
+                          () =>
+                            addQualification({
+                              cleanerId,
+                              serviceType,
+                              isQualified: true,
+                              isPreferred: false,
+                              qualifiedAt: Date.now(),
+                            }),
+                          "Qualification created"
+                        )
+                      }
+                      styles={styles}
+                      disabled={savingKey !== null}
+                    />
+                  )}
+
+                  {qualification ? (
+                    <SecondaryCTA
+                      title={qualification.isPreferred ? "Unset preferred" : "Set preferred"}
+                      onPress={() =>
+                        runMutation(
+                          `preferred-${qualification._id}`,
+                          () =>
+                            updateQualification({
+                              qualificationId: qualification._id,
+                              isPreferred: !qualification.isPreferred,
+                            }),
+                          "Preference updated"
+                        )
+                      }
+                      styles={styles}
+                      disabled={savingKey !== null}
+                    />
+                  ) : null}
+
+                  {qualification ? (
+                    <SecondaryCTA
+                      title="Remove"
+                      onPress={() =>
+                        runMutation(
+                          `remove-${qualification._id}`,
+                          () => removeQualification({ qualificationId: qualification._id }),
+                          "Qualification removed"
+                        )
+                      }
+                      styles={styles}
+                      disabled={savingKey !== null}
+                    />
+                  ) : null}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </SurfaceCard>
+
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Skills</Text>
+        <Text style={styles.blockLabel}>Skill type</Text>
+        <OptionGrid
+          styles={styles}
+          options={[...SKILL_OPTIONS]}
+          selected={selectedSkillType}
+          onSelect={setSelectedSkillType}
+          disabledLookup={Object.fromEntries([...existingSkills].map((skill) => [skill, true]))}
+        />
+
+        <Text style={styles.blockLabel}>Proficiency</Text>
+        <OptionGrid
+          styles={styles}
+          options={[...PROFICIENCY_OPTIONS]}
+          selected={selectedSkillProficiency}
+          onSelect={setSelectedSkillProficiency}
+        />
+
+        <TextInput
+          value={skillNotes}
+          onChangeText={setSkillNotes}
+          placeholder="Optional skill notes"
+          placeholderTextColor={styles.subtitle.color}
+          style={styles.input}
+        />
+
+        <PrimaryCTA
+          title={savingKey === "skill-add" ? "Saving..." : "Add Skill"}
+          onPress={() =>
+            runMutation(
+              "skill-add",
+              () =>
+                addSkill({
+                  cleanerId,
+                  skillType: selectedSkillType,
+                  proficiencyLevel: selectedSkillProficiency,
+                  notes: skillNotes.trim() || undefined,
+                }),
+              "Skill added"
+            )
+          }
+          styles={styles}
+          disabled={existingSkills.has(selectedSkillType) || savingKey !== null}
+        />
+
+        <View style={styles.listColumn}>
+          {skills.map((skill) => (
+            <View key={skill._id} style={styles.rowCard}>
+              <View style={styles.rowTop}>
+                <Text style={styles.rowTitle}>{skill.skillType}</Text>
+                {skill.isVerified ? <MetaPill styles={styles} label="verified" tone="success" /> : null}
+              </View>
+              <Text style={styles.rowSubtitle}>
+                {skill.proficiencyLevel}
+                {skill.notes ? ` - ${skill.notes}` : ""}
+              </Text>
+              <View style={styles.actionRow}>
+                {PROFICIENCY_OPTIONS.map((level) => (
+                  <Pressable
+                    key={`${skill._id}-${level}`}
+                    onPress={() =>
+                      runMutation(
+                        `skill-${skill._id}-${level}`,
+                        () => updateSkill({ skillId: skill._id, proficiencyLevel: level }),
+                        `Skill updated to ${level}`
+                      )
+                    }
+                    style={[
+                      styles.optionChip,
+                      skill.proficiencyLevel === level && styles.optionChipActive,
+                      savingKey !== null && styles.optionChipDisabled,
+                    ]}
+                    disabled={savingKey !== null}
+                  >
+                    <Text
+                      style={[
+                        styles.optionChipText,
+                        skill.proficiencyLevel === level && styles.optionChipTextActive,
+                      ]}
+                    >
+                      {level}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <SecondaryCTA
+                title="Remove Skill"
+                onPress={() =>
+                  runMutation(
+                    `skill-remove-${skill._id}`,
+                    () => removeSkill({ skillId: skill._id }),
+                    "Skill removed"
+                  )
+                }
+                styles={styles}
+                disabled={savingKey !== null}
+              />
+            </View>
+          ))}
+          {skills.length === 0 ? <Text style={styles.rowSubtitle}>No skills added yet.</Text> : null}
+        </View>
+      </SurfaceCard>
+    </>
+  );
+}
+
+function CleanerAvailabilityPanel({
+  styles,
+  cleanerId,
+  availability,
+  onNotice,
+}: {
+  styles: AppStyles;
+  cleanerId: Id<"cleaners">;
+  availability: CleanerAvailability[];
+  onNotice: (value: string | null) => void;
+}) {
+  const setAvailability = useMutation(api.cleaners.setAvailability);
+  const removeAvailability = useMutation(api.cleaners.removeAvailability);
+
+  const [editingDay, setEditingDay] = useState<number | null>(null);
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("17:00");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const availabilityByDay = Object.fromEntries(
+    availability.filter((slot) => slot.isActive).map((slot) => [slot.dayOfWeek, slot])
+  ) as Record<number, CleanerAvailability>;
+
+  const openEditor = (dayIndex: number) => {
+    const slot = availabilityByDay[dayIndex];
+    setEditingDay(dayIndex);
+    setStartTime(slot?.startTime ?? "09:00");
+    setEndTime(slot?.endTime ?? "17:00");
+  };
+
+  const saveDay = async () => {
+    if (editingDay === null) return;
+    if (startTime >= endTime) {
+      onNotice("Start time must be before end time.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await setAvailability({
+        cleanerId,
+        dayOfWeek: editingDay,
+        startTime,
+        endTime,
+      });
+      onNotice(`Availability updated for ${DAYS[editingDay]}`);
+      setEditingDay(null);
+    } catch (error) {
+      onNotice(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const removeDay = async (dayIndex: number) => {
+    const slot = availabilityByDay[dayIndex];
+    if (!slot) return;
+    setIsSaving(true);
+    try {
+      await removeAvailability({ availabilityId: slot._id });
+      onNotice(`Availability removed for ${DAYS[dayIndex]}`);
+    } catch (error) {
+      onNotice(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const activeCount = Object.values(availabilityByDay).length;
+
+  return (
+    <>
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Availability Validation</Text>
+        {activeCount > 0 ? (
+          <Text style={styles.validationSuccess}>{activeCount} active day(s) configured.</Text>
+        ) : (
+          <Text style={styles.validationError}>No active availability. Set at least one working day.</Text>
+        )}
+      </SurfaceCard>
+
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Weekly Availability</Text>
+        <View style={styles.availabilityGrid}>
+          {DAYS.map((dayLabel, index) => {
+            const slot = availabilityByDay[index];
+            return (
+              <View key={dayLabel} style={styles.dayCard}>
+                <Text style={styles.dayTitle}>{dayLabel}</Text>
+                <Text style={styles.dayTime}>{slot ? `${slot.startTime} - ${slot.endTime}` : "Off"}</Text>
+                <View style={styles.actionRow}>
+                  <SecondaryCTA
+                    title={slot ? "Edit" : "Set"}
+                    onPress={() => openEditor(index)}
+                    styles={styles}
+                    disabled={isSaving}
+                  />
+                  {slot ? (
+                    <SecondaryCTA
+                      title="Clear"
+                      onPress={() => removeDay(index)}
+                      styles={styles}
+                      disabled={isSaving}
+                    />
+                  ) : null}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+      </SurfaceCard>
+
+      {editingDay !== null ? (
+        <SurfaceCard styles={styles}>
+          <Text style={styles.sectionTitle}>Set {DAYS[editingDay]} Hours</Text>
+          <View style={styles.editorRow}>
+            <View style={styles.timeInputGroup}>
+              <Text style={styles.blockLabel}>Start</Text>
+              <TextInput
+                value={startTime}
+                onChangeText={setStartTime}
+                style={styles.input}
+                placeholder="09:00"
+                placeholderTextColor={styles.subtitle.color}
+              />
+            </View>
+            <View style={styles.timeInputGroup}>
+              <Text style={styles.blockLabel}>End</Text>
+              <TextInput
+                value={endTime}
+                onChangeText={setEndTime}
+                style={styles.input}
+                placeholder="17:00"
+                placeholderTextColor={styles.subtitle.color}
+              />
+            </View>
+          </View>
+          <View style={styles.actionRow}>
+            <PrimaryCTA
+              title={isSaving ? "Saving..." : "Save Availability"}
+              onPress={saveDay}
+              styles={styles}
+              disabled={isSaving}
+            />
+            <SecondaryCTA
+              title="Cancel"
+              onPress={() => setEditingDay(null)}
+              styles={styles}
+              disabled={isSaving}
+            />
+          </View>
+        </SurfaceCard>
+      ) : null}
+    </>
+  );
+}
+
+function CleanerAssignmentsPanel({
+  styles,
+  assignments,
+  onNotice,
+}: {
+  styles: AppStyles;
+  assignments: CleanerAssignment[];
+  onNotice: (value: string | null) => void;
+}) {
+  const respondToAssignment = useMutation(api.cleaners.respondToAssignment);
+  const confirmAssignment = useMutation(api.cleaners.confirmAssignment);
+  const clockIn = useMutation(api.cleaners.clockIn);
+  const clockOut = useMutation(api.cleaners.clockOut);
+
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [notesByAssignment, setNotesByAssignment] = useState<Record<string, string>>({});
+
+  const runAction = async (
+    assignmentId: Id<"bookingAssignments">,
+    successMessage: string,
+    fn: () => Promise<unknown>
+  ) => {
+    setSavingId(assignmentId);
+    try {
+      await fn();
+      onNotice(successMessage);
+    } catch (error) {
+      onNotice(getErrorMessage(error));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <SurfaceCard styles={styles}>
+      <Text style={styles.sectionTitle}>Assignment Validation</Text>
+      {assignments.length === 0 ? <Text style={styles.rowSubtitle}>No assignments found.</Text> : null}
+
+      <View style={styles.listColumn}>
+        {assignments
+          .slice()
+          .sort((a, b) => b.assignedAt - a.assignedAt)
+          .map((assignment) => {
+            const note = notesByAssignment[assignment._id] ?? "";
+            const isSaving = savingId === assignment._id;
+
+            return (
+              <View key={assignment._id} style={styles.rowCard}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.rowTitle}>Booking {String(assignment.bookingId).slice(-6)}</Text>
+                  <MetaPill styles={styles} label={assignment.status.replace(/_/g, " ")} tone="info" />
+                </View>
+                <Text style={styles.rowSubtitle}>
+                  Assigned {new Date(assignment.assignedAt).toLocaleDateString()} - role {assignment.role}
+                </Text>
+                <TextInput
+                  value={note}
+                  onChangeText={(value) =>
+                    setNotesByAssignment((prev) => ({
+                      ...prev,
+                      [assignment._id]: value,
+                    }))
+                  }
+                  placeholder="Cleaner notes (optional)"
+                  placeholderTextColor={styles.subtitle.color}
+                  style={styles.input}
+                />
+
+                <View style={styles.actionRow}>
+                  {assignment.status === "pending" ? (
+                    <>
+                      <SecondaryCTA
+                        title={isSaving ? "Saving..." : "Accept"}
+                        onPress={() =>
+                          runAction(assignment._id, "Assignment accepted", () =>
+                            respondToAssignment({
+                              assignmentId: assignment._id,
+                              response: "accepted",
+                              cleanerNotes: note.trim() || undefined,
+                            })
+                          )
+                        }
+                        styles={styles}
+                        disabled={isSaving}
+                      />
+                      <SecondaryCTA
+                        title={isSaving ? "Saving..." : "Decline"}
+                        onPress={() =>
+                          runAction(assignment._id, "Assignment declined", () =>
+                            respondToAssignment({
+                              assignmentId: assignment._id,
+                              response: "declined",
+                              cleanerNotes: note.trim() || undefined,
+                            })
+                          )
+                        }
+                        styles={styles}
+                        disabled={isSaving}
+                      />
+                    </>
+                  ) : null}
+
+                  {assignment.status === "accepted" ? (
+                    <SecondaryCTA
+                      title={isSaving ? "Saving..." : "Confirm"}
+                      onPress={() =>
+                        runAction(assignment._id, "Assignment confirmed", () =>
+                          confirmAssignment({ assignmentId: assignment._id })
+                        )
+                      }
+                      styles={styles}
+                      disabled={isSaving}
+                    />
+                  ) : null}
+
+                  {assignment.status === "confirmed" ? (
+                    <SecondaryCTA
+                      title={isSaving ? "Saving..." : "Clock In"}
+                      onPress={() =>
+                        runAction(assignment._id, "Clocked in", () =>
+                          clockIn({ assignmentId: assignment._id })
+                        )
+                      }
+                      styles={styles}
+                      disabled={isSaving}
+                    />
+                  ) : null}
+
+                  {assignment.status === "in_progress" ? (
+                    <SecondaryCTA
+                      title={isSaving ? "Saving..." : "Clock Out"}
+                      onPress={() =>
+                        runAction(assignment._id, "Clocked out", () =>
+                          clockOut({
+                            assignmentId: assignment._id,
+                            cleanerNotes: note.trim() || undefined,
+                          })
+                        )
+                      }
+                      styles={styles}
+                      disabled={isSaving}
+                    />
+                  ) : null}
+                </View>
+              </View>
+            );
+          })}
+      </View>
+    </SurfaceCard>
+  );
+}
+
+function TabBar({
+  styles,
+  activeTab,
+  onChange,
+}: {
+  styles: AppStyles;
+  activeTab: CleanerTab;
+  onChange: (tab: CleanerTab) => void;
+}) {
+  const tabs: Array<{ value: CleanerTab; label: string }> = [
+    { value: "overview", label: "Overview" },
+    { value: "qualifications", label: "Qualifications" },
+    { value: "availability", label: "Availability" },
+    { value: "assignments", label: "Assignments" },
+  ];
+
+  return (
+    <SurfaceCard styles={styles}>
+      <View style={styles.tabRow}>
+        {tabs.map((tab) => (
+          <Pressable
+            key={tab.value}
+            onPress={() => onChange(tab.value)}
+            style={[styles.tabButton, activeTab === tab.value && styles.tabButtonActive]}
+          >
+            <Text style={[styles.tabButtonText, activeTab === tab.value && styles.tabButtonTextActive]}>
+              {tab.label}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </SurfaceCard>
+  );
+}
+
+function OptionGrid({
+  styles,
+  options,
+  selected,
+  onSelect,
+  disabledLookup,
+}: {
+  styles: AppStyles;
+  options: readonly string[];
+  selected: string;
+  onSelect: (value: string) => void;
+  disabledLookup?: Record<string, unknown>;
+}) {
+  return (
+    <View style={styles.optionWrap}>
+      {options.map((option) => {
+        const disabled = Boolean(disabledLookup?.[option]);
+        const isActive = selected === option;
+        return (
+          <Pressable
+            key={option}
+            onPress={() => onSelect(option)}
+            style={[
+              styles.optionChip,
+              isActive && styles.optionChipActive,
+              disabled && styles.optionChipDisabled,
+            ]}
+            disabled={disabled}
+          >
+            <Text style={[styles.optionChipText, isActive && styles.optionChipTextActive]}>{option}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function MetricCard({ styles, label, value }: { styles: AppStyles; label: string; value: string }) {
+  return (
+    <View style={styles.metricCard}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function MetaPill({
+  styles,
+  label,
+  tone,
+}: {
+  styles: AppStyles;
+  label: string;
+  tone: "neutral" | "success" | "danger" | "info";
+}) {
+  return (
+    <Text
+      style={[
+        styles.metaPill,
+        tone === "success" && styles.metaPillSuccess,
+        tone === "danger" && styles.metaPillDanger,
+        tone === "info" && styles.metaPillInfo,
+      ]}
+    >
+      {label}
+    </Text>
   );
 }
 
@@ -409,7 +1214,7 @@ function AuthScreen({ styles, theme }: { styles: AppStyles; theme: ThemeTokens }
         <ScrollView contentContainerStyle={styles.scrollBody} keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
             <Text style={styles.title}>Cleaner</Text>
-            <Text style={styles.subtitle}>A simple auth-ready mobile app using Expo + Clerk.</Text>
+            <Text style={styles.subtitle}>A real-time cleaner operations app using Expo + Clerk + Convex.</Text>
           </View>
 
           <View style={styles.toggleRow}>
@@ -532,9 +1337,7 @@ function SignInForm({ styles, theme }: { styles: AppStyles; theme: ThemeTokens }
         value={password}
       />
       {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-      <Pressable onPress={handleSignIn} style={styles.primaryButton}>
-        <Text style={styles.primaryButtonText}>{isSubmitting ? "Signing in..." : "Sign In"}</Text>
-      </Pressable>
+      <PrimaryCTA title={isSubmitting ? "Signing in..." : "Sign In"} onPress={handleSignIn} styles={styles} />
     </View>
   );
 }
@@ -613,9 +1416,11 @@ function SignUpForm({ styles, theme }: { styles: AppStyles; theme: ThemeTokens }
             value={password}
           />
           {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-          <Pressable onPress={handleStartSignUp} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{isSubmitting ? "Creating account..." : "Create Account"}</Text>
-          </Pressable>
+          <PrimaryCTA
+            title={isSubmitting ? "Creating account..." : "Create Account"}
+            onPress={handleStartSignUp}
+            styles={styles}
+          />
         </>
       ) : (
         <>
@@ -629,441 +1434,10 @@ function SignUpForm({ styles, theme }: { styles: AppStyles; theme: ThemeTokens }
             value={code}
           />
           {!!errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-          <Pressable onPress={handleVerify} style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{isSubmitting ? "Verifying..." : "Verify Email"}</Text>
-          </Pressable>
+          <PrimaryCTA title={isSubmitting ? "Verifying..." : "Verify Email"} onPress={handleVerify} styles={styles} />
         </>
       )}
     </View>
-  );
-}
-
-function HomeHubScreen({
-  styles,
-  userEmail,
-  onOpenFlow,
-  onSignOut,
-  isSigningOut,
-}: {
-  styles: AppStyles;
-  userEmail: string;
-  onOpenFlow: (flow: "job" | "checklist" | "record") => void;
-  onSignOut: () => void;
-  isSigningOut: boolean;
-}) {
-  const operationButtons = [
-    {
-      key: "job",
-      label: "Job",
-      description: "Open and manage assigned cleaning jobs.",
-    },
-    {
-      key: "checklist",
-      label: "Checklist",
-      description: "Step-by-step room and task checklist flow.",
-    },
-    {
-      key: "record",
-      label: "Record",
-      description: "Capture completion notes and proof records.",
-    },
-  ] as const;
-
-  return (
-    <SurfaceCard styles={styles}>
-      <Text style={styles.title}>Cleaner</Text>
-      <Text style={styles.subtitle}>Signed in as {userEmail}.</Text>
-
-      <View style={styles.operationsSection}>
-        <Text style={styles.operationsTitle}>Core Operations</Text>
-        <Text style={styles.operationsSubtitle}>Mockup entry points for the main mobile workflows.</Text>
-        <View style={styles.operationsList}>
-          {operationButtons.map((operation) => (
-            <Pressable
-              key={operation.key}
-              style={styles.operationButton}
-              onPress={() => onOpenFlow(operation.key)}
-            >
-              <Text style={styles.operationButtonLabel}>{operation.label}</Text>
-              <Text style={styles.operationButtonDescription}>{operation.description}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <PrimaryCTA title={isSigningOut ? "Signing out..." : "Sign Out"} onPress={onSignOut} styles={styles} />
-    </SurfaceCard>
-  );
-}
-
-function JobListMockScreen({
-  styles,
-  jobs,
-  onBack,
-  onOpenJob,
-}: {
-  styles: AppStyles;
-  jobs: MockJob[];
-  onBack: () => void;
-  onOpenJob: (jobId: string) => void;
-}) {
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Job"
-        subtitle="Step 1 of 3: pick an assigned job to start."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={1} total={3} />
-      <View style={styles.stackList}>
-        {jobs.map((job) => (
-          <View key={job.id} style={styles.rowCard}>
-            <View style={styles.rowTop}>
-              <Text style={styles.rowTitle}>{job.address}</Text>
-              <Text style={styles.statusChip}>{job.status}</Text>
-            </View>
-            <Text style={styles.rowSubtitle}>{job.time}</Text>
-            <SecondaryCTA title="Open Job" onPress={() => onOpenJob(job.id)} styles={styles} />
-          </View>
-        ))}
-      </View>
-    </SurfaceCard>
-  );
-}
-
-function JobDetailsMockScreen({
-  styles,
-  job,
-  onBack,
-  onStart,
-}: {
-  styles: AppStyles;
-  job: MockJob | null;
-  onBack: () => void;
-  onStart: () => void;
-}) {
-  const activeJob = job ?? MOCK_JOBS[0];
-
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Job Details"
-        subtitle="Step 2 of 3: verify scope and begin."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={2} total={3} />
-      <View style={styles.stackList}>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Address</Text>
-          <Text style={styles.infoValue}>{activeJob.address}</Text>
-        </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Service</Text>
-          <Text style={styles.infoValue}>{activeJob.service}</Text>
-        </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Estimated duration</Text>
-          <Text style={styles.infoValue}>{activeJob.duration}</Text>
-        </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Contact note</Text>
-          <Text style={styles.infoValue}>{activeJob.contactNote}</Text>
-        </View>
-      </View>
-      <PrimaryCTA title="Start Job" onPress={onStart} styles={styles} />
-    </SurfaceCard>
-  );
-}
-
-function JobCompleteMockScreen({
-  styles,
-  job,
-  onBack,
-  onComplete,
-}: {
-  styles: AppStyles;
-  job: MockJob | null;
-  onBack: () => void;
-  onComplete: () => void;
-}) {
-  const activeJob = job ?? MOCK_JOBS[0];
-
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Complete Job"
-        subtitle="Step 3 of 3: quick completion review."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={3} total={3} />
-      <View style={styles.stackList}>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Final check</Text>
-          <Text style={styles.infoValue}>All rooms complete for {activeJob.address}.</Text>
-        </View>
-        <View style={styles.checkItemRow}>
-          <Text style={styles.checkMark}>✓</Text>
-          <Text style={styles.checkItemText}>Supplies gathered and removed</Text>
-        </View>
-        <View style={styles.checkItemRow}>
-          <Text style={styles.checkMark}>✓</Text>
-          <Text style={styles.checkItemText}>Doors/windows secured</Text>
-        </View>
-        <View style={styles.checkItemRow}>
-          <Text style={styles.checkMark}>✓</Text>
-          <Text style={styles.checkItemText}>Client completion photos captured</Text>
-        </View>
-      </View>
-      <PrimaryCTA title="Mark Complete" onPress={onComplete} styles={styles} />
-    </SurfaceCard>
-  );
-}
-
-function ChecklistTemplateMockScreen({
-  styles,
-  templates,
-  selectedTemplateId,
-  onBack,
-  onSelectTemplate,
-}: {
-  styles: AppStyles;
-  templates: MockChecklistTemplate[];
-  selectedTemplateId: string | null;
-  onBack: () => void;
-  onSelectTemplate: (templateId: string) => void;
-}) {
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Checklist"
-        subtitle="Step 1 of 3: choose a template."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={1} total={3} />
-      <View style={styles.stackList}>
-        {templates.map((template) => {
-          const isSelected = selectedTemplateId === template.id;
-          return (
-            <View key={template.id} style={[styles.rowCard, isSelected && styles.rowCardSelected]}>
-              <Text style={styles.rowTitle}>{template.name}</Text>
-              <Text style={styles.rowSubtitle}>
-                {template.rooms} rooms • {template.duration}
-              </Text>
-              <Text style={styles.operationButtonDescription}>{template.highlight}</Text>
-              <SecondaryCTA title="Use Template" onPress={() => onSelectTemplate(template.id)} styles={styles} />
-            </View>
-          );
-        })}
-      </View>
-    </SurfaceCard>
-  );
-}
-
-function ChecklistRunMockScreen({
-  styles,
-  selectedTemplate,
-  checkedIds,
-  onBack,
-  onToggleItem,
-  onReview,
-}: {
-  styles: AppStyles;
-  selectedTemplate: MockChecklistTemplate | null;
-  checkedIds: string[];
-  onBack: () => void;
-  onToggleItem: (itemId: string) => void;
-  onReview: () => void;
-}) {
-  const checkedCount = checkedIds.length;
-  const allComplete = checkedCount === CHECKLIST_ITEMS.length;
-
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Checklist Run"
-        subtitle={`Step 2 of 3: ${selectedTemplate?.name ?? "Standard Clean"}`}
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={2} total={3} label={`${checkedCount}/${CHECKLIST_ITEMS.length} completed`} />
-      <View style={styles.stackList}>
-        {CHECKLIST_ITEMS.map((item) => {
-          const checked = checkedIds.includes(item.id);
-          return (
-            <Pressable key={item.id} style={styles.checkItemRow} onPress={() => onToggleItem(item.id)}>
-              <Text style={styles.checkMark}>{checked ? "✓" : "○"}</Text>
-              <Text style={styles.checkItemText}>{item.label}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <PrimaryCTA title="Review" onPress={onReview} styles={styles} disabled={!allComplete} />
-    </SurfaceCard>
-  );
-}
-
-function ChecklistSubmitMockScreen({
-  styles,
-  selectedTemplate,
-  checkedCount,
-  totalCount,
-  onBack,
-  onSubmit,
-}: {
-  styles: AppStyles;
-  selectedTemplate: MockChecklistTemplate | null;
-  checkedCount: number;
-  totalCount: number;
-  onBack: () => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Submit Checklist"
-        subtitle="Step 3 of 3: confirm and submit."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={3} total={3} />
-      <View style={styles.stackList}>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Template</Text>
-          <Text style={styles.infoValue}>{selectedTemplate?.name ?? "Standard Clean"}</Text>
-        </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Completion</Text>
-          <Text style={styles.infoValue}>
-            {checkedCount}/{totalCount} tasks completed
-          </Text>
-        </View>
-      </View>
-      <PrimaryCTA title="Submit Checklist" onPress={onSubmit} styles={styles} />
-    </SurfaceCard>
-  );
-}
-
-function RecordEntryMockScreen({
-  styles,
-  draft,
-  onBack,
-  onChangeNotes,
-  onSetPhotoCount,
-  onContinue,
-}: {
-  styles: AppStyles;
-  draft: MockRecordDraft;
-  onBack: () => void;
-  onChangeNotes: (notes: string) => void;
-  onSetPhotoCount: (photoCount: number) => void;
-  onContinue: () => void;
-}) {
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Record"
-        subtitle="Step 1 of 3: add notes and media."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={1} total={3} />
-      <View style={styles.stackList}>
-        <TextInput
-          value={draft.notes}
-          onChangeText={onChangeNotes}
-          style={[styles.input, styles.notesInput]}
-          placeholder="Add completion notes..."
-          placeholderTextColor={styles.subtitle.color}
-          multiline
-          textAlignVertical="top"
-        />
-        <View style={styles.photoCounterRow}>
-          <Text style={styles.infoLabel}>Photos added</Text>
-          <View style={styles.photoCounterControls}>
-            <SecondaryCTA title="-" onPress={() => onSetPhotoCount(Math.max(0, draft.photoCount - 1))} styles={styles} />
-            <Text style={styles.infoValue}>{draft.photoCount}</Text>
-            <SecondaryCTA title="+" onPress={() => onSetPhotoCount(draft.photoCount + 1)} styles={styles} />
-          </View>
-        </View>
-      </View>
-      <PrimaryCTA title="Continue" onPress={onContinue} styles={styles} />
-    </SurfaceCard>
-  );
-}
-
-function RecordReviewMockScreen({
-  styles,
-  draft,
-  onBack,
-  onSave,
-}: {
-  styles: AppStyles;
-  draft: MockRecordDraft;
-  onBack: () => void;
-  onSave: () => void;
-}) {
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Review Record"
-        subtitle="Step 2 of 3: verify record details."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={2} total={3} />
-      <View style={styles.stackList}>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Notes</Text>
-          <Text style={styles.infoValue}>{draft.notes.trim() || "No notes added yet."}</Text>
-        </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Photos</Text>
-          <Text style={styles.infoValue}>{draft.photoCount} files attached</Text>
-        </View>
-      </View>
-      <PrimaryCTA title="Save Record" onPress={onSave} styles={styles} />
-    </SurfaceCard>
-  );
-}
-
-function RecordSavedMockScreen({
-  styles,
-  draft,
-  onBack,
-  onDone,
-}: {
-  styles: AppStyles;
-  draft: MockRecordDraft;
-  onBack: () => void;
-  onDone: () => void;
-}) {
-  const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-  return (
-    <SurfaceCard styles={styles}>
-      <MockHeader
-        styles={styles}
-        title="Record Saved"
-        subtitle="Step 3 of 3: summary ready."
-        onBack={onBack}
-      />
-      <ProgressPill styles={styles} current={3} total={3} />
-      <View style={styles.stackList}>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Saved at</Text>
-          <Text style={styles.infoValue}>{timestamp}</Text>
-        </View>
-        <View style={styles.infoBlock}>
-          <Text style={styles.infoLabel}>Payload</Text>
-          <Text style={styles.infoValue}>{draft.photoCount} photos with notes included</Text>
-        </View>
-      </View>
-      <PrimaryCTA title="Done" onPress={onDone} styles={styles} />
-    </SurfaceCard>
   );
 }
 
@@ -1078,41 +1452,7 @@ function AppFrame({ children, styles }: { children: ReactNode; styles: AppStyles
 }
 
 function SurfaceCard({ children, styles }: { children: ReactNode; styles: AppStyles }) {
-  return <View style={styles.homeCard}>{children}</View>;
-}
-
-function MockHeader({
-  styles,
-  title,
-  subtitle,
-  onBack,
-}: {
-  styles: AppStyles;
-  title: string;
-  subtitle: string;
-  onBack: () => void;
-}) {
-  return (
-    <View style={styles.mockHeader}>
-      <SecondaryCTA title="Back" onPress={onBack} styles={styles} />
-      <Text style={styles.operationsTitle}>{title}</Text>
-      <Text style={styles.operationsSubtitle}>{subtitle}</Text>
-    </View>
-  );
-}
-
-function ProgressPill({
-  styles,
-  current,
-  total,
-  label,
-}: {
-  styles: AppStyles;
-  current: number;
-  total: number;
-  label?: string;
-}) {
-  return <Text style={styles.progressPill}>{label ?? `Step ${current} of ${total}`}</Text>;
+  return <View style={styles.surfaceCard}>{children}</View>;
 }
 
 function PrimaryCTA({
@@ -1127,7 +1467,7 @@ function PrimaryCTA({
   disabled?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.primaryButton, disabled ? styles.primaryButtonDisabled : null]} disabled={disabled}>
+    <Pressable onPress={onPress} style={[styles.primaryButton, disabled && styles.primaryButtonDisabled]} disabled={disabled}>
       <Text style={styles.primaryButtonText}>{title}</Text>
     </Pressable>
   );
@@ -1145,7 +1485,11 @@ function SecondaryCTA({
   disabled?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} style={[styles.secondaryButton, disabled ? styles.secondaryButtonDisabled : null]} disabled={disabled}>
+    <Pressable
+      onPress={onPress}
+      style={[styles.secondaryButtonSmall, disabled && styles.secondaryButtonDisabled]}
+      disabled={disabled}
+    >
       <Text style={styles.secondaryButtonText}>{title}</Text>
     </Pressable>
   );
@@ -1161,130 +1505,20 @@ function useAppTheme() {
   return { theme, styles, statusBarStyle };
 }
 
-function appReducer(state: AppState, action: AppAction): AppState {
-  switch (action.type) {
-    case "OPEN_FLOW": {
-      if (action.flow === "job") return { ...state, route: "job:list", toast: null };
-      if (action.flow === "checklist") return { ...state, route: "checklist:template", toast: null };
-      return { ...state, route: "record:entry", toast: null };
-    }
-    case "BACK": {
-      switch (state.route) {
-        case "job:list":
-          return { ...state, route: "home" };
-        case "job:details":
-          return { ...state, route: "job:list" };
-        case "job:complete":
-          return { ...state, route: "job:details" };
-        case "checklist:template":
-          return { ...state, route: "home" };
-        case "checklist:run":
-          return { ...state, route: "checklist:template" };
-        case "checklist:submit":
-          return { ...state, route: "checklist:run" };
-        case "record:entry":
-          return { ...state, route: "home" };
-        case "record:review":
-          return { ...state, route: "record:entry" };
-        case "record:saved":
-          return { ...state, route: "record:review" };
-        default:
-          return state;
-      }
-    }
-    case "JOB_OPEN": {
-      if (state.route !== "job:list") return state;
-      return { ...state, route: "job:details", selectedJobId: action.jobId };
-    }
-    case "JOB_START": {
-      if (state.route !== "job:details") return state;
-      return { ...state, route: "job:complete" };
-    }
-    case "JOB_COMPLETE": {
-      if (state.route !== "job:complete") return state;
-      return {
-        ...state,
-        route: "home",
-        toast: "Job marked complete. Ready for the next assignment.",
-        selectedJobId: null,
-      };
-    }
-    case "CHECKLIST_SELECT_TEMPLATE": {
-      if (state.route !== "checklist:template") return state;
-      return {
-        ...state,
-        route: "checklist:run",
-        selectedTemplateId: action.templateId,
-        checklistCheckedIds: [],
-      };
-    }
-    case "CHECKLIST_TOGGLE_ITEM": {
-      if (state.route !== "checklist:run") return state;
-      const exists = state.checklistCheckedIds.includes(action.itemId);
-      return {
-        ...state,
-        checklistCheckedIds: exists
-          ? state.checklistCheckedIds.filter((id) => id !== action.itemId)
-          : [...state.checklistCheckedIds, action.itemId],
-      };
-    }
-    case "CHECKLIST_REVIEW": {
-      if (state.route !== "checklist:run") return state;
-      if (state.checklistCheckedIds.length !== CHECKLIST_ITEMS.length) return state;
-      return { ...state, route: "checklist:submit" };
-    }
-    case "CHECKLIST_SUBMIT": {
-      if (state.route !== "checklist:submit") return state;
-      return {
-        ...state,
-        route: "home",
-        toast: "Checklist submitted successfully.",
-        selectedTemplateId: null,
-        checklistCheckedIds: [],
-      };
-    }
-    case "RECORD_UPDATE_NOTES": {
-      if (state.route !== "record:entry") return state;
-      return {
-        ...state,
-        recordDraft: {
-          ...state.recordDraft,
-          notes: action.notes,
-        },
-      };
-    }
-    case "RECORD_SET_PHOTO_COUNT": {
-      if (state.route !== "record:entry") return state;
-      return {
-        ...state,
-        recordDraft: {
-          ...state.recordDraft,
-          photoCount: action.photoCount,
-        },
-      };
-    }
-    case "RECORD_CONTINUE": {
-      if (state.route !== "record:entry") return state;
-      return { ...state, route: "record:review" };
-    }
-    case "RECORD_SAVE": {
-      if (state.route !== "record:review") return state;
-      return { ...state, route: "record:saved" };
-    }
-    case "RECORD_DONE": {
-      if (state.route !== "record:saved") return state;
-      return {
-        ...state,
-        route: "home",
-        toast: "Record saved and synced for review.",
-      };
-    }
-    case "DISMISS_TOAST": {
-      return { ...state, toast: null };
-    }
-    default:
-      return state;
+function formatPayRate(baseRate: number, payType: string, currency = "USD") {
+  const normalizedType = payType.toLowerCase();
+  if (normalizedType === "commission") {
+    return `${baseRate}%`;
   }
+
+  const money = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+  }).format(baseRate / 100);
+
+  if (normalizedType === "hourly") return `${money}/hr`;
+  if (normalizedType === "per_job") return `${money}/job`;
+  return money;
 }
 
 function getErrorMessage(error: unknown): string {
@@ -1330,20 +1564,11 @@ function createStyles(theme: ThemeTokens) {
       alignItems: "center",
       justifyContent: "center",
     },
-    missingKeyContainer: {
-      margin: 24,
-      marginTop: 80,
-      padding: 20,
-      borderRadius: 16,
-      backgroundColor: theme.card,
-      borderWidth: 1,
-      borderColor: theme.border,
-      gap: 8,
-      shadowColor: theme.shadowColor,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.24,
-      shadowRadius: 14,
-      elevation: 2,
+    pageBody: {
+      paddingHorizontal: 20,
+      paddingTop: 30,
+      paddingBottom: 30,
+      gap: 12,
     },
     scrollBody: {
       paddingHorizontal: 20,
@@ -1351,17 +1576,22 @@ function createStyles(theme: ThemeTokens) {
       paddingBottom: 28,
       gap: 20,
     },
-    homeScrollBody: {
-      paddingHorizontal: 20,
-      paddingTop: 30,
-      paddingBottom: 30,
+    surfaceCard: {
+      padding: 18,
+      borderRadius: 16,
       gap: 12,
+      backgroundColor: theme.card,
+      borderWidth: 1,
+      borderColor: theme.border,
+      shadowColor: theme.shadowColor,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.24,
+      shadowRadius: 14,
+      elevation: 2,
     },
-    header: {
-      gap: 8,
-    },
+    header: { gap: 8 },
     title: {
-      fontSize: 32,
+      fontSize: 30,
       fontWeight: "700",
       color: theme.foreground,
     },
@@ -1369,6 +1599,253 @@ function createStyles(theme: ThemeTokens) {
       fontSize: 15,
       lineHeight: 22,
       color: theme.mutedForeground,
+    },
+    sectionTitle: {
+      fontSize: 19,
+      fontWeight: "700",
+      color: theme.cardForeground,
+    },
+    blockLabel: {
+      fontSize: 12,
+      fontWeight: "700",
+      textTransform: "uppercase",
+      letterSpacing: 0.7,
+      color: theme.mutedForeground,
+    },
+    metaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    metaPill: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      color: theme.secondaryForeground,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+      fontSize: 12,
+      fontWeight: "700",
+      overflow: "hidden",
+    },
+    metaPillSuccess: {
+      backgroundColor: theme.accent,
+      borderColor: theme.ring,
+      color: theme.secondaryForeground,
+    },
+    metaPillDanger: {
+      backgroundColor: "rgba(223, 34, 37, 0.12)",
+      borderColor: theme.destructive,
+      color: theme.destructive,
+    },
+    metaPillInfo: {
+      backgroundColor: theme.secondary,
+      borderColor: theme.ring,
+      color: theme.secondaryForeground,
+    },
+    noticeRow: {
+      gap: 10,
+    },
+    noticeText: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.secondaryForeground,
+      fontWeight: "600",
+    },
+    tabRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    tabButton: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    tabButtonActive: {
+      borderColor: theme.ring,
+      backgroundColor: theme.secondary,
+    },
+    tabButtonText: {
+      color: theme.mutedForeground,
+      fontWeight: "700",
+      fontSize: 13,
+    },
+    tabButtonTextActive: {
+      color: theme.secondaryForeground,
+    },
+    checkList: {
+      gap: 10,
+    },
+    checkItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      padding: 10,
+    },
+    checkBody: {
+      flex: 1,
+      gap: 3,
+    },
+    checkTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.cardForeground,
+    },
+    checkDetail: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.mutedForeground,
+    },
+    metricGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    metricCard: {
+      minWidth: 120,
+      flexGrow: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      padding: 12,
+      gap: 4,
+    },
+    metricValue: {
+      fontSize: 24,
+      fontWeight: "800",
+      color: theme.cardForeground,
+    },
+    metricLabel: {
+      fontSize: 12,
+      color: theme.mutedForeground,
+    },
+    validationSuccess: {
+      color: theme.primary,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+    validationError: {
+      color: theme.destructive,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: "600",
+    },
+    optionWrap: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    optionChip: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    optionChipActive: {
+      borderColor: theme.ring,
+      backgroundColor: theme.secondary,
+    },
+    optionChipDisabled: {
+      opacity: 0.45,
+    },
+    optionChipText: {
+      color: theme.mutedForeground,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    optionChipTextActive: {
+      color: theme.secondaryForeground,
+    },
+    listColumn: {
+      gap: 10,
+    },
+    rowCard: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      padding: 12,
+      gap: 8,
+    },
+    rowTop: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    rowTitle: {
+      color: theme.cardForeground,
+      fontSize: 15,
+      fontWeight: "700",
+      flex: 1,
+    },
+    rowSubtitle: {
+      color: theme.mutedForeground,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    actionRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      alignItems: "center",
+    },
+    availabilityGrid: {
+      gap: 10,
+    },
+    dayCard: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.muted,
+      padding: 12,
+      gap: 8,
+    },
+    dayTitle: {
+      color: theme.cardForeground,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    dayTime: {
+      color: theme.mutedForeground,
+      fontSize: 13,
+    },
+    editorRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      alignItems: "flex-end",
+    },
+    timeInputGroup: {
+      minWidth: 140,
+      flexGrow: 1,
+      gap: 6,
+    },
+    socialSection: {
+      gap: 10,
+    },
+    secondaryButton: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.secondary,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      justifyContent: "center",
     },
     toggleRow: {
       flexDirection: "row",
@@ -1394,27 +1871,6 @@ function createStyles(theme: ThemeTokens) {
     },
     toggleTextActive: {
       color: theme.secondaryForeground,
-    },
-    socialSection: {
-      gap: 10,
-    },
-    secondaryButton: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.secondary,
-      paddingVertical: 12,
-      paddingHorizontal: 12,
-      alignItems: "center",
-      justifyContent: "center",
-    },
-    secondaryButtonDisabled: {
-      opacity: 0.55,
-    },
-    secondaryButtonText: {
-      color: theme.secondaryForeground,
-      fontSize: 16,
-      fontWeight: "600",
     },
     dividerRow: {
       flexDirection: "row",
@@ -1460,22 +1916,40 @@ function createStyles(theme: ThemeTokens) {
       fontSize: 16,
       backgroundColor: theme.muted,
     },
-    notesInput: {
-      minHeight: 130,
-    },
     primaryButton: {
       marginTop: 6,
       borderRadius: 12,
       backgroundColor: theme.primary,
       paddingVertical: 12,
       alignItems: "center",
+      justifyContent: "center",
+      minWidth: 120,
     },
     primaryButtonDisabled: {
-      opacity: 0.55,
+      opacity: 0.6,
     },
     primaryButtonText: {
       color: theme.primaryForeground,
       fontSize: 16,
+      fontWeight: "600",
+    },
+    secondaryButtonSmall: {
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.secondary,
+      paddingVertical: 9,
+      paddingHorizontal: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      minWidth: 90,
+    },
+    secondaryButtonDisabled: {
+      opacity: 0.55,
+    },
+    secondaryButtonText: {
+      color: theme.secondaryForeground,
+      fontSize: 14,
       fontWeight: "600",
     },
     errorText: {
@@ -1486,181 +1960,6 @@ function createStyles(theme: ThemeTokens) {
       color: theme.mutedForeground,
       fontSize: 14,
       lineHeight: 20,
-    },
-    homeCard: {
-      padding: 22,
-      borderRadius: 16,
-      gap: 14,
-      backgroundColor: theme.card,
-      borderWidth: 1,
-      borderColor: theme.border,
-      shadowColor: theme.shadowColor,
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: 0.24,
-      shadowRadius: 14,
-      elevation: 2,
-    },
-    operationsSection: {
-      marginTop: 6,
-      gap: 10,
-    },
-    operationsTitle: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: theme.cardForeground,
-    },
-    operationsSubtitle: {
-      fontSize: 14,
-      lineHeight: 20,
-      color: theme.mutedForeground,
-    },
-    operationsList: {
-      gap: 10,
-    },
-    operationButton: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.accent,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      gap: 4,
-    },
-    operationButtonLabel: {
-      fontSize: 16,
-      fontWeight: "700",
-      color: theme.secondaryForeground,
-    },
-    operationButtonDescription: {
-      fontSize: 13,
-      lineHeight: 18,
-      color: theme.mutedForeground,
-    },
-    mockHeader: {
-      gap: 8,
-      marginBottom: 2,
-    },
-    progressPill: {
-      alignSelf: "flex-start",
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.secondary,
-      color: theme.secondaryForeground,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      fontSize: 12,
-      fontWeight: "600",
-      overflow: "hidden",
-    },
-    stackList: {
-      gap: 10,
-      marginTop: 4,
-    },
-    rowCard: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      padding: 12,
-      gap: 8,
-    },
-    rowCardSelected: {
-      borderColor: theme.ring,
-    },
-    rowTop: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: 8,
-    },
-    rowTitle: {
-      color: theme.cardForeground,
-      fontSize: 15,
-      fontWeight: "700",
-      flex: 1,
-    },
-    rowSubtitle: {
-      color: theme.mutedForeground,
-      fontSize: 13,
-    },
-    statusChip: {
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.card,
-      color: theme.secondaryForeground,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      fontSize: 11,
-      fontWeight: "700",
-      overflow: "hidden",
-    },
-    infoBlock: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      padding: 12,
-      gap: 4,
-    },
-    infoLabel: {
-      fontSize: 12,
-      textTransform: "uppercase",
-      letterSpacing: 0.8,
-      color: theme.mutedForeground,
-    },
-    infoValue: {
-      fontSize: 15,
-      lineHeight: 21,
-      color: theme.cardForeground,
-      fontWeight: "600",
-    },
-    checkItemRow: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 10,
-    },
-    checkMark: {
-      color: theme.primary,
-      fontWeight: "800",
-      fontSize: 17,
-      width: 22,
-    },
-    checkItemText: {
-      color: theme.secondaryForeground,
-      fontSize: 14,
-      lineHeight: 20,
-      flex: 1,
-    },
-    photoCounterRow: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      padding: 12,
-      gap: 10,
-    },
-    photoCounterControls: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 10,
-    },
-    toastRow: {
-      gap: 10,
-    },
-    toastText: {
-      fontSize: 14,
-      lineHeight: 20,
-      color: theme.secondaryForeground,
-      fontWeight: "600",
     },
   });
 }
