@@ -104,6 +104,11 @@ export default function DispatchBookingCard({
     booking.assignments.assigned > 0
       ? `${booking.assignments.assigned} assigned`
       : "Unassigned";
+  const checklistLabel =
+    booking.checklist.total === 0
+      ? "No checklist"
+      : `Checklist ${booking.checklist.completed}/${booking.checklist.total}`;
+  const checklistBlocked = booking.status === "in_progress" && !booking.checklist.complete;
 
   return (
     <article
@@ -133,12 +138,27 @@ export default function DispatchBookingCard({
           <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
             {booking.location.addressLine ? "Mapped address" : "Needs address"}
           </span>
+          <span
+            className={cn(
+              "rounded-full px-2 py-1",
+              booking.checklist.complete
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-rose-100 text-rose-700"
+            )}
+          >
+            {checklistLabel}
+          </span>
         </div>
 
         <div className="mt-3 space-y-1 text-xs text-muted-foreground">
           <p>{booking.serviceType ?? "Standard cleaning"}</p>
           <p>{formatCurrency(booking.amount)}</p>
           <p>{booking.location.addressLine || "No address on file"}</p>
+          {checklistBlocked ? (
+            <p className="font-medium text-rose-700">
+              Clock-out blocked until checklist is complete.
+            </p>
+          ) : null}
         </div>
       </button>
 

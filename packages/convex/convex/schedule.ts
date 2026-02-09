@@ -211,6 +211,14 @@ export const getDispatchDay = query({
           .collect()
       )
     );
+    const checklistNested = await Promise.all(
+      dayBookings.map((booking) =>
+        ctx.db
+          .query("bookingChecklistItems")
+          .withIndex("by_booking", (q) => q.eq("bookingId", booking._id))
+          .collect()
+      )
+    );
 
     assignmentsNested.forEach((assignments, index) => {
       assignmentsByBooking.set(
@@ -223,6 +231,19 @@ export const getDispatchDay = query({
           status: assignment.status,
         }))
       );
+    });
+    const checklistByBooking = new Map<
+      Id<"bookings">,
+      { total: number; completed: number; complete: boolean }
+    >();
+    checklistNested.forEach((items, index) => {
+      const total = items.length;
+      const completed = items.filter((item) => item.isCompleted).length;
+      checklistByBooking.set(dayBookings[index]._id, {
+        total,
+        completed,
+        complete: total === 0 || completed === total,
+      });
     });
 
     const cleanerIds = Array.from(
@@ -289,6 +310,11 @@ export const getDispatchDay = query({
     const enrichedBookings = dayBookings
       .map((booking) => {
         const assignments = assignmentsByBooking.get(booking._id) ?? [];
+        const checklist = checklistByBooking.get(booking._id) ?? {
+          total: 0,
+          completed: 0,
+          complete: true,
+        };
         const assignedCount = assignments.filter(
           (assignment) => assignment.cleanerId || assignment.crewId
         ).length;
@@ -406,9 +432,11 @@ export const getDispatchDay = query({
             assigned: assignedCount,
             cleaners: bookingCleaners,
           },
+          checklist,
           badges: [
             assignedCount === 0 ? "unassigned" : "assigned",
             !hasCoordinates(location) ? "needs_location" : "mapped",
+            !checklist.complete ? "checklist_blocked" : null,
             dispatchPriority !== "normal" ? `${dispatchPriority}_priority` : null,
           ].filter((badge): badge is string => Boolean(badge)),
         };

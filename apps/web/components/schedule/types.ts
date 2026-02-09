@@ -59,6 +59,11 @@ export type DispatchBooking = {
       name: string;
     }>;
   };
+  checklist: {
+    total: number;
+    completed: number;
+    complete: boolean;
+  };
   badges: string[];
 };
 

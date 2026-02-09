@@ -59,6 +59,7 @@ const ALLOWED_TRANSITIONS: Record<BookingOperationalStatus, BookingOperationalSt
 };
 
 const SCHEDULE_BLOCKING_ASSIGNMENT_STATUSES = new Set(["declined", "cancelled", "no_show"]);
+const INACTIVE_ASSIGNMENT_STATUSES = new Set(["declined", "cancelled", "no_show"]);
 const OVERRIDE_ALLOWED_SOURCES = new Set([
   "bookings.adminOverrideBookingStatus",
   "backfill_and_validate",
@@ -382,6 +383,105 @@ export const recomputeScheduledState = internalMutation({
       reason: "no_transition",
       status: booking.status,
       gate,
+    };
+  },
+});
+
+export const syncBookingStatusFromAssignments = internalMutation({
+  args: {
+    bookingId: v.id("bookings"),
+    source: v.optional(v.string()),
+    actorUserId: v.optional(v.id("users")),
+    triggerAssignmentId: v.optional(v.id("bookingAssignments")),
+  },
+  handler: async (ctx, args): Promise<any> => {
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      return { changed: false, reason: "booking_not_found" };
+    }
+
+    if (
+      booking.status === "cancelled" ||
+      booking.status === "completed" ||
+      booking.status === "payment_failed" ||
+      booking.status === "charged"
+    ) {
+      return {
+        changed: false,
+        reason: "status_locked",
+        status: booking.status,
+      };
+    }
+
+    const assignments = await ctx.db
+      .query("bookingAssignments")
+      .withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
+      .collect();
+
+    const activeAssignments = assignments.filter(
+      (assignment) => !INACTIVE_ASSIGNMENT_STATUSES.has(assignment.status)
+    );
+    const anyInProgress = activeAssignments.some(
+      (assignment) => assignment.status === "in_progress"
+    );
+    const allActiveCompleted =
+      activeAssignments.length > 0 &&
+      activeAssignments.every((assignment) => assignment.status === "completed");
+
+    let currentStatus = booking.status;
+    let changed = false;
+    const source = args.source ?? "bookingStateMachine.syncBookingStatusFromAssignments";
+
+    const metadata = {
+      assignmentCount: assignments.length,
+      activeAssignmentCount: activeAssignments.length,
+      anyInProgress,
+      allActiveCompleted,
+      triggerAssignmentId: args.triggerAssignmentId,
+    };
+
+    if (currentStatus === "scheduled" && (anyInProgress || allActiveCompleted)) {
+      const result: any = await ctx.runMutation(
+        internal.bookingStateMachine.transitionBookingStatus,
+        {
+          bookingId: args.bookingId,
+          toStatus: "in_progress",
+          source,
+          reason: anyInProgress
+            ? "assignment_started"
+            : "assignment_completion_rollup",
+          actorUserId: args.actorUserId,
+          metadata,
+        }
+      );
+      changed = changed || Boolean(result.changed);
+      currentStatus = "in_progress";
+    }
+
+    if (currentStatus === "in_progress" && allActiveCompleted) {
+      const result: any = await ctx.runMutation(
+        internal.bookingStateMachine.transitionBookingStatus,
+        {
+          bookingId: args.bookingId,
+          toStatus: "completed",
+          source,
+          reason: "all_active_assignments_completed",
+          actorUserId: args.actorUserId,
+          metadata,
+        }
+      );
+      changed = changed || Boolean(result.changed);
+      currentStatus = "completed";
+    }
+
+    return {
+      changed,
+      status: currentStatus,
+      reason: changed ? "assignment_rollup_transitioned" : "no_transition",
+      assignmentCount: assignments.length,
+      activeAssignmentCount: activeAssignments.length,
+      anyInProgress,
+      allActiveCompleted,
     };
   },
 });

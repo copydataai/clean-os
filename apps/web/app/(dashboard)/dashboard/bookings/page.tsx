@@ -210,6 +210,53 @@ function LegacyBookingsView() {
   );
 }
 
+function BookingChecklistReadiness({
+  bookingId,
+  operationalStatus,
+}: {
+  bookingId: Id<"bookings">;
+  operationalStatus: string | null;
+}) {
+  const assignments = useQuery(api.cleaners.getBookingAssignments, { bookingId });
+  if (!assignments) {
+    return <p className="text-xs text-muted-foreground">Loading assignment readiness...</p>;
+  }
+
+  const activeAssignments = assignments.filter(
+    (assignment) => !["declined", "cancelled", "no_show"].includes(assignment.status)
+  );
+  const checklistTotal = activeAssignments.reduce(
+    (sum, assignment) => sum + (assignment.checklist?.total ?? 0),
+    0
+  );
+  const checklistCompleted = activeAssignments.reduce(
+    (sum, assignment) => sum + (assignment.checklist?.completed ?? 0),
+    0
+  );
+  const checklistComplete =
+    checklistTotal === 0 || checklistCompleted === checklistTotal;
+  const allActiveAssignmentsCompleted =
+    activeAssignments.length > 0 &&
+    activeAssignments.every((assignment) => assignment.status === "completed");
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+      <Badge className="bg-muted text-muted-foreground">
+        Checklist {checklistCompleted}/{checklistTotal}
+      </Badge>
+      <Badge className="bg-muted text-muted-foreground">
+        Active assignments {activeAssignments.length}
+      </Badge>
+      {operationalStatus === "in_progress" && !checklistComplete ? (
+        <Badge className="bg-rose-100 text-rose-700">Clock-out blocked</Badge>
+      ) : null}
+      {operationalStatus === "in_progress" && allActiveAssignmentsCompleted ? (
+        <Badge className="bg-emerald-100 text-emerald-700">Ready to auto-complete</Badge>
+      ) : null}
+    </div>
+  );
+}
+
 export default function BookingsPage() {
   const organizations = useQuery(api.queries.getUserOrganizations);
   const isAdmin = Boolean(organizations?.some((org) => isAdminRole(org?.role)));
@@ -486,6 +533,10 @@ export default function BookingsPage() {
                   <span>Service date: {row.serviceDate ?? "TBD"}</span>
                   <span>Service type: {row.serviceType ?? "Standard"}</span>
                 </div>
+                <BookingChecklistReadiness
+                  bookingId={row.bookingId}
+                  operationalStatus={row.operationalStatus}
+                />
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Button

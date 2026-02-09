@@ -789,6 +789,39 @@ const cleanerDocuments = defineTable({
   .index("by_cleaner_type", ["cleanerId", "documentType"])
   .index("by_status", ["status"]);
 
+const checklistTemplates = defineTable({
+  serviceType: v.string(),
+  name: v.string(),
+  items: v.array(
+    v.object({
+      label: v.string(),
+      sortOrder: v.number(),
+      category: v.optional(v.string()),
+    })
+  ),
+  isActive: v.boolean(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_service_type", ["serviceType"])
+  .index("by_service_type_active", ["serviceType", "isActive"]);
+
+const bookingChecklistItems = defineTable({
+  bookingAssignmentId: v.id("bookingAssignments"),
+  bookingId: v.id("bookings"),
+  templateId: v.optional(v.id("checklistTemplates")),
+  label: v.string(),
+  sortOrder: v.number(),
+  category: v.optional(v.string()),
+  isCompleted: v.boolean(),
+  completedAt: v.optional(v.number()),
+  completedBy: v.optional(v.id("cleaners")),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_assignment", ["bookingAssignmentId"])
+  .index("by_booking", ["bookingId"]);
+
 export default defineSchema({
   users,
   organizations,
@@ -827,4 +860,6 @@ export default defineSchema({
   cleanerRatings,
   cleanerReliabilityEvents,
   cleanerDocuments,
+  checklistTemplates,
+  bookingChecklistItems,
 });

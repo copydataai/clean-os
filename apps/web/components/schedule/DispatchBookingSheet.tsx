@@ -51,6 +51,18 @@ export default function DispatchBookingSheet({
             <p className="text-sm text-muted-foreground">
               {booking.location.addressLine || "No address available"}
             </p>
+            <p
+              className={
+                booking.checklist.complete
+                  ? "text-sm text-emerald-700"
+                  : "text-sm text-rose-700"
+              }
+            >
+              Checklist: {booking.checklist.completed}/{booking.checklist.total}
+              {booking.status === "in_progress" && !booking.checklist.complete
+                ? " (clock-out blocked)"
+                : ""}
+            </p>
           </section>
 
           <section>

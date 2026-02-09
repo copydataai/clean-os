@@ -130,6 +130,32 @@ export default function BookingLifecycleSheet({
     if (!assignments) return [];
     return [...assignments].sort((a, b) => a.assignedAt - b.assignedAt);
   }, [assignments]);
+  const assignmentRollup = useMemo(() => {
+    const activeAssignments = orderedAssignments.filter(
+      (assignment) => !["declined", "cancelled", "no_show"].includes(assignment.status)
+    );
+    const checklistTotal = activeAssignments.reduce(
+      (sum, assignment) => sum + (assignment.checklist?.total ?? 0),
+      0
+    );
+    const checklistCompleted = activeAssignments.reduce(
+      (sum, assignment) => sum + (assignment.checklist?.completed ?? 0),
+      0
+    );
+    const checklistComplete =
+      checklistTotal === 0 || checklistCompleted === checklistTotal;
+    const allActiveAssignmentsCompleted =
+      activeAssignments.length > 0 &&
+      activeAssignments.every((assignment) => assignment.status === "completed");
+
+    return {
+      activeAssignmentsCount: activeAssignments.length,
+      checklistTotal,
+      checklistCompleted,
+      checklistComplete,
+      allActiveAssignmentsCompleted,
+    };
+  }, [orderedAssignments]);
 
   if (!row || !bookingId) {
     return null;
@@ -203,6 +229,21 @@ export default function BookingLifecycleSheet({
 
           <section className="rounded-lg border border-border p-4">
             <h3 className="text-sm font-semibold text-foreground">Assignment Snapshot</h3>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Active assignments: {assignmentRollup.activeAssignmentsCount} · Checklist{" "}
+              {assignmentRollup.checklistCompleted}/{assignmentRollup.checklistTotal}
+            </p>
+            {row.operationalStatus === "in_progress" && !assignmentRollup.checklistComplete ? (
+              <p className="mt-2 text-xs font-medium text-rose-700">
+                Clock-out is blocked until all checklist items are completed.
+              </p>
+            ) : null}
+            {row.operationalStatus === "in_progress" &&
+            assignmentRollup.allActiveAssignmentsCompleted ? (
+              <p className="mt-2 text-xs font-medium text-emerald-700">
+                All active assignments are completed. Booking is ready to auto-complete.
+              </p>
+            ) : null}
             {!assignments ? (
               <p className="mt-2 text-sm text-muted-foreground">Loading assignments...</p>
             ) : orderedAssignments.length === 0 ? (
@@ -221,6 +262,10 @@ export default function BookingLifecycleSheet({
                     </p>
                     <p className="text-muted-foreground">
                       {assignment.role} · {assignment.status}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Checklist {assignment.checklist?.completed ?? 0}/
+                      {assignment.checklist?.total ?? 0}
                     </p>
                   </div>
                 ))}

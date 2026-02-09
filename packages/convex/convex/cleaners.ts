@@ -2,6 +2,93 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { computeRatingsWindowSummary } from "./cleanerInsights";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+
+const ASSIGNMENT_TERMINAL_STATUSES = new Set([
+  "declined",
+  "completed",
+  "cancelled",
+  "no_show",
+]);
+const ASSIGNMENT_ALLOWED_TRANSITIONS: Record<string, readonly string[]> = {
+  pending: ["accepted", "declined", "cancelled"],
+  accepted: ["confirmed", "cancelled"],
+  confirmed: ["in_progress", "cancelled", "no_show"],
+  in_progress: ["completed", "cancelled", "no_show"],
+  declined: [],
+  completed: [],
+  cancelled: [],
+  no_show: [],
+};
+
+type ChecklistProgress = {
+  total: number;
+  completed: number;
+  complete: boolean;
+};
+
+function assertAssignmentTransition(fromStatus: string, toStatus: string, action: string) {
+  const allowed = ASSIGNMENT_ALLOWED_TRANSITIONS[fromStatus] ?? [];
+  if (!allowed.includes(toStatus)) {
+    throw new Error(
+      `Cannot ${action}: assignment transition ${fromStatus} -> ${toStatus} is not allowed`
+    );
+  }
+}
+
+async function getChecklistProgress(
+  ctx: any,
+  bookingAssignmentId: Id<"bookingAssignments">
+): Promise<ChecklistProgress> {
+  const items = await ctx.db
+    .query("bookingChecklistItems")
+    .withIndex("by_assignment", (q: any) =>
+      q.eq("bookingAssignmentId", bookingAssignmentId)
+    )
+    .collect();
+  const completed = items.filter((item: { isCompleted: boolean }) => item.isCompleted).length;
+  const total = items.length;
+  return {
+    total,
+    completed,
+    complete: total === 0 || completed === total,
+  };
+}
+
+async function upsertChecklistTemplateDocument(
+  ctx: any,
+  args: {
+    serviceType: string;
+    name: string;
+    items: Array<{ label: string; sortOrder: number; category?: string }>;
+  }
+) {
+  const existing = await ctx.db
+    .query("checklistTemplates")
+    .withIndex("by_service_type_active", (q: any) =>
+      q.eq("serviceType", args.serviceType).eq("isActive", true)
+    )
+    .first();
+
+  const now = Date.now();
+  if (existing) {
+    await ctx.db.patch(existing._id, {
+      name: args.name,
+      items: args.items,
+      updatedAt: now,
+    });
+    return existing._id;
+  }
+
+  return await ctx.db.insert("checklistTemplates", {
+    serviceType: args.serviceType,
+    name: args.name,
+    items: args.items,
+    isActive: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
 
 // ============================================================================
 // Public Queries
@@ -167,18 +254,44 @@ export const getAssignments = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, { cleanerId, status }) => {
+    let assignments;
     if (status) {
-      return await ctx.db
+      assignments = await ctx.db
         .query("bookingAssignments")
         .withIndex("by_cleaner_status", (q) =>
           q.eq("cleanerId", cleanerId).eq("status", status)
         )
         .collect();
+    } else {
+      assignments = await ctx.db
+        .query("bookingAssignments")
+        .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
+        .collect();
     }
-    return await ctx.db
-      .query("bookingAssignments")
-      .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
-      .collect();
+
+    const enriched = await Promise.all(
+      assignments.map(async (assignment) => {
+        const booking = await ctx.db.get(assignment.bookingId);
+        return {
+          ...assignment,
+          booking: booking
+            ? {
+                serviceType: booking.serviceType,
+                serviceDate: booking.serviceDate,
+                serviceWindowStart: booking.serviceWindowStart,
+                serviceWindowEnd: booking.serviceWindowEnd,
+                estimatedDurationMinutes: booking.estimatedDurationMinutes,
+                customerName: booking.customerName,
+                notes: booking.notes,
+                locationSnapshot: booking.locationSnapshot,
+                status: booking.status,
+              }
+            : null,
+        };
+      })
+    );
+
+    return enriched;
   },
 });
 
@@ -326,7 +439,8 @@ export const getBookingAssignments = query({
           ? await ctx.db.get(assignment.cleanerId)
           : null;
         const crew = assignment.crewId ? await ctx.db.get(assignment.crewId) : null;
-        return { ...assignment, cleaner, crew };
+        const checklist = await getChecklistProgress(ctx, assignment._id);
+        return { ...assignment, cleaner, crew, checklist };
       })
     );
   },
@@ -865,6 +979,11 @@ export const assignToBooking = mutation({
       throw new Error("Must specify either cleanerId or crewId");
     }
 
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
     // Get pay rate snapshot if assigning a cleaner
     let payRateSnapshot: { payType: string; rate: number; currency: string } | undefined;
     if (args.cleanerId) {
@@ -898,6 +1017,32 @@ export const assignToBooking = mutation({
       updatedAt: now,
     });
 
+    // Initialize checklist from template if one exists for this service type
+    if (booking?.serviceType) {
+      const template = await ctx.db
+        .query("checklistTemplates")
+        .withIndex("by_service_type_active", (q) =>
+          q.eq("serviceType", booking.serviceType!).eq("isActive", true)
+        )
+        .first();
+
+      if (template) {
+        for (const item of template.items) {
+          await ctx.db.insert("bookingChecklistItems", {
+            bookingAssignmentId: assignmentId,
+            bookingId: args.bookingId,
+            templateId: template._id,
+            label: item.label,
+            sortOrder: item.sortOrder,
+            category: item.category,
+            isCompleted: false,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+
     await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
       bookingId: args.bookingId,
       source: "cleaners.assignToBooking",
@@ -919,6 +1064,7 @@ export const respondToAssignment = mutation({
     if (!assignment) {
       throw new Error("Assignment not found");
     }
+    assertAssignmentTransition(assignment.status, response, "respond to assignment");
 
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
@@ -944,6 +1090,7 @@ export const confirmAssignment = mutation({
     if (!assignment) {
       throw new Error("Assignment not found");
     }
+    assertAssignmentTransition(assignment.status, "confirmed", "confirm assignment");
 
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
@@ -968,6 +1115,17 @@ export const clockIn = mutation({
     if (!assignment) {
       throw new Error("Assignment not found");
     }
+    assertAssignmentTransition(assignment.status, "in_progress", "clock in");
+
+    const booking = await ctx.db.get(assignment.bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+    if (booking.status !== "scheduled" && booking.status !== "in_progress") {
+      throw new Error(
+        `Booking must be scheduled before clock-in (current: ${booking.status})`
+      );
+    }
 
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
@@ -976,10 +1134,10 @@ export const clockIn = mutation({
       updatedAt: now,
     });
 
-    await ctx.runMutation(internal.bookingStateMachine.transitionBookingStatus, {
+    await ctx.runMutation(internal.bookingStateMachine.syncBookingStatusFromAssignments, {
       bookingId: assignment.bookingId,
-      toStatus: "in_progress",
       source: "cleaners.clockIn",
+      triggerAssignmentId: assignmentId,
     });
 
     return assignmentId;
@@ -996,6 +1154,14 @@ export const clockOut = mutation({
     const assignment = await ctx.db.get(assignmentId);
     if (!assignment) {
       throw new Error("Assignment not found");
+    }
+    assertAssignmentTransition(assignment.status, "completed", "clock out");
+
+    const checklist = await getChecklistProgress(ctx, assignmentId);
+    if (!checklist.complete) {
+      throw new Error(
+        `Cannot clock out before checklist is complete (${checklist.completed}/${checklist.total})`
+      );
     }
 
     let actualDurationMinutes: number | undefined;
@@ -1024,6 +1190,12 @@ export const clockOut = mutation({
       updatedAt: now,
     });
 
+    await ctx.runMutation(internal.bookingStateMachine.syncBookingStatusFromAssignments, {
+      bookingId: assignment.bookingId,
+      source: "cleaners.clockOut",
+      triggerAssignmentId: assignmentId,
+    });
+
     return assignmentId;
   },
 });
@@ -1039,6 +1211,10 @@ export const cancelAssignment = mutation({
     if (!assignment) {
       throw new Error("Assignment not found");
     }
+    if (ASSIGNMENT_TERMINAL_STATUSES.has(assignment.status)) {
+      throw new Error(`Cannot cancel assignment from terminal status: ${assignment.status}`);
+    }
+    assertAssignmentTransition(assignment.status, "cancelled", "cancel assignment");
 
     const now = Date.now();
     await ctx.db.patch(assignmentId, {
@@ -1053,6 +1229,12 @@ export const cancelAssignment = mutation({
       bookingId: assignment.bookingId,
       source: "cleaners.cancelAssignment",
       actorUserId: cancelledBy,
+    });
+    await ctx.runMutation(internal.bookingStateMachine.syncBookingStatusFromAssignments, {
+      bookingId: assignment.bookingId,
+      source: "cleaners.cancelAssignment",
+      actorUserId: cancelledBy,
+      triggerAssignmentId: assignmentId,
     });
 
     return assignmentId;
@@ -1330,5 +1512,158 @@ export const excuseReliabilityEvent = mutation({
     });
 
     return eventId;
+  },
+});
+
+// ============================================================================
+// Checklist Queries & Mutations
+// ============================================================================
+
+export const getChecklistItems = query({
+  args: {
+    bookingAssignmentId: v.id("bookingAssignments"),
+  },
+  handler: async (ctx, { bookingAssignmentId }) => {
+    const items = await ctx.db
+      .query("bookingChecklistItems")
+      .withIndex("by_assignment", (q) =>
+        q.eq("bookingAssignmentId", bookingAssignmentId)
+      )
+      .collect();
+    return items.sort((a, b) => a.sortOrder - b.sortOrder);
+  },
+});
+
+export const toggleChecklistItem = mutation({
+  args: {
+    checklistItemId: v.id("bookingChecklistItems"),
+    isCompleted: v.boolean(),
+    completedBy: v.optional(v.id("cleaners")),
+  },
+  handler: async (ctx, { checklistItemId, isCompleted, completedBy }) => {
+    const item = await ctx.db.get(checklistItemId);
+    if (!item) {
+      throw new Error("Checklist item not found");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(checklistItemId, {
+      isCompleted,
+      completedAt: isCompleted ? now : undefined,
+      completedBy: isCompleted ? completedBy : undefined,
+      updatedAt: now,
+    });
+  },
+});
+
+export const upsertChecklistTemplate = mutation({
+  args: {
+    serviceType: v.string(),
+    name: v.string(),
+    items: v.array(
+      v.object({
+        label: v.string(),
+        sortOrder: v.number(),
+        category: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, { serviceType, name, items }) => {
+    return await upsertChecklistTemplateDocument(ctx, {
+      serviceType,
+      name,
+      items: [...items].sort((left, right) => left.sortOrder - right.sortOrder),
+    });
+  },
+});
+
+const DEFAULT_CHECKLIST_TEMPLATES: Array<{
+  serviceType: string;
+  name: string;
+  items: Array<{ label: string; sortOrder: number; category: string }>;
+}> = [
+  {
+    serviceType: "standard",
+    name: "Standard Cleaning Checklist",
+    items: [
+      { label: "Dust all reachable surfaces", sortOrder: 1, category: "living_areas" },
+      { label: "Vacuum and mop floors", sortOrder: 2, category: "floors" },
+      { label: "Sanitize kitchen counters and sink", sortOrder: 3, category: "kitchen" },
+      { label: "Sanitize bathroom fixtures and mirrors", sortOrder: 4, category: "bathroom" },
+      { label: "Take before/after photos", sortOrder: 5, category: "documentation" },
+    ],
+  },
+  {
+    serviceType: "deep",
+    name: "Deep Cleaning Checklist",
+    items: [
+      { label: "Detail baseboards and trim", sortOrder: 1, category: "detail" },
+      { label: "Clean inside reachable appliances", sortOrder: 2, category: "kitchen" },
+      { label: "Scrub grout and high-touch bathroom areas", sortOrder: 3, category: "bathroom" },
+      { label: "Wipe doors, frames, and switches", sortOrder: 4, category: "detail" },
+      { label: "Take before/after photos", sortOrder: 5, category: "documentation" },
+    ],
+  },
+  {
+    serviceType: "move_out",
+    name: "Move-Out Cleaning Checklist",
+    items: [
+      { label: "Clean empty cabinets and drawers", sortOrder: 1, category: "kitchen" },
+      { label: "Spot clean walls and doors", sortOrder: 2, category: "detail" },
+      { label: "Deep clean bathrooms", sortOrder: 3, category: "bathroom" },
+      { label: "Vacuum and mop all floors", sortOrder: 4, category: "floors" },
+      { label: "Final walkthrough and photos", sortOrder: 5, category: "documentation" },
+    ],
+  },
+];
+
+export const seedDefaultChecklistTemplates = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const templateIds = [];
+    for (const template of DEFAULT_CHECKLIST_TEMPLATES) {
+      const templateId = await upsertChecklistTemplateDocument(ctx, template);
+      templateIds.push(templateId);
+    }
+    return {
+      count: templateIds.length,
+      templateIds,
+    };
+  },
+});
+
+export const initializeChecklist = mutation({
+  args: {
+    bookingAssignmentId: v.id("bookingAssignments"),
+    bookingId: v.id("bookings"),
+    serviceType: v.string(),
+  },
+  handler: async (ctx, { bookingAssignmentId, bookingId, serviceType }) => {
+    const template = await ctx.db
+      .query("checklistTemplates")
+      .withIndex("by_service_type_active", (q) =>
+        q.eq("serviceType", serviceType).eq("isActive", true)
+      )
+      .first();
+
+    if (!template) return [];
+
+    const now = Date.now();
+    const ids = [];
+    for (const item of template.items) {
+      const id = await ctx.db.insert("bookingChecklistItems", {
+        bookingAssignmentId,
+        bookingId,
+        templateId: template._id,
+        label: item.label,
+        sortOrder: item.sortOrder,
+        category: item.category,
+        isCompleted: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      ids.push(id);
+    }
+    return ids;
   },
 });

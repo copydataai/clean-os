@@ -230,6 +230,56 @@ describe.sequential("booking state machine", () => {
     expect(after?.status).toBe("card_saved");
   });
 
+  it("rolls booking status from assignments with any-start/all-finish behavior", async () => {
+    const t = convexTest(schema, modules);
+    const bookingId = await insertBooking(t, {
+      status: "scheduled",
+      serviceDate: "2026-02-11",
+      serviceWindowStart: "09:00",
+      serviceWindowEnd: "12:00",
+    });
+
+    const [assignmentA, assignmentB] = await t.run(async (ctx) => {
+      const now = Date.now();
+      const assignmentAId = await ctx.db.insert("bookingAssignments", {
+        bookingId,
+        cleanerId: undefined,
+        crewId: undefined,
+        role: "primary",
+        status: "confirmed",
+        assignedAt: now,
+        confirmedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      const assignmentBId = await ctx.db.insert("bookingAssignments", {
+        bookingId,
+        cleanerId: undefined,
+        crewId: undefined,
+        role: "secondary",
+        status: "confirmed",
+        assignedAt: now,
+        confirmedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return [assignmentAId, assignmentBId] as const;
+    });
+
+    await t.mutation(api.cleaners.clockIn, { assignmentId: assignmentA });
+    let booking = await t.run(async (ctx) => ctx.db.get(bookingId));
+    expect(booking?.status).toBe("in_progress");
+
+    await t.mutation(api.cleaners.clockIn, { assignmentId: assignmentB });
+    await t.mutation(api.cleaners.clockOut, { assignmentId: assignmentA });
+    booking = await t.run(async (ctx) => ctx.db.get(bookingId));
+    expect(booking?.status).toBe("in_progress");
+
+    await t.mutation(api.cleaners.clockOut, { assignmentId: assignmentB });
+    booking = await t.run(async (ctx) => ctx.db.get(bookingId));
+    expect(booking?.status).toBe("completed");
+  });
+
   it("records reschedule lifecycle events and keeps status lifecycle-driven", async () => {
     const t = convexTest(schema, modules);
     const bookingId = await insertBooking(t, {
