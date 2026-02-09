@@ -5,6 +5,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 
 export const createQuoteRequest = internalMutation({
@@ -33,13 +34,47 @@ export const createQuoteRequest = internalMutation({
     rawRequestPayload: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<Id<"quoteRequests">> => {
+    const address =
+      args.address || args.addressLine2 || args.city || args.state || args.postalCode
+        ? {
+            street: args.address,
+            addressLine2: args.addressLine2,
+            city: args.city,
+            state: args.state,
+            postalCode: args.postalCode,
+          }
+        : undefined;
+
+    const customerId = args.email
+      ? await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+          email: args.email,
+          firstName: args.firstName,
+          lastName: args.lastName,
+          phone: args.phone,
+          address,
+          squareFootage: args.squareFootage,
+          source: "quote_request",
+        })
+      : undefined;
+
     const now = Date.now();
-    return await ctx.db.insert("quoteRequests", {
+    const quoteRequestId = await ctx.db.insert("quoteRequests", {
       ...args,
+      customerId,
       requestStatus: "requested",
       createdAt: now,
       updatedAt: now,
     });
+
+    if (customerId && args.bookingRequestId) {
+      await ctx.runMutation(internal.customers.linkLifecycleRecordsToCustomer, {
+        customerId,
+        quoteRequestId,
+        bookingRequestId: args.bookingRequestId,
+      });
+    }
+
+    return quoteRequestId;
   },
 });
 
