@@ -63,10 +63,24 @@ export const createBookingFromTally = mutation({
     bookingRequestId: v.optional(v.id("bookingRequests")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
+    const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+      email: args.email,
+      fullName: args.customerName,
+      source: "booking",
+      activateOnLink: true,
+    });
+
+    const request = args.bookingRequestId
+      ? await ctx.runQuery(internal.bookingRequests.getRequestById, {
+          id: args.bookingRequestId,
+        })
+      : null;
+
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
       email: args.email,
       customerName: args.customerName,
+      customerId,
       status: "pending_card",
       serviceType: args.serviceType,
       serviceDate: args.serviceDate,
@@ -85,6 +99,17 @@ export const createBookingFromTally = mutation({
       source: "bookings.createBookingFromTally",
     });
 
+    await ctx.runMutation(internal.customers.linkLifecycleRecordsToCustomer, {
+      customerId,
+      bookingId,
+      bookingRequestId: args.bookingRequestId,
+      quoteRequestId: request?.quoteRequestId,
+    });
+
+    await ctx.runMutation(internal.customers.recomputeStatsInternal, {
+      customerId,
+    });
+
     return bookingId;
   },
 });
@@ -100,6 +125,14 @@ export const createBookingFromRequest = mutation({
     }
 
     if (request.bookingId) {
+      if (request.customerId) {
+        await ctx.runMutation(internal.customers.linkLifecycleRecordsToCustomer, {
+          customerId: request.customerId,
+          bookingId: request.bookingId,
+          bookingRequestId: request._id,
+          quoteRequestId: request.quoteRequestId,
+        });
+      }
       return request.bookingId;
     }
 
@@ -107,10 +140,20 @@ export const createBookingFromRequest = mutation({
       throw new Error("Booking request is missing email");
     }
 
+    const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+      email: request.email,
+      fullName: request.contactDetails,
+      contactDetails: request.contactDetails,
+      phone: request.phoneNumber,
+      source: "booking",
+      activateOnLink: true,
+    });
+
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
       email: request.email,
       customerName: request.contactDetails,
+      customerId,
       status: "pending_card",
       notes: request.additionalNotes ?? request.attentionAreas,
       bookingRequestId: request._id,
@@ -128,6 +171,17 @@ export const createBookingFromRequest = mutation({
     await ctx.runMutation(internal.bookingRequests.linkBookingToRequest, {
       requestId: request._id,
       bookingId,
+    });
+
+    await ctx.runMutation(internal.customers.linkLifecycleRecordsToCustomer, {
+      customerId,
+      bookingId,
+      bookingRequestId: request._id,
+      quoteRequestId: request.quoteRequestId,
+    });
+
+    await ctx.runMutation(internal.customers.recomputeStatsInternal, {
+      customerId,
     });
 
     return bookingId;

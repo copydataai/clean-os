@@ -7,6 +7,7 @@ export const createBooking = internalMutation({
   args: {
     email: v.string(),
     customerName: v.optional(v.string()),
+    customerId: v.optional(v.id("customers")),
     serviceType: v.optional(v.string()),
     serviceDate: v.optional(v.string()),
     amount: v.optional(v.number()),
@@ -15,10 +16,24 @@ export const createBooking = internalMutation({
     bookingRequestId: v.optional(v.id("bookingRequests")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
+    const customerId =
+      args.customerId ??
+      (await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+        email: args.email,
+        fullName: args.customerName,
+        source: "booking",
+        activateOnLink: true,
+      }));
+
+    const request = args.bookingRequestId
+      ? await ctx.db.get(args.bookingRequestId)
+      : null;
+
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
       email: args.email,
       customerName: args.customerName,
+      customerId,
       status: "pending_card",
       serviceType: args.serviceType,
       serviceDate: args.serviceDate,
@@ -35,6 +50,17 @@ export const createBooking = internalMutation({
       eventType: "created",
       toStatus: "pending_card",
       source: "bookingDb.createBooking",
+    });
+
+    await ctx.runMutation(internal.customers.linkLifecycleRecordsToCustomer, {
+      customerId,
+      bookingId,
+      bookingRequestId: args.bookingRequestId,
+      quoteRequestId: request?.quoteRequestId,
+    });
+
+    await ctx.runMutation(internal.customers.recomputeStatsInternal, {
+      customerId,
     });
 
     return bookingId;
