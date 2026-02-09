@@ -27,7 +27,6 @@ const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
 WebBrowser.maybeCompleteAuthSession();
 
 type AuthMode = "sign-in" | "sign-up";
-type CleanerTab = "overview" | "qualifications" | "availability" | "assignments";
 
 type ThemeTokens = {
   background: string;
@@ -50,28 +49,22 @@ type ThemeTokens = {
   shadowColor: string;
 };
 
-type CleanerServiceQualification = {
-  _id: Id<"cleanerServiceTypes">;
-  serviceType: string;
-  isQualified: boolean;
-  isPreferred?: boolean;
-  qualifiedAt?: number;
-};
-
-type CleanerSkill = {
-  _id: Id<"cleanerSkills">;
-  skillType: string;
-  proficiencyLevel: string;
+type BookingSnapshot = {
+  serviceType?: string;
+  serviceDate?: string;
+  serviceWindowStart?: string;
+  serviceWindowEnd?: string;
+  estimatedDurationMinutes?: number;
+  customerName?: string;
   notes?: string;
-  isVerified?: boolean;
-};
-
-type CleanerAvailability = {
-  _id: Id<"cleanerAvailability">;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  isActive: boolean;
+  locationSnapshot?: {
+    street?: string;
+    addressLine2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+  };
+  status: string;
 };
 
 type CleanerAssignment = {
@@ -84,22 +77,19 @@ type CleanerAssignment = {
   clockedInAt?: number;
   clockedOutAt?: number;
   actualDurationMinutes?: number;
+  booking: BookingSnapshot | null;
 };
 
-const REQUIRED_SERVICE_TYPES = ["standard", "deep", "move_out"] as const;
-const EXTRA_SERVICE_TYPES = ["move_in", "post_construction", "airbnb"] as const;
-const SKILL_OPTIONS = [
-  "deep_cleaning",
-  "window",
-  "carpet",
-  "hardwood",
-  "appliances",
-  "organizing",
-  "laundry",
-  "pet_safe",
-] as const;
-const PROFICIENCY_OPTIONS = ["beginner", "intermediate", "advanced", "expert"] as const;
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+type ChecklistItem = {
+  _id: Id<"bookingChecklistItems">;
+  bookingAssignmentId: Id<"bookingAssignments">;
+  bookingId: Id<"bookings">;
+  label: string;
+  sortOrder: number;
+  category?: string;
+  isCompleted: boolean;
+  completedAt?: number;
+};
 
 const LIGHT_THEME: ThemeTokens = {
   background: "#f5fcfc",
@@ -241,16 +231,12 @@ function SignedInConvexDisabled({ styles }: { styles: AppStyles }) {
 function SignedInCleanerApp({ styles }: { styles: AppStyles }) {
   const { user } = useUser();
   const { signOut } = useClerk();
-  const [activeTab, setActiveTab] = useState<CleanerTab>("overview");
   const [notice, setNotice] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<Id<"bookingAssignments"> | null>(null);
 
   const email = user?.primaryEmailAddress?.emailAddress ?? null;
   const cleaner = useQuery(api.cleaners.getByEmail, email ? { email } : "skip");
-  const cleanerDetails = useQuery(
-    api.cleaners.getWithDetails,
-    cleaner ? { cleanerId: cleaner._id } : "skip"
-  );
   const assignments = useQuery(
     api.cleaners.getAssignments,
     cleaner ? { cleanerId: cleaner._id } : "skip"
@@ -283,14 +269,10 @@ function SignedInCleanerApp({ styles }: { styles: AppStyles }) {
         ) : null}
 
         <SurfaceCard styles={styles}>
-          <Text style={styles.title}>Cleaner Workspace</Text>
-          <Text style={styles.subtitle}>Signed in as {email ?? "no email found"}</Text>
-          <View style={styles.metaRow}>
-            <MetaPill styles={styles} label={cleaner?.status ?? "status unknown"} tone="info" />
-            <MetaPill styles={styles} label={cleaner?.employmentType ?? "employment unknown"} tone="neutral" />
-            <MetaPill styles={styles} label={cleanerName} tone="neutral" />
+          <View style={styles.headerRow}>
+            <Text style={styles.headerName}>{cleanerName}</Text>
+            <SecondaryCTA title={isSigningOut ? "Signing out..." : "Sign Out"} onPress={handleSignOut} styles={styles} />
           </View>
-          <PrimaryCTA title={isSigningOut ? "Signing out..." : "Sign Out"} onPress={handleSignOut} styles={styles} />
         </SurfaceCard>
 
         {email === null ? (
@@ -316,636 +298,26 @@ function SignedInCleanerApp({ styles }: { styles: AppStyles }) {
         ) : null}
 
         {cleaner ? (
-          <>
-            <TabBar styles={styles} activeTab={activeTab} onChange={setActiveTab} />
-
-            {cleanerDetails === undefined ? (
-              <SurfaceCard styles={styles}>
-                <Text style={styles.sectionTitle}>Loading cleaner details...</Text>
-              </SurfaceCard>
-            ) : cleanerDetails === null ? (
-              <SurfaceCard styles={styles}>
-                <Text style={styles.sectionTitle}>Cleaner details unavailable</Text>
-                <Text style={styles.subtitle}>
-                  The cleaner profile exists but extended detail records could not be loaded.
-                </Text>
-              </SurfaceCard>
-            ) : (
-              <>
-                {activeTab === "overview" ? (
-                  <CleanerOverviewPanel
-                    styles={styles}
-                    cleaner={cleaner}
-                    cleanerDetails={cleanerDetails}
-                    assignments={assignments ?? []}
-                  />
-                ) : null}
-
-                {activeTab === "qualifications" ? (
-                  <CleanerQualificationsPanel
-                    styles={styles}
-                    cleanerId={cleaner._id}
-                    cleanerDetails={cleanerDetails}
-                    onNotice={setNotice}
-                  />
-                ) : null}
-
-                {activeTab === "availability" ? (
-                  <CleanerAvailabilityPanel
-                    styles={styles}
-                    cleanerId={cleaner._id}
-                    availability={cleanerDetails.availability ?? []}
-                    onNotice={setNotice}
-                  />
-                ) : null}
-
-                {activeTab === "assignments" ? (
-                  <CleanerAssignmentsPanel
-                    styles={styles}
-                    assignments={assignments ?? []}
-                    onNotice={setNotice}
-                  />
-                ) : null}
-              </>
-            )}
-          </>
+          selectedAssignmentId ? (
+            <JobDetailScreen
+              styles={styles}
+              assignmentId={selectedAssignmentId}
+              assignments={assignments ?? []}
+              cleanerId={cleaner._id}
+              onBack={() => setSelectedAssignmentId(null)}
+              onNotice={setNotice}
+            />
+          ) : (
+            <CleanerAssignmentsPanel
+              styles={styles}
+              assignments={assignments ?? []}
+              onNotice={setNotice}
+              onSelectAssignment={setSelectedAssignmentId}
+            />
+          )
         ) : null}
       </ScrollView>
     </AppFrame>
-  );
-}
-
-function CleanerOverviewPanel({
-  styles,
-  cleaner,
-  cleanerDetails,
-  assignments,
-}: {
-  styles: AppStyles;
-  cleaner: {
-    hasOwnTransportation?: boolean;
-    hasOwnEquipment?: boolean;
-    willingToTravel?: boolean;
-  };
-  cleanerDetails: {
-    serviceTypes?: CleanerServiceQualification[];
-    availability?: CleanerAvailability[];
-    activePayRate?: { payType: string; baseRate: number; currency?: string } | null;
-  };
-  assignments: CleanerAssignment[];
-}) {
-  const serviceTypes = cleanerDetails.serviceTypes ?? [];
-  const qualifiedSet = new Set(
-    serviceTypes
-      .filter((item) => item.isQualified)
-      .map((item) => item.serviceType.toLowerCase())
-  );
-  const missingRequired = REQUIRED_SERVICE_TYPES.filter((serviceType) => !qualifiedSet.has(serviceType));
-  const activeAvailability = (cleanerDetails.availability ?? []).filter((slot) => slot.isActive);
-  const hasValidAvailability = activeAvailability.length > 0;
-  const hasPayRate = Boolean(cleanerDetails.activePayRate);
-
-  const checks = [
-    {
-      label: "Required service qualifications",
-      valid: missingRequired.length === 0,
-      detail:
-        missingRequired.length === 0
-          ? "All required services are qualified"
-          : `Missing: ${missingRequired.join(", ")}`,
-    },
-    {
-      label: "Availability configured",
-      valid: hasValidAvailability,
-      detail: hasValidAvailability
-        ? `${activeAvailability.length} active day(s)`
-        : "No active availability slots",
-    },
-    {
-      label: "Active pay rate",
-      valid: hasPayRate,
-      detail: hasPayRate
-        ? formatPayRate(
-            cleanerDetails.activePayRate?.baseRate ?? 0,
-            cleanerDetails.activePayRate?.payType ?? "hourly",
-            cleanerDetails.activePayRate?.currency
-          )
-        : "Set an active pay rate",
-    },
-    {
-      label: "Transportation",
-      valid: cleaner.hasOwnTransportation === true,
-      detail: cleaner.hasOwnTransportation ? "Own transportation" : "Transportation not confirmed",
-    },
-    {
-      label: "Equipment",
-      valid: cleaner.hasOwnEquipment === true,
-      detail: cleaner.hasOwnEquipment ? "Own equipment" : "Equipment not confirmed",
-    },
-  ];
-
-  const pendingAssignments = assignments.filter((item) => item.status === "pending").length;
-  const activeAssignments = assignments.filter((item) => item.status === "in_progress").length;
-  const confirmedAssignments = assignments.filter((item) => item.status === "confirmed").length;
-
-  return (
-    <>
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Readiness Validation</Text>
-        <View style={styles.checkList}>
-          {checks.map((check) => (
-            <View key={check.label} style={styles.checkItem}>
-              <MetaPill
-                styles={styles}
-                label={check.valid ? "Pass" : "Action Required"}
-                tone={check.valid ? "success" : "danger"}
-              />
-              <View style={styles.checkBody}>
-                <Text style={styles.checkTitle}>{check.label}</Text>
-                <Text style={styles.checkDetail}>{check.detail}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Operational Snapshot</Text>
-        <View style={styles.metricGrid}>
-          <MetricCard styles={styles} label="Pending" value={String(pendingAssignments)} />
-          <MetricCard styles={styles} label="Confirmed" value={String(confirmedAssignments)} />
-          <MetricCard styles={styles} label="In Progress" value={String(activeAssignments)} />
-          <MetricCard styles={styles} label="Total Assignments" value={String(assignments.length)} />
-        </View>
-      </SurfaceCard>
-    </>
-  );
-}
-
-function CleanerQualificationsPanel({
-  styles,
-  cleanerId,
-  cleanerDetails,
-  onNotice,
-}: {
-  styles: AppStyles;
-  cleanerId: Id<"cleaners">;
-  cleanerDetails: {
-    serviceTypes?: CleanerServiceQualification[];
-    skills?: CleanerSkill[];
-  };
-  onNotice: (value: string | null) => void;
-}) {
-  const addQualification = useMutation(api.cleaners.addServiceTypeQualification);
-  const updateQualification = useMutation(api.cleaners.updateServiceTypeQualification);
-  const removeQualification = useMutation(api.cleaners.removeServiceTypeQualification);
-  const addSkill = useMutation(api.cleaners.addSkill);
-  const updateSkill = useMutation(api.cleaners.updateSkill);
-  const removeSkill = useMutation(api.cleaners.removeSkill);
-
-  const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [selectedServiceType, setSelectedServiceType] = useState<string>(REQUIRED_SERVICE_TYPES[0]);
-  const [selectedSkillType, setSelectedSkillType] = useState<string>(SKILL_OPTIONS[0]);
-  const [selectedSkillProficiency, setSelectedSkillProficiency] = useState<string>(PROFICIENCY_OPTIONS[1]);
-  const [skillNotes, setSkillNotes] = useState("");
-
-  const qualifications = cleanerDetails.serviceTypes ?? [];
-  const skills = cleanerDetails.skills ?? [];
-
-  const qualificationByType = Object.fromEntries(
-    qualifications.map((item) => [item.serviceType.toLowerCase(), item])
-  );
-  const allServiceTypes = Array.from(
-    new Set([
-      ...REQUIRED_SERVICE_TYPES,
-      ...EXTRA_SERVICE_TYPES,
-      ...qualifications.map((item) => item.serviceType.toLowerCase()),
-    ])
-  );
-
-  const missingRequired = REQUIRED_SERVICE_TYPES.filter((serviceType) => {
-    const qualification = qualificationByType[serviceType];
-    return !qualification || !qualification.isQualified;
-  });
-
-  const existingSkills = new Set(skills.map((skill) => skill.skillType));
-
-  const runMutation = async (key: string, fn: () => Promise<unknown>, successMessage: string) => {
-    setSavingKey(key);
-    try {
-      await fn();
-      onNotice(successMessage);
-    } catch (error) {
-      onNotice(getErrorMessage(error));
-    } finally {
-      setSavingKey(null);
-    }
-  };
-
-  return (
-    <>
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Service Qualification Validation</Text>
-        {missingRequired.length > 0 ? (
-          <Text style={styles.validationError}>Missing required types: {missingRequired.join(", ")}</Text>
-        ) : (
-          <Text style={styles.validationSuccess}>All required service types are covered.</Text>
-        )}
-
-        <Text style={styles.blockLabel}>Quick add qualification</Text>
-        <OptionGrid
-          styles={styles}
-          options={allServiceTypes}
-          selected={selectedServiceType}
-          onSelect={setSelectedServiceType}
-          disabledLookup={qualificationByType}
-        />
-
-        <PrimaryCTA
-          title={savingKey === "qualification-add" ? "Saving..." : "Add Qualification"}
-          onPress={() =>
-            runMutation(
-              "qualification-add",
-              () =>
-                addQualification({
-                  cleanerId,
-                  serviceType: selectedServiceType,
-                  isQualified: true,
-                  isPreferred: false,
-                  qualifiedAt: Date.now(),
-                }),
-              "Qualification added"
-            )
-          }
-          styles={styles}
-          disabled={Boolean(qualificationByType[selectedServiceType]) || savingKey !== null}
-        />
-      </SurfaceCard>
-
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Service Types</Text>
-        <View style={styles.listColumn}>
-          {allServiceTypes.map((serviceType) => {
-            const qualification = qualificationByType[serviceType];
-
-            return (
-              <View key={serviceType} style={styles.rowCard}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.rowTitle}>{serviceType}</Text>
-                  {qualification?.isPreferred ? (
-                    <MetaPill styles={styles} label="preferred" tone="info" />
-                  ) : null}
-                </View>
-                <Text style={styles.rowSubtitle}>
-                  {qualification
-                    ? qualification.isQualified
-                      ? "Qualified"
-                      : "Not qualified"
-                    : "Not configured"}
-                </Text>
-
-                <View style={styles.actionRow}>
-                  {qualification ? (
-                    <SecondaryCTA
-                      title={qualification.isQualified ? "Unqualify" : "Qualify"}
-                      onPress={() =>
-                        runMutation(
-                          `qualify-${qualification._id}`,
-                          () =>
-                            updateQualification({
-                              qualificationId: qualification._id,
-                              isQualified: !qualification.isQualified,
-                              qualifiedAt: !qualification.isQualified ? Date.now() : undefined,
-                            }),
-                          "Qualification updated"
-                        )
-                      }
-                      styles={styles}
-                      disabled={savingKey !== null}
-                    />
-                  ) : (
-                    <SecondaryCTA
-                      title="Create"
-                      onPress={() =>
-                        runMutation(
-                          `create-${serviceType}`,
-                          () =>
-                            addQualification({
-                              cleanerId,
-                              serviceType,
-                              isQualified: true,
-                              isPreferred: false,
-                              qualifiedAt: Date.now(),
-                            }),
-                          "Qualification created"
-                        )
-                      }
-                      styles={styles}
-                      disabled={savingKey !== null}
-                    />
-                  )}
-
-                  {qualification ? (
-                    <SecondaryCTA
-                      title={qualification.isPreferred ? "Unset preferred" : "Set preferred"}
-                      onPress={() =>
-                        runMutation(
-                          `preferred-${qualification._id}`,
-                          () =>
-                            updateQualification({
-                              qualificationId: qualification._id,
-                              isPreferred: !qualification.isPreferred,
-                            }),
-                          "Preference updated"
-                        )
-                      }
-                      styles={styles}
-                      disabled={savingKey !== null}
-                    />
-                  ) : null}
-
-                  {qualification ? (
-                    <SecondaryCTA
-                      title="Remove"
-                      onPress={() =>
-                        runMutation(
-                          `remove-${qualification._id}`,
-                          () => removeQualification({ qualificationId: qualification._id }),
-                          "Qualification removed"
-                        )
-                      }
-                      styles={styles}
-                      disabled={savingKey !== null}
-                    />
-                  ) : null}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Skills</Text>
-        <Text style={styles.blockLabel}>Skill type</Text>
-        <OptionGrid
-          styles={styles}
-          options={[...SKILL_OPTIONS]}
-          selected={selectedSkillType}
-          onSelect={setSelectedSkillType}
-          disabledLookup={Object.fromEntries([...existingSkills].map((skill) => [skill, true]))}
-        />
-
-        <Text style={styles.blockLabel}>Proficiency</Text>
-        <OptionGrid
-          styles={styles}
-          options={[...PROFICIENCY_OPTIONS]}
-          selected={selectedSkillProficiency}
-          onSelect={setSelectedSkillProficiency}
-        />
-
-        <TextInput
-          value={skillNotes}
-          onChangeText={setSkillNotes}
-          placeholder="Optional skill notes"
-          placeholderTextColor={styles.subtitle.color}
-          style={styles.input}
-        />
-
-        <PrimaryCTA
-          title={savingKey === "skill-add" ? "Saving..." : "Add Skill"}
-          onPress={() =>
-            runMutation(
-              "skill-add",
-              () =>
-                addSkill({
-                  cleanerId,
-                  skillType: selectedSkillType,
-                  proficiencyLevel: selectedSkillProficiency,
-                  notes: skillNotes.trim() || undefined,
-                }),
-              "Skill added"
-            )
-          }
-          styles={styles}
-          disabled={existingSkills.has(selectedSkillType) || savingKey !== null}
-        />
-
-        <View style={styles.listColumn}>
-          {skills.map((skill) => (
-            <View key={skill._id} style={styles.rowCard}>
-              <View style={styles.rowTop}>
-                <Text style={styles.rowTitle}>{skill.skillType}</Text>
-                {skill.isVerified ? <MetaPill styles={styles} label="verified" tone="success" /> : null}
-              </View>
-              <Text style={styles.rowSubtitle}>
-                {skill.proficiencyLevel}
-                {skill.notes ? ` - ${skill.notes}` : ""}
-              </Text>
-              <View style={styles.actionRow}>
-                {PROFICIENCY_OPTIONS.map((level) => (
-                  <Pressable
-                    key={`${skill._id}-${level}`}
-                    onPress={() =>
-                      runMutation(
-                        `skill-${skill._id}-${level}`,
-                        () => updateSkill({ skillId: skill._id, proficiencyLevel: level }),
-                        `Skill updated to ${level}`
-                      )
-                    }
-                    style={[
-                      styles.optionChip,
-                      skill.proficiencyLevel === level && styles.optionChipActive,
-                      savingKey !== null && styles.optionChipDisabled,
-                    ]}
-                    disabled={savingKey !== null}
-                  >
-                    <Text
-                      style={[
-                        styles.optionChipText,
-                        skill.proficiencyLevel === level && styles.optionChipTextActive,
-                      ]}
-                    >
-                      {level}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-              <SecondaryCTA
-                title="Remove Skill"
-                onPress={() =>
-                  runMutation(
-                    `skill-remove-${skill._id}`,
-                    () => removeSkill({ skillId: skill._id }),
-                    "Skill removed"
-                  )
-                }
-                styles={styles}
-                disabled={savingKey !== null}
-              />
-            </View>
-          ))}
-          {skills.length === 0 ? <Text style={styles.rowSubtitle}>No skills added yet.</Text> : null}
-        </View>
-      </SurfaceCard>
-    </>
-  );
-}
-
-function CleanerAvailabilityPanel({
-  styles,
-  cleanerId,
-  availability,
-  onNotice,
-}: {
-  styles: AppStyles;
-  cleanerId: Id<"cleaners">;
-  availability: CleanerAvailability[];
-  onNotice: (value: string | null) => void;
-}) {
-  const setAvailability = useMutation(api.cleaners.setAvailability);
-  const removeAvailability = useMutation(api.cleaners.removeAvailability);
-
-  const [editingDay, setEditingDay] = useState<number | null>(null);
-  const [startTime, setStartTime] = useState("09:00");
-  const [endTime, setEndTime] = useState("17:00");
-  const [isSaving, setIsSaving] = useState(false);
-
-  const availabilityByDay = Object.fromEntries(
-    availability.filter((slot) => slot.isActive).map((slot) => [slot.dayOfWeek, slot])
-  ) as Record<number, CleanerAvailability>;
-
-  const openEditor = (dayIndex: number) => {
-    const slot = availabilityByDay[dayIndex];
-    setEditingDay(dayIndex);
-    setStartTime(slot?.startTime ?? "09:00");
-    setEndTime(slot?.endTime ?? "17:00");
-  };
-
-  const saveDay = async () => {
-    if (editingDay === null) return;
-    if (startTime >= endTime) {
-      onNotice("Start time must be before end time.");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      await setAvailability({
-        cleanerId,
-        dayOfWeek: editingDay,
-        startTime,
-        endTime,
-      });
-      onNotice(`Availability updated for ${DAYS[editingDay]}`);
-      setEditingDay(null);
-    } catch (error) {
-      onNotice(getErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const removeDay = async (dayIndex: number) => {
-    const slot = availabilityByDay[dayIndex];
-    if (!slot) return;
-    setIsSaving(true);
-    try {
-      await removeAvailability({ availabilityId: slot._id });
-      onNotice(`Availability removed for ${DAYS[dayIndex]}`);
-    } catch (error) {
-      onNotice(getErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const activeCount = Object.values(availabilityByDay).length;
-
-  return (
-    <>
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Availability Validation</Text>
-        {activeCount > 0 ? (
-          <Text style={styles.validationSuccess}>{activeCount} active day(s) configured.</Text>
-        ) : (
-          <Text style={styles.validationError}>No active availability. Set at least one working day.</Text>
-        )}
-      </SurfaceCard>
-
-      <SurfaceCard styles={styles}>
-        <Text style={styles.sectionTitle}>Weekly Availability</Text>
-        <View style={styles.availabilityGrid}>
-          {DAYS.map((dayLabel, index) => {
-            const slot = availabilityByDay[index];
-            return (
-              <View key={dayLabel} style={styles.dayCard}>
-                <Text style={styles.dayTitle}>{dayLabel}</Text>
-                <Text style={styles.dayTime}>{slot ? `${slot.startTime} - ${slot.endTime}` : "Off"}</Text>
-                <View style={styles.actionRow}>
-                  <SecondaryCTA
-                    title={slot ? "Edit" : "Set"}
-                    onPress={() => openEditor(index)}
-                    styles={styles}
-                    disabled={isSaving}
-                  />
-                  {slot ? (
-                    <SecondaryCTA
-                      title="Clear"
-                      onPress={() => removeDay(index)}
-                      styles={styles}
-                      disabled={isSaving}
-                    />
-                  ) : null}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      </SurfaceCard>
-
-      {editingDay !== null ? (
-        <SurfaceCard styles={styles}>
-          <Text style={styles.sectionTitle}>Set {DAYS[editingDay]} Hours</Text>
-          <View style={styles.editorRow}>
-            <View style={styles.timeInputGroup}>
-              <Text style={styles.blockLabel}>Start</Text>
-              <TextInput
-                value={startTime}
-                onChangeText={setStartTime}
-                style={styles.input}
-                placeholder="09:00"
-                placeholderTextColor={styles.subtitle.color}
-              />
-            </View>
-            <View style={styles.timeInputGroup}>
-              <Text style={styles.blockLabel}>End</Text>
-              <TextInput
-                value={endTime}
-                onChangeText={setEndTime}
-                style={styles.input}
-                placeholder="17:00"
-                placeholderTextColor={styles.subtitle.color}
-              />
-            </View>
-          </View>
-          <View style={styles.actionRow}>
-            <PrimaryCTA
-              title={isSaving ? "Saving..." : "Save Availability"}
-              onPress={saveDay}
-              styles={styles}
-              disabled={isSaving}
-            />
-            <SecondaryCTA
-              title="Cancel"
-              onPress={() => setEditingDay(null)}
-              styles={styles}
-              disabled={isSaving}
-            />
-          </View>
-        </SurfaceCard>
-      ) : null}
-    </>
   );
 }
 
@@ -953,25 +325,100 @@ function CleanerAssignmentsPanel({
   styles,
   assignments,
   onNotice,
+  onSelectAssignment,
 }: {
   styles: AppStyles;
   assignments: CleanerAssignment[];
+  onNotice: (value: string | null) => void;
+  onSelectAssignment: (id: Id<"bookingAssignments">) => void;
+}) {
+  return (
+    <SurfaceCard styles={styles}>
+      <Text style={styles.sectionTitle}>Assignments</Text>
+      {assignments.length === 0 ? <Text style={styles.rowSubtitle}>No assignments found.</Text> : null}
+
+      <View style={styles.listColumn}>
+        {assignments
+          .slice()
+          .sort((a, b) => b.assignedAt - a.assignedAt)
+          .map((assignment) => {
+            const booking = assignment.booking;
+            const serviceLabel = booking?.serviceType
+              ? booking.serviceType.replace(/_/g, " ")
+              : "Unknown service";
+            const dateLabel = booking?.serviceDate ?? "No date";
+            const timeLabel =
+              booking?.serviceWindowStart && booking?.serviceWindowEnd
+                ? `${booking.serviceWindowStart} - ${booking.serviceWindowEnd}`
+                : "";
+            const customerLabel = booking?.customerName ?? "";
+
+            return (
+              <Pressable
+                key={assignment._id}
+                onPress={() => onSelectAssignment(assignment._id)}
+                style={styles.rowCard}
+              >
+                <View style={styles.rowTop}>
+                  <Text style={styles.rowTitle}>{serviceLabel}</Text>
+                  <MetaPill styles={styles} label={assignment.status.replace(/_/g, " ")} tone="info" />
+                </View>
+                <Text style={styles.rowSubtitle}>
+                  {dateLabel}
+                  {timeLabel ? ` \u00B7 ${timeLabel}` : ""}
+                </Text>
+                {customerLabel ? <Text style={styles.rowSubtitle}>{customerLabel}</Text> : null}
+              </Pressable>
+            );
+          })}
+      </View>
+    </SurfaceCard>
+  );
+}
+
+function JobDetailScreen({
+  styles,
+  assignmentId,
+  assignments,
+  cleanerId,
+  onBack,
+  onNotice,
+}: {
+  styles: AppStyles;
+  assignmentId: Id<"bookingAssignments">;
+  assignments: CleanerAssignment[];
+  cleanerId: Id<"cleaners">;
+  onBack: () => void;
   onNotice: (value: string | null) => void;
 }) {
   const respondToAssignment = useMutation(api.cleaners.respondToAssignment);
   const confirmAssignment = useMutation(api.cleaners.confirmAssignment);
   const clockIn = useMutation(api.cleaners.clockIn);
   const clockOut = useMutation(api.cleaners.clockOut);
+  const toggleChecklistItem = useMutation(api.cleaners.toggleChecklistItem);
+
+  const checklistItems = useQuery(api.cleaners.getChecklistItems, { bookingAssignmentId: assignmentId }) as
+    | ChecklistItem[]
+    | undefined;
 
   const [savingId, setSavingId] = useState<string | null>(null);
-  const [notesByAssignment, setNotesByAssignment] = useState<Record<string, string>>({});
+  const [cleanerNotes, setCleanerNotes] = useState("");
 
-  const runAction = async (
-    assignmentId: Id<"bookingAssignments">,
-    successMessage: string,
-    fn: () => Promise<unknown>
-  ) => {
-    setSavingId(assignmentId);
+  const assignment = assignments.find((a) => a._id === assignmentId);
+  if (!assignment) {
+    return (
+      <SurfaceCard styles={styles}>
+        <SecondaryCTA title="Back" onPress={onBack} styles={styles} />
+        <Text style={styles.rowSubtitle}>Assignment not found.</Text>
+      </SurfaceCard>
+    );
+  }
+
+  const booking = assignment.booking;
+  const isSaving = savingId !== null;
+
+  const runAction = async (key: string, successMessage: string, fn: () => Promise<unknown>) => {
+    setSavingId(key);
     try {
       await fn();
       onNotice(successMessage);
@@ -982,202 +429,196 @@ function CleanerAssignmentsPanel({
     }
   };
 
-  return (
-    <SurfaceCard styles={styles}>
-      <Text style={styles.sectionTitle}>Assignment Validation</Text>
-      {assignments.length === 0 ? <Text style={styles.rowSubtitle}>No assignments found.</Text> : null}
+  const completedCount = checklistItems?.filter((i) => i.isCompleted).length ?? 0;
+  const totalCount = checklistItems?.length ?? 0;
+  const checklistComplete = totalCount === 0 || completedCount === totalCount;
 
-      <View style={styles.listColumn}>
-        {assignments
-          .slice()
-          .sort((a, b) => b.assignedAt - a.assignedAt)
-          .map((assignment) => {
-            const note = notesByAssignment[assignment._id] ?? "";
-            const isSaving = savingId === assignment._id;
-
-            return (
-              <View key={assignment._id} style={styles.rowCard}>
-                <View style={styles.rowTop}>
-                  <Text style={styles.rowTitle}>Booking {String(assignment.bookingId).slice(-6)}</Text>
-                  <MetaPill styles={styles} label={assignment.status.replace(/_/g, " ")} tone="info" />
-                </View>
-                <Text style={styles.rowSubtitle}>
-                  Assigned {new Date(assignment.assignedAt).toLocaleDateString()} - role {assignment.role}
+  const locationParts = booking?.locationSnapshot
+    ? [
+        booking.locationSnapshot.street,
+        booking.locationSnapshot.addressLine2,
+        booking.locationSnapshot.city,
+        booking.locationSnapshot.state,
+        booking.locationSnapshot.postalCode,
+      ]
+        .filter(Boolean)
+        .join(", ")
+    : null;
+  const checklistCard =
+    checklistItems !== undefined && totalCount > 0 ? (
+      <SurfaceCard styles={styles}>
+        <View style={styles.rowTop}>
+          <Text style={styles.sectionTitle}>Checklist</Text>
+          <MetaPill
+            styles={styles}
+            label={`${completedCount}/${totalCount}`}
+            tone={checklistComplete ? "success" : "info"}
+          />
+        </View>
+        <View style={styles.listColumn}>
+          {checklistItems.map((item) => (
+            <Pressable
+              key={item._id}
+              onPress={() =>
+                runAction(
+                  `checklist-${item._id}`,
+                  item.isCompleted ? "Item unchecked" : "Item checked",
+                  () =>
+                    toggleChecklistItem({
+                      checklistItemId: item._id,
+                      isCompleted: !item.isCompleted,
+                      completedBy: !item.isCompleted ? cleanerId : undefined,
+                    })
+                )
+              }
+              style={styles.checkItem}
+              disabled={isSaving}
+            >
+              <Text style={[styles.metaPill, item.isCompleted ? styles.metaPillSuccess : styles.metaPillInfo]}>
+                {item.isCompleted ? "\u2713" : "\u25CB"}
+              </Text>
+              <View style={styles.checkBody}>
+                <Text
+                  style={[
+                    styles.checkTitle,
+                    item.isCompleted && { textDecorationLine: "line-through" as const, opacity: 0.6 },
+                  ]}
+                >
+                  {item.label}
                 </Text>
-                <TextInput
-                  value={note}
-                  onChangeText={(value) =>
-                    setNotesByAssignment((prev) => ({
-                      ...prev,
-                      [assignment._id]: value,
-                    }))
-                  }
-                  placeholder="Cleaner notes (optional)"
-                  placeholderTextColor={styles.subtitle.color}
-                  style={styles.input}
-                />
-
-                <View style={styles.actionRow}>
-                  {assignment.status === "pending" ? (
-                    <>
-                      <SecondaryCTA
-                        title={isSaving ? "Saving..." : "Accept"}
-                        onPress={() =>
-                          runAction(assignment._id, "Assignment accepted", () =>
-                            respondToAssignment({
-                              assignmentId: assignment._id,
-                              response: "accepted",
-                              cleanerNotes: note.trim() || undefined,
-                            })
-                          )
-                        }
-                        styles={styles}
-                        disabled={isSaving}
-                      />
-                      <SecondaryCTA
-                        title={isSaving ? "Saving..." : "Decline"}
-                        onPress={() =>
-                          runAction(assignment._id, "Assignment declined", () =>
-                            respondToAssignment({
-                              assignmentId: assignment._id,
-                              response: "declined",
-                              cleanerNotes: note.trim() || undefined,
-                            })
-                          )
-                        }
-                        styles={styles}
-                        disabled={isSaving}
-                      />
-                    </>
-                  ) : null}
-
-                  {assignment.status === "accepted" ? (
-                    <SecondaryCTA
-                      title={isSaving ? "Saving..." : "Confirm"}
-                      onPress={() =>
-                        runAction(assignment._id, "Assignment confirmed", () =>
-                          confirmAssignment({ assignmentId: assignment._id })
-                        )
-                      }
-                      styles={styles}
-                      disabled={isSaving}
-                    />
-                  ) : null}
-
-                  {assignment.status === "confirmed" ? (
-                    <SecondaryCTA
-                      title={isSaving ? "Saving..." : "Clock In"}
-                      onPress={() =>
-                        runAction(assignment._id, "Clocked in", () =>
-                          clockIn({ assignmentId: assignment._id })
-                        )
-                      }
-                      styles={styles}
-                      disabled={isSaving}
-                    />
-                  ) : null}
-
-                  {assignment.status === "in_progress" ? (
-                    <SecondaryCTA
-                      title={isSaving ? "Saving..." : "Clock Out"}
-                      onPress={() =>
-                        runAction(assignment._id, "Clocked out", () =>
-                          clockOut({
-                            assignmentId: assignment._id,
-                            cleanerNotes: note.trim() || undefined,
-                          })
-                        )
-                      }
-                      styles={styles}
-                      disabled={isSaving}
-                    />
-                  ) : null}
-                </View>
+                {item.category ? <Text style={styles.checkDetail}>{item.category}</Text> : null}
               </View>
-            );
-          })}
-      </View>
-    </SurfaceCard>
+            </Pressable>
+          ))}
+        </View>
+      </SurfaceCard>
+    ) : null;
+
+  return (
+    <>
+      <SurfaceCard styles={styles}>
+        <SecondaryCTA title="Back to Assignments" onPress={onBack} styles={styles} />
+      </SurfaceCard>
+
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Job Details</Text>
+        <DetailRow styles={styles} label="Service Type" value={booking?.serviceType?.replace(/_/g, " ") ?? "N/A"} />
+        <DetailRow styles={styles} label="Date" value={booking?.serviceDate ?? "N/A"} />
+        {booking?.serviceWindowStart && booking?.serviceWindowEnd ? (
+          <DetailRow styles={styles} label="Time Window" value={`${booking.serviceWindowStart} - ${booking.serviceWindowEnd}`} />
+        ) : null}
+        {booking?.estimatedDurationMinutes ? (
+          <DetailRow styles={styles} label="Est. Duration" value={`${booking.estimatedDurationMinutes} min`} />
+        ) : null}
+        {booking?.customerName ? <DetailRow styles={styles} label="Customer" value={booking.customerName} /> : null}
+        {locationParts ? <DetailRow styles={styles} label="Address" value={locationParts} /> : null}
+        {booking?.notes ? <DetailRow styles={styles} label="Booking Notes" value={booking.notes} /> : null}
+        <DetailRow styles={styles} label="Status" value={assignment.status.replace(/_/g, " ")} />
+        <DetailRow styles={styles} label="Role" value={assignment.role} />
+      </SurfaceCard>
+      {assignment.status === "in_progress" ? checklistCard : null}
+
+      <SurfaceCard styles={styles}>
+        <Text style={styles.sectionTitle}>Actions</Text>
+        <TextInput
+          value={cleanerNotes}
+          onChangeText={setCleanerNotes}
+          placeholder="Cleaner notes (optional)"
+          placeholderTextColor={styles.subtitle.color}
+          style={styles.input}
+        />
+        <View style={styles.actionRow}>
+          {assignment.status === "pending" ? (
+            <>
+              <PrimaryCTA
+                title={isSaving ? "Saving..." : "Accept"}
+                onPress={() =>
+                  runAction("accept", "Assignment accepted", () =>
+                    respondToAssignment({
+                      assignmentId: assignment._id,
+                      response: "accepted",
+                      cleanerNotes: cleanerNotes.trim() || undefined,
+                    })
+                  )
+                }
+                styles={styles}
+                disabled={isSaving}
+              />
+              <SecondaryCTA
+                title={isSaving ? "Saving..." : "Decline"}
+                onPress={() =>
+                  runAction("decline", "Assignment declined", () =>
+                    respondToAssignment({
+                      assignmentId: assignment._id,
+                      response: "declined",
+                      cleanerNotes: cleanerNotes.trim() || undefined,
+                    })
+                  )
+                }
+                styles={styles}
+                disabled={isSaving}
+              />
+            </>
+          ) : null}
+
+          {assignment.status === "accepted" ? (
+            <PrimaryCTA
+              title={isSaving ? "Saving..." : "Confirm"}
+              onPress={() =>
+                runAction("confirm", "Assignment confirmed", () =>
+                  confirmAssignment({ assignmentId: assignment._id })
+                )
+              }
+              styles={styles}
+              disabled={isSaving}
+            />
+          ) : null}
+
+          {assignment.status === "confirmed" ? (
+            <PrimaryCTA
+              title={isSaving ? "Saving..." : "Clock In"}
+              onPress={() =>
+                runAction("clockin", "Clocked in", () =>
+                  clockIn({ assignmentId: assignment._id })
+                )
+              }
+              styles={styles}
+              disabled={isSaving}
+            />
+          ) : null}
+
+          {assignment.status === "in_progress" ? (
+            <PrimaryCTA
+              title={isSaving ? "Saving..." : checklistComplete ? "Clock Out" : "Complete Checklist First"}
+              onPress={() =>
+                runAction("clockout", "Clocked out", () =>
+                  clockOut({
+                    assignmentId: assignment._id,
+                    cleanerNotes: cleanerNotes.trim() || undefined,
+                  })
+                )
+              }
+              styles={styles}
+              disabled={isSaving || !checklistComplete}
+            />
+          ) : null}
+        </View>
+        {assignment.status === "in_progress" && !checklistComplete ? (
+          <Text style={styles.errorText}>
+            Complete all checklist items before clocking out.
+          </Text>
+        ) : null}
+      </SurfaceCard>
+      {assignment.status !== "in_progress" ? checklistCard : null}
+    </>
   );
 }
 
-function TabBar({
-  styles,
-  activeTab,
-  onChange,
-}: {
-  styles: AppStyles;
-  activeTab: CleanerTab;
-  onChange: (tab: CleanerTab) => void;
-}) {
-  const tabs: Array<{ value: CleanerTab; label: string }> = [
-    { value: "overview", label: "Overview" },
-    { value: "qualifications", label: "Qualifications" },
-    { value: "availability", label: "Availability" },
-    { value: "assignments", label: "Assignments" },
-  ];
-
+function DetailRow({ styles, label, value }: { styles: AppStyles; label: string; value: string }) {
   return (
-    <SurfaceCard styles={styles}>
-      <View style={styles.tabRow}>
-        {tabs.map((tab) => (
-          <Pressable
-            key={tab.value}
-            onPress={() => onChange(tab.value)}
-            style={[styles.tabButton, activeTab === tab.value && styles.tabButtonActive]}
-          >
-            <Text style={[styles.tabButtonText, activeTab === tab.value && styles.tabButtonTextActive]}>
-              {tab.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </SurfaceCard>
-  );
-}
-
-function OptionGrid({
-  styles,
-  options,
-  selected,
-  onSelect,
-  disabledLookup,
-}: {
-  styles: AppStyles;
-  options: readonly string[];
-  selected: string;
-  onSelect: (value: string) => void;
-  disabledLookup?: Record<string, unknown>;
-}) {
-  return (
-    <View style={styles.optionWrap}>
-      {options.map((option) => {
-        const disabled = Boolean(disabledLookup?.[option]);
-        const isActive = selected === option;
-        return (
-          <Pressable
-            key={option}
-            onPress={() => onSelect(option)}
-            style={[
-              styles.optionChip,
-              isActive && styles.optionChipActive,
-              disabled && styles.optionChipDisabled,
-            ]}
-            disabled={disabled}
-          >
-            <Text style={[styles.optionChipText, isActive && styles.optionChipTextActive]}>{option}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-function MetricCard({ styles, label, value }: { styles: AppStyles; label: string; value: string }) {
-  return (
-    <View style={styles.metricCard}>
-      <Text style={styles.metricValue}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
 }
@@ -1505,22 +946,6 @@ function useAppTheme() {
   return { theme, styles, statusBarStyle };
 }
 
-function formatPayRate(baseRate: number, payType: string, currency = "USD") {
-  const normalizedType = payType.toLowerCase();
-  if (normalizedType === "commission") {
-    return `${baseRate}%`;
-  }
-
-  const money = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
-  }).format(baseRate / 100);
-
-  if (normalizedType === "hourly") return `${money}/hr`;
-  if (normalizedType === "per_job") return `${money}/job`;
-  return money;
-}
-
 function getErrorMessage(error: unknown): string {
   if (typeof error === "object" && error !== null && "errors" in error) {
     const errors = (error as { errors?: Array<{ longMessage?: string; message?: string }> }).errors;
@@ -1590,6 +1015,18 @@ function createStyles(theme: ThemeTokens) {
       elevation: 2,
     },
     header: { gap: 8 },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    headerName: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.foreground,
+      flex: 1,
+    },
     title: {
       fontSize: 30,
       fontWeight: "700",
@@ -1653,34 +1090,6 @@ function createStyles(theme: ThemeTokens) {
       color: theme.secondaryForeground,
       fontWeight: "600",
     },
-    tabRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-    },
-    tabButton: {
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-    },
-    tabButtonActive: {
-      borderColor: theme.ring,
-      backgroundColor: theme.secondary,
-    },
-    tabButtonText: {
-      color: theme.mutedForeground,
-      fontWeight: "700",
-      fontSize: 13,
-    },
-    tabButtonTextActive: {
-      color: theme.secondaryForeground,
-    },
-    checkList: {
-      gap: 10,
-    },
     checkItem: {
       flexDirection: "row",
       alignItems: "flex-start",
@@ -1704,70 +1113,6 @@ function createStyles(theme: ThemeTokens) {
       fontSize: 13,
       lineHeight: 18,
       color: theme.mutedForeground,
-    },
-    metricGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 10,
-    },
-    metricCard: {
-      minWidth: 120,
-      flexGrow: 1,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      padding: 12,
-      gap: 4,
-    },
-    metricValue: {
-      fontSize: 24,
-      fontWeight: "800",
-      color: theme.cardForeground,
-    },
-    metricLabel: {
-      fontSize: 12,
-      color: theme.mutedForeground,
-    },
-    validationSuccess: {
-      color: theme.primary,
-      fontSize: 14,
-      lineHeight: 20,
-      fontWeight: "600",
-    },
-    validationError: {
-      color: theme.destructive,
-      fontSize: 14,
-      lineHeight: 20,
-      fontWeight: "600",
-    },
-    optionWrap: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-    },
-    optionChip: {
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-    },
-    optionChipActive: {
-      borderColor: theme.ring,
-      backgroundColor: theme.secondary,
-    },
-    optionChipDisabled: {
-      opacity: 0.45,
-    },
-    optionChipText: {
-      color: theme.mutedForeground,
-      fontSize: 12,
-      fontWeight: "700",
-    },
-    optionChipTextActive: {
-      color: theme.secondaryForeground,
     },
     listColumn: {
       gap: 10,
@@ -1802,37 +1147,6 @@ function createStyles(theme: ThemeTokens) {
       flexWrap: "wrap",
       gap: 8,
       alignItems: "center",
-    },
-    availabilityGrid: {
-      gap: 10,
-    },
-    dayCard: {
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border,
-      backgroundColor: theme.muted,
-      padding: 12,
-      gap: 8,
-    },
-    dayTitle: {
-      color: theme.cardForeground,
-      fontSize: 14,
-      fontWeight: "700",
-    },
-    dayTime: {
-      color: theme.mutedForeground,
-      fontSize: 13,
-    },
-    editorRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 10,
-      alignItems: "flex-end",
-    },
-    timeInputGroup: {
-      minWidth: 140,
-      flexGrow: 1,
-      gap: 6,
     },
     socialSection: {
       gap: 10,
@@ -1960,6 +1274,25 @@ function createStyles(theme: ThemeTokens) {
       color: theme.mutedForeground,
       fontSize: 14,
       lineHeight: 20,
+    },
+    detailRow: {
+      flexDirection: "row" as const,
+      justifyContent: "space-between" as const,
+      alignItems: "flex-start" as const,
+      gap: 12,
+      paddingVertical: 4,
+    },
+    detailLabel: {
+      fontSize: 13,
+      fontWeight: "600" as const,
+      color: theme.mutedForeground,
+      minWidth: 100,
+    },
+    detailValue: {
+      fontSize: 14,
+      color: theme.cardForeground,
+      flex: 1,
+      textAlign: "right" as const,
     },
   });
 }
