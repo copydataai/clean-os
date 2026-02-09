@@ -406,6 +406,7 @@ const customers = defineTable({
   firstName: v.string(),
   lastName: v.string(),
   email: v.string(),
+  emailNormalized: v.optional(v.string()),
   phone: v.optional(v.string()),
   alternatePhone: v.optional(v.string()),
 
@@ -443,6 +444,7 @@ const customers = defineTable({
   updatedAt: v.number(),
 })
   .index("by_email", ["email"])
+  .index("by_email_normalized", ["emailNormalized"])
   .index("by_organization", ["organizationId"])
   .index("by_status", ["status"])
   .index("by_stripe_id", ["stripeCustomerId"]);
