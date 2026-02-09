@@ -11,6 +11,7 @@ const modules: Record<string, () => Promise<any>> = {
   "../bookingDb.ts": () => import("../bookingDb"),
   "../bookings.ts": () => import("../bookings"),
   "../cleaners.ts": () => import("../cleaners"),
+  "../customers.ts": () => import("../customers"),
 };
 
 async function insertBooking(
@@ -378,6 +379,56 @@ describe.sequential("booking state machine", () => {
     expect(preBookingStage?.operationalStatus).toBeNull();
   });
 
+  it("recomputes customer stats on completed/charged transitions", async () => {
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+
+    const customerId = await t.run(async (ctx) => {
+      return await ctx.db.insert("customers", {
+        firstName: "Stats",
+        lastName: "Hook",
+        email: "hook@example.com",
+        emailNormalized: "hook@example.com",
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const bookingId = await t.run(async (ctx) => {
+      return await ctx.db.insert("bookings", {
+        email: "hook@example.com",
+        customerName: "Stats Hook",
+        customerId,
+        status: "in_progress",
+        amount: 3600,
+        serviceDate: "2026-02-09",
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    await t.mutation(internal.bookingStateMachine.transitionBookingStatus, {
+      bookingId,
+      toStatus: "completed",
+      source: "test",
+    });
+
+    let customer = await t.run(async (ctx) => ctx.db.get(customerId));
+    expect(customer?.totalBookings).toBe(1);
+    expect(customer?.totalSpent).toBe(3600);
+
+    await t.mutation(internal.bookingStateMachine.transitionBookingStatus, {
+      bookingId,
+      toStatus: "charged",
+      source: "test",
+    });
+
+    customer = await t.run(async (ctx) => ctx.db.get(customerId));
+    expect(customer?.totalBookings).toBe(1);
+    expect(customer?.totalSpent).toBe(3600);
+  });
+
   it("lists unified lifecycle rows with filtering and cursor pagination", async () => {
     const t = convexTest(schema, modules);
     const base = Date.now();
@@ -426,7 +477,7 @@ describe.sequential("booking state machine", () => {
       cursor: firstPage.nextCursor ?? undefined,
     });
     expect(secondPage.rows.length).toBeGreaterThanOrEqual(1);
-    expect(secondPage.rows.some((row) => row.rowType === "booking")).toBe(true);
+    expect(secondPage.rows.some((row: any) => row.rowType === "booking")).toBe(true);
 
     const filtered = await t.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
       rowType: "booking",
