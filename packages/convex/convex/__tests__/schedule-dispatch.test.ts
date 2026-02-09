@@ -12,6 +12,7 @@ const modules: Record<string, () => Promise<any>> = {
   "../bookings.ts": () => import("../bookings"),
   "../cleaners.ts": () => import("../cleaners"),
   "../schedule.ts": () => import("../schedule"),
+  "../customers.ts": () => import("../customers"),
 };
 
 describe.sequential("schedule dispatch query", () => {
@@ -76,10 +77,10 @@ describe.sequential("schedule dispatch query", () => {
 
     const dispatch = await t.query(api.schedule.getDispatchDay, { date });
     const bookingWithChecklist = dispatch.bookings.find(
-      (booking) => booking._id === bookingWithChecklistId
+      (booking: any) => booking._id === bookingWithChecklistId
     );
     const bookingWithoutChecklist = dispatch.bookings.find(
-      (booking) => booking._id === bookingWithoutChecklistId
+      (booking: any) => booking._id === bookingWithoutChecklistId
     );
 
     expect(bookingWithChecklist).toBeTruthy();

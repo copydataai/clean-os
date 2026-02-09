@@ -10,6 +10,7 @@ const modules: Record<string, () => Promise<any>> = {
   "../quotes.ts": () => import("../quotes"),
   "../quoteRequests.ts": () => import("../quoteRequests"),
   "../bookingRequests.ts": () => import("../bookingRequests"),
+  "../customers.ts": () => import("../customers"),
 };
 
 let quoteNumberCounter = 10000;

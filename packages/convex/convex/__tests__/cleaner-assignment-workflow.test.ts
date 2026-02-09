@@ -11,6 +11,7 @@ const modules: Record<string, () => Promise<any>> = {
   "../bookingDb.ts": () => import("../bookingDb"),
   "../bookings.ts": () => import("../bookings"),
   "../cleaners.ts": () => import("../cleaners"),
+  "../customers.ts": () => import("../customers"),
 };
 
 async function insertScheduledBooking(t: ReturnType<typeof convexTest>) {
