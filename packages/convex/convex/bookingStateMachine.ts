@@ -252,6 +252,19 @@ export const transitionBookingStatus = internalMutation({
       createdAt: now,
     });
 
+    const affectsCustomerStats =
+      (fromStatus === "completed" ||
+        fromStatus === "charged" ||
+        toStatus === "completed" ||
+        toStatus === "charged") &&
+      Boolean(booking.customerId);
+
+    if (affectsCustomerStats && booking.customerId) {
+      await ctx.runMutation(internal.customers.recomputeStatsInternal, {
+        customerId: booking.customerId,
+      });
+    }
+
     return {
       bookingId: args.bookingId,
       fromStatus,
