@@ -14,6 +14,10 @@ import {
   getServiceLabel,
   getTermsSnapshot,
 } from "./quoteContent";
+import {
+  assertRecordInActiveOrg,
+  requireActiveOrganization,
+} from "./lib/orgContext";
 
 function normalize(value?: string | null): string {
   return (value ?? "")
@@ -35,6 +39,7 @@ function computeMoney(args: {
 
 async function getSuggestedPriceInternal(
   ctx: any,
+  organizationId?: Id<"organizations">,
   serviceType?: string | null,
   frequency?: string | null,
   squareFootage?: number | null
@@ -43,10 +48,17 @@ async function getSuggestedPriceInternal(
   const frequencyNorm = normalize(frequency);
   const sqft = squareFootage ?? 0;
 
-  const activeRules = await ctx.db
-    .query("quotePricingRules")
-    .withIndex("by_active", (q: any) => q.eq("isActive", true))
-    .collect();
+  const activeRules = organizationId
+    ? await ctx.db
+        .query("quotePricingRules")
+        .withIndex("by_org_active", (q: any) =>
+          q.eq("organizationId", organizationId).eq("isActive", true)
+        )
+        .collect()
+    : await ctx.db
+        .query("quotePricingRules")
+        .withIndex("by_active", (q: any) => q.eq("isActive", true))
+        .collect();
 
   const matches = activeRules
     .filter((rule: any) => {
@@ -143,24 +155,49 @@ function computeUrgency(
   return { urgencyLevel: "normal", hoursUntilExpiry };
 }
 
-async function getProfileByKeyOrDefault(ctx: any, key?: string | null) {
+async function getProfileByKeyOrDefault(
+  ctx: any,
+  organizationId?: Id<"organizations">,
+  key?: string | null
+) {
   if (key) {
-    const byKey = await ctx.db
-      .query("quoteProfiles")
-      .withIndex("by_key", (q: any) => q.eq("key", key))
-      .first();
+    const byKey = organizationId
+      ? await ctx.db
+          .query("quoteProfiles")
+          .withIndex("by_org_key", (q: any) =>
+            q.eq("organizationId", organizationId).eq("key", key)
+          )
+          .first()
+      : await ctx.db
+          .query("quoteProfiles")
+          .withIndex("by_key", (q: any) => q.eq("key", key))
+          .first();
     if (byKey) {
       return byKey;
     }
   }
 
-  const defaultProfile = await ctx.db
-    .query("quoteProfiles")
-    .withIndex("by_key", (q: any) => q.eq("key", "kathy_clean_default"))
-    .first();
+  const defaultProfile = organizationId
+    ? await ctx.db
+        .query("quoteProfiles")
+        .withIndex("by_org_key", (q: any) =>
+          q.eq("organizationId", organizationId).eq("key", "kathy_clean_default")
+        )
+        .first()
+    : await ctx.db
+        .query("quoteProfiles")
+        .withIndex("by_key", (q: any) => q.eq("key", "kathy_clean_default"))
+        .first();
 
   if (defaultProfile) {
     return defaultProfile;
+  }
+
+  if (organizationId) {
+    return await ctx.db
+      .query("quoteProfiles")
+      .withIndex("by_organization", (q: any) => q.eq("organizationId", organizationId))
+      .first();
   }
 
   return await ctx.db.query("quoteProfiles").first();
@@ -171,8 +208,14 @@ export const ensureDraftFromRequest = mutation({
     quoteRequestId: v.id("quoteRequests"),
   },
   handler: async (ctx, args): Promise<Id<"quotes">> => {
-    await ctx.runMutation(internal.quoteProfiles.ensureDefaultProfile, {});
-    await ctx.runMutation(internal.quotePricing.ensureDefaultRules, {});
+    const { organization } = await requireActiveOrganization(ctx);
+
+    await ctx.runMutation(internal.quoteProfiles.ensureDefaultProfile, {
+      organizationId: organization._id,
+    });
+    await ctx.runMutation(internal.quotePricing.ensureDefaultRules, {
+      organizationId: organization._id,
+    });
     await ctx.runMutation(internal.sequences.ensureQuoteNumberSequence, {
       startAt: 989,
     });
@@ -181,16 +224,19 @@ export const ensureDraftFromRequest = mutation({
     if (!quoteRequest) {
       throw new Error("Quote request not found");
     }
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
 
     const existing = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
     if (existing) {
       return existing._id;
     }
 
-    const profile = await getProfileByKeyOrDefault(ctx);
+    const profile = await getProfileByKeyOrDefault(ctx, organization._id);
     if (!profile) {
       throw new Error("Quote profile not found");
     }
@@ -198,6 +244,7 @@ export const ensureDraftFromRequest = mutation({
     const quoteNumber: number = await ctx.runMutation(internal.sequences.nextQuoteNumber, {});
     const suggested = await getSuggestedPriceInternal(
       ctx,
+      organization._id,
       quoteRequest.serviceType ?? quoteRequest.service,
       quoteRequest.frequency,
       quoteRequest.squareFootage
@@ -214,6 +261,7 @@ export const ensureDraftFromRequest = mutation({
     const now = Date.now();
 
     const quoteId: Id<"quotes"> = await ctx.db.insert("quotes", {
+      organizationId: organization._id,
       quoteRequestId: args.quoteRequestId,
       bookingRequestId: quoteRequest.bookingRequestId ?? undefined,
       quoteNumber,
@@ -226,6 +274,7 @@ export const ensureDraftFromRequest = mutation({
 
     const serviceLabel = getServiceLabel(quoteRequest.serviceType ?? quoteRequest.service);
     const revisionId = await ctx.db.insert("quoteRevisions", {
+      organizationId: organization._id,
       quoteId,
       revisionNumber: 1,
       source: suggested.source,
@@ -271,9 +320,12 @@ export const saveDraftRevision = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
     if (!quote) {
       throw new Error("Quote not found. Open quote detail first.");
@@ -308,6 +360,7 @@ export const saveDraftRevision = mutation({
         : "manual");
 
     const revisionId = await ctx.db.insert("quoteRevisions", {
+      organizationId: organization._id,
       quoteId: quote._id,
       revisionNumber,
       source,
@@ -344,9 +397,12 @@ export const listRevisions = query({
     quoteRequestId: v.id("quoteRequests"),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
     if (!quote) {
       return [];
@@ -366,14 +422,18 @@ export const getQuoteDetailByRequestId = query({
     quoteRequestId: v.id("quoteRequests"),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const quoteRequest = await ctx.db.get(args.quoteRequestId);
     if (!quoteRequest) {
       return null;
     }
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
 
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
 
     const bookingRequest = quoteRequest.bookingRequestId
@@ -381,6 +441,7 @@ export const getQuoteDetailByRequestId = query({
       : null;
     const pricingSuggestion = await getSuggestedPriceInternal(
       ctx,
+      organization._id,
       quoteRequest.serviceType ?? quoteRequest.service,
       quoteRequest.frequency,
       quoteRequest.squareFootage
@@ -408,7 +469,11 @@ export const getQuoteDetailByRequestId = query({
     const currentRevision = quote.currentRevisionId
       ? await ctx.db.get(quote.currentRevisionId)
       : revisions[0] ?? null;
-    const profile = await getProfileByKeyOrDefault(ctx, quote.profileKey);
+    const profile = await getProfileByKeyOrDefault(
+      ctx,
+      organization._id,
+      quote.profileKey
+    );
     const isExpired =
       Boolean(quote.expiresAt) &&
       quote.status === "sent" &&
@@ -432,7 +497,11 @@ export const getRevisionPdfUrl = query({
     revisionId: v.id("quoteRevisions"),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const revision = await ctx.db.get(args.revisionId);
+    if (revision) {
+      assertRecordInActiveOrg(revision.organizationId, organization._id);
+    }
     if (!revision?.pdfStorageId) {
       return null;
     }
@@ -445,15 +514,22 @@ export const listQuoteBoard = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 50;
     const now = Date.now();
-    const requests = await ctx.db.query("quoteRequests").order("desc").take(limit);
+    const requests = await ctx.db
+      .query("quoteRequests")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .order("desc")
+      .take(limit);
 
     const rows = await Promise.all(
       requests.map(async (request) => {
         const quote = await ctx.db
           .query("quotes")
-          .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", request._id))
+          .withIndex("by_org_quote_request", (q) =>
+            q.eq("organizationId", organization._id).eq("quoteRequestId", request._id)
+          )
           .first();
 
         if (!quote) {
@@ -508,14 +584,18 @@ export const moveBoardCard = mutation({
     targetColumn: v.union(v.literal("requested"), v.literal("quoted"), v.literal("confirmed")),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const request = await ctx.db.get(args.quoteRequestId);
     if (!request) {
       throw new Error("Quote request not found");
     }
+    assertRecordInActiveOrg(request.organizationId, organization._id);
 
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
 
     const sourceBoardColumn: BoardColumn = quote
@@ -555,7 +635,11 @@ export const moveBoardCard = mutation({
         patch.sentAt = now;
       }
       if (!quote.expiresAt) {
-        const profile = await getProfileByKeyOrDefault(ctx, quote.profileKey);
+        const profile = await getProfileByKeyOrDefault(
+          ctx,
+          organization._id,
+          quote.profileKey
+        );
         const validityDays = profile?.quoteValidityDays ?? 30;
         patch.expiresAt = now + validityDays * 24 * 60 * 60 * 1000;
       }
@@ -575,9 +659,12 @@ export const refreshExpiryStatus = mutation({
     quoteRequestId: v.id("quoteRequests"),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
     if (!quote) {
       return null;
@@ -702,7 +789,9 @@ export const createQuoteReminderEvent = internalMutation({
     sentAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const quote = await ctx.db.get(args.quoteId);
     return await ctx.db.insert("quoteReminderEvents", {
+      organizationId: quote?.organizationId,
       ...args,
       createdAt: Date.now(),
     });
@@ -734,7 +823,11 @@ export const getQuoteByRequestIdInternal = internalQuery({
     const currentRevision = quote.currentRevisionId
       ? await ctx.db.get(quote.currentRevisionId)
       : null;
-    const profile = await getProfileByKeyOrDefault(ctx, quote.profileKey);
+    const profile = await getProfileByKeyOrDefault(
+      ctx,
+      quote.organizationId,
+      quote.profileKey
+    );
 
     return {
       quote,
@@ -768,6 +861,7 @@ export const markRevisionSendResult = internalMutation({
 
     const now = Date.now();
     const patch: any = {
+      organizationId: quote.organizationId,
       sendStatus: args.status,
       sendError: args.errorMessage,
       pdfStorageId: args.pdfStorageId ?? revision.pdfStorageId,
@@ -779,7 +873,11 @@ export const markRevisionSendResult = internalMutation({
     await ctx.db.patch(args.revisionId, patch);
 
     if (args.status === "sent") {
-      const profile = await getProfileByKeyOrDefault(ctx, quote.profileKey);
+      const profile = await getProfileByKeyOrDefault(
+        ctx,
+        quote.organizationId,
+        quote.profileKey
+      );
       const validityDays = profile?.quoteValidityDays ?? 30;
       const expiresAt = now + validityDays * 24 * 60 * 60 * 1000;
       await ctx.db.patch(args.quoteId, {
@@ -815,6 +913,15 @@ export const sendRevision = action({
     storageId: Id<"_storage">;
     downloadUrl: string | null;
   }> => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const quoteRequest = await ctx.runQuery(internal.quoteRequests.getQuoteRequestById, {
+      id: args.quoteRequestId,
+    });
+    if (!quoteRequest) {
+      throw new Error("Quote request not found");
+    }
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
+
     return await ctx.runAction(internal.quoteSendActions.sendRevisionNode, {
       quoteRequestId: args.quoteRequestId,
       revisionId: args.revisionId,
@@ -831,6 +938,15 @@ export const sendManualReminder = action({
     status: "sent" | "failed" | "skipped" | "suppressed" | "missing_context";
     idempotencyKey: string;
   }> => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const quoteRequest = await ctx.runQuery(internal.quoteRequests.getQuoteRequestById, {
+      id: args.quoteRequestId,
+    });
+    if (!quoteRequest) {
+      throw new Error("Quote request not found");
+    }
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
+
     return await ctx.runAction(internal.quoteReminderActions.sendManualReminderInternal, {
       quoteRequestId: args.quoteRequestId,
     });
@@ -842,9 +958,12 @@ export const getQuoteReminderTimeline = query({
     quoteRequestId: v.id("quoteRequests"),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", args.quoteRequestId))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", args.quoteRequestId)
+      )
       .first();
     if (!quote) {
       return [];
@@ -852,7 +971,9 @@ export const getQuoteReminderTimeline = query({
 
     const events = await ctx.db
       .query("quoteReminderEvents")
-      .withIndex("by_quote_created", (q) => q.eq("quoteId", quote._id))
+      .withIndex("by_org_quote_created", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteId", quote._id)
+      )
       .collect();
 
     return events.sort((a, b) => b.createdAt - a.createdAt);
@@ -864,14 +985,21 @@ export const getQuoteFunnelMetrics = query({
     days: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const days = args.days ?? 30;
     const now = Date.now();
     const cutoff = now - days * 24 * 60 * 60 * 1000;
 
-    const quoteRequests = (await ctx.db.query("quoteRequests").collect()).filter(
-      (request) => request.createdAt >= cutoff
-    );
-    const quotes = await ctx.db.query("quotes").collect();
+    const quoteRequests = (
+      await ctx.db
+        .query("quoteRequests")
+        .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+        .collect()
+    ).filter((request) => request.createdAt >= cutoff);
+    const quotes = await ctx.db
+      .query("quotes")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .collect();
     const quotesByRequestId = new Map<string, (typeof quotes)[number]>();
     for (const quote of quotes) {
       if (!quotesByRequestId.has(quote.quoteRequestId)) {
@@ -936,6 +1064,15 @@ export const retrySendRevision = action({
     storageId: Id<"_storage">;
     downloadUrl: string | null;
   }> => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const quoteRequest = await ctx.runQuery(internal.quoteRequests.getQuoteRequestById, {
+      id: args.quoteRequestId,
+    });
+    if (!quoteRequest) {
+      throw new Error("Quote request not found");
+    }
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
+
     return await ctx.runAction(internal.quoteSendActions.retrySendRevisionNode, {
       quoteRequestId: args.quoteRequestId,
       revisionId: args.revisionId,

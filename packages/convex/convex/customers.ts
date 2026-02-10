@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { query, mutation, internalMutation } from "./_generated/server";
 import { Id, Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import {
+  assertRecordInActiveOrg,
+  requireActiveOrganization,
+  requireOrganizationAdmin,
+} from "./lib/orgContext";
 
 const CUSTOMER_SPEND_STATUSES = new Set(["completed", "charged"]);
 
@@ -387,39 +392,7 @@ async function recomputeCustomerStatsForId(
 }
 
 async function requireAdminActorUserId(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Authentication required for customer backfill");
-  }
-
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
-    .unique();
-  if (!user) {
-    throw new Error("Authenticated user record not found");
-  }
-
-  const memberships = await ctx.db
-    .query("organizationMemberships")
-    .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-    .collect();
-
-  const isAdmin = memberships.some((membership: { role?: string }) => {
-    const role = (membership.role ?? "").toLowerCase();
-    return (
-      role === "admin" ||
-      role === "owner" ||
-      role.endsWith(":admin") ||
-      role.endsWith(":owner") ||
-      role.includes("admin")
-    );
-  });
-
-  if (!isAdmin) {
-    throw new Error("Admin role required for customer backfill");
-  }
-
+  const { user } = await requireOrganizationAdmin(ctx);
   return user._id as Id<"users">;
 }
 
@@ -430,17 +403,27 @@ async function requireAdminActorUserId(ctx: any) {
 export const getById = query({
   args: { customerId: v.id("customers") },
   handler: async (ctx, { customerId }) => {
-    return await ctx.db.get(customerId);
+    const { organization } = await requireActiveOrganization(ctx);
+    const customer = await ctx.db.get(customerId);
+    if (!customer) {
+      return null;
+    }
+    assertRecordInActiveOrg(customer.organizationId, organization._id);
+    return customer;
   },
 });
 
 export const getByEmail = query({
   args: { email: v.string(), organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, { email, organizationId }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
+
     const candidates = await getCustomersByNormalizedEmail(
       ctx,
       normalizeEmailAddress(email),
-      organizationId
+      resolvedOrganizationId
     );
     if (candidates.length === 0) {
       return null;
@@ -455,33 +438,28 @@ export const list = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, { organizationId, status }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
     const tableQuery = ctx.db.query("customers");
 
-    if (organizationId) {
-      const customers = await tableQuery
-        .withIndex("by_organization", (q: any) => q.eq("organizationId", organizationId))
-        .collect();
-      if (status) {
-        return customers.filter((customer: any) => customer.status === status);
-      }
-      return customers;
-    }
-
+    const customers = await tableQuery
+      .withIndex("by_organization", (q: any) => q.eq("organizationId", resolvedOrganizationId))
+      .collect();
     if (status) {
-      return await tableQuery
-        .withIndex("by_status", (q: any) => q.eq("status", status))
-        .collect();
+      return customers.filter((customer: any) => customer.status === status);
     }
-
-    return await tableQuery.collect();
+    return customers;
   },
 });
 
 export const getWithDetails = query({
   args: { customerId: v.id("customers") },
   handler: async (ctx, { customerId }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const customer = await ctx.db.get(customerId);
     if (!customer) return null;
+    assertRecordInActiveOrg(customer.organizationId, organization._id);
 
     const [bookings, quoteRequests, bookingRequests] = await Promise.all([
       ctx.db
@@ -510,6 +488,13 @@ export const getWithDetails = query({
 export const getBookings = query({
   args: { customerId: v.id("customers") },
   handler: async (ctx, { customerId }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const customer = await ctx.db.get(customerId);
+    if (!customer) {
+      return [];
+    }
+    assertRecordInActiveOrg(customer.organizationId, organization._id);
+
     return await ctx.db
       .query("bookings")
       .withIndex("by_customer", (q: any) => q.eq("customerId", customerId))
@@ -520,6 +505,13 @@ export const getBookings = query({
 export const getQuoteRequests = query({
   args: { customerId: v.id("customers") },
   handler: async (ctx, { customerId }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const customer = await ctx.db.get(customerId);
+    if (!customer) {
+      return [];
+    }
+    assertRecordInActiveOrg(customer.organizationId, organization._id);
+
     return await ctx.db
       .query("quoteRequests")
       .withIndex("by_customer", (q: any) => q.eq("customerId", customerId))
@@ -530,10 +522,14 @@ export const getQuoteRequests = query({
 export const search = query({
   args: { query: v.string() },
   handler: async (ctx, { query: searchQuery }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const normalizedQuery = searchQuery.toLowerCase().trim();
     if (!normalizedQuery) return [];
 
-    const customers = await ctx.db.query("customers").collect();
+    const customers = await ctx.db
+      .query("customers")
+      .withIndex("by_organization", (q: any) => q.eq("organizationId", organization._id))
+      .collect();
 
     return customers.filter((customer: any) => {
       const fullName = `${customer.firstName} ${customer.lastName}`.toLowerCase();
@@ -546,11 +542,24 @@ export const search = query({
 export const getCustomerLinkingHealth = query({
   args: {},
   handler: async (ctx) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const [customers, quoteRequests, bookingRequests, bookings] = await Promise.all([
-      ctx.db.query("customers").collect(),
-      ctx.db.query("quoteRequests").collect(),
-      ctx.db.query("bookingRequests").collect(),
-      ctx.db.query("bookings").collect(),
+      ctx.db
+        .query("customers")
+        .withIndex("by_organization", (q: any) => q.eq("organizationId", organization._id))
+        .collect(),
+      ctx.db
+        .query("quoteRequests")
+        .withIndex("by_organization", (q: any) => q.eq("organizationId", organization._id))
+        .collect(),
+      ctx.db
+        .query("bookingRequests")
+        .withIndex("by_organization", (q: any) => q.eq("organizationId", organization._id))
+        .collect(),
+      ctx.db
+        .query("bookings")
+        .withIndex("by_organization", (q: any) => q.eq("organizationId", organization._id))
+        .collect(),
     ]);
 
     const duplicateTracker = new Map<string, number>();
@@ -599,8 +608,12 @@ export const create = mutation({
     internalNotes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = args.organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
+
     const normalizedEmail = normalizeEmailAddress(args.email);
-    const existing = await getCustomersByNormalizedEmail(ctx, normalizedEmail, args.organizationId);
+    const existing = await getCustomersByNormalizedEmail(ctx, normalizedEmail, resolvedOrganizationId);
     if (existing.length > 0) {
       throw new Error("A customer with this email already exists");
     }
@@ -608,6 +621,7 @@ export const create = mutation({
     const now = Date.now();
     return await ctx.db.insert("customers", {
       ...args,
+      organizationId: resolvedOrganizationId,
       email: args.email.trim(),
       emailNormalized: normalizedEmail,
       status: args.status ?? "lead",
@@ -636,10 +650,12 @@ export const update = mutation({
     internalNotes: v.optional(v.string()),
   },
   handler: async (ctx, { customerId, ...updates }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const customer = await ctx.db.get(customerId);
     if (!customer) {
       throw new Error("Customer not found");
     }
+    assertRecordInActiveOrg(customer.organizationId, organization._id);
 
     if (updates.email && updates.email !== customer.email) {
       const normalizedEmail = normalizeEmailAddress(updates.email);

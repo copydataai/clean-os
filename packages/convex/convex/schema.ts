@@ -188,11 +188,13 @@ const bookingRequests = defineTable({
   .index("by_org_email", ["organizationId", "email"])
   .index("by_organization", ["organizationId"])
   .index("by_status", ["status"])
+  .index("by_org_status", ["organizationId", "status"])
   .index("by_request_response_id", ["requestResponseId"])
   .index("by_confirmation_response_id", ["confirmationResponseId"])
   .index("by_customer", ["customerId"]);
 
 const quoteRequests = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   firstName: v.optional(v.string()),
   lastName: v.optional(v.string()),
   email: v.optional(v.string()),
@@ -220,10 +222,13 @@ const quoteRequests = defineTable({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
+  .index("by_organization", ["organizationId"])
+  .index("by_org_request_status", ["organizationId", "requestStatus"])
   .index("by_email", ["email"])
   .index("by_customer", ["customerId"]);
 
 const quoteProfiles = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   key: v.string(),
   displayName: v.string(),
   legalName: v.string(),
@@ -243,9 +248,12 @@ const quoteProfiles = defineTable({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
+  .index("by_organization", ["organizationId"])
+  .index("by_org_key", ["organizationId", "key"])
   .index("by_key", ["key"]);
 
 const quotePricingRules = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   serviceType: v.string(),
   frequency: v.string(),
   minSqft: v.number(),
@@ -256,10 +264,14 @@ const quotePricingRules = defineTable({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
+  .index("by_organization", ["organizationId"])
+  .index("by_org_active", ["organizationId", "isActive"])
+  .index("by_org_service_frequency", ["organizationId", "serviceType", "frequency"])
   .index("by_service_frequency", ["serviceType", "frequency"])
   .index("by_active", ["isActive"]);
 
 const quotes = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   quoteRequestId: v.id("quoteRequests"),
   bookingRequestId: v.optional(v.id("bookingRequests")),
   quoteNumber: v.number(),
@@ -275,11 +287,15 @@ const quotes = defineTable({
   createdAt: v.number(),
   updatedAt: v.number(),
 })
+  .index("by_organization", ["organizationId"])
+  .index("by_org_quote_request", ["organizationId", "quoteRequestId"])
+  .index("by_org_status", ["organizationId", "status"])
   .index("by_quote_request", ["quoteRequestId"])
   .index("by_quote_number", ["quoteNumber"])
   .index("by_status", ["status"]);
 
 const quoteRevisions = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   quoteId: v.id("quotes"),
   revisionNumber: v.number(),
   source: v.string(), // grid_auto|manual_override|manual
@@ -329,10 +345,13 @@ const quoteRevisions = defineTable({
   sentAt: v.optional(v.number()),
   createdAt: v.number(),
 })
+  .index("by_organization", ["organizationId"])
+  .index("by_org_quote", ["organizationId", "quoteId"])
   .index("by_quote", ["quoteId"])
   .index("by_quote_revision", ["quoteId", "revisionNumber"]);
 
 const quoteReminderEvents = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   quoteId: v.id("quotes"),
   quoteRequestId: v.id("quoteRequests"),
   bookingRequestId: v.optional(v.id("bookingRequests")),
@@ -346,6 +365,8 @@ const quoteReminderEvents = defineTable({
   sentAt: v.optional(v.number()),
   createdAt: v.number(),
 })
+  .index("by_organization", ["organizationId"])
+  .index("by_org_quote_created", ["organizationId", "quoteId", "createdAt"])
   .index("by_quote_created", ["quoteId", "createdAt"])
   .index("by_quote_stage", ["quoteId", "stage"])
   .index("by_idempotency_key", ["idempotencyKey"]);

@@ -370,6 +370,7 @@ export const handleTallyRequestWebhook = internalAction({
     const quoteRequestId = await ctx.runMutation(
       internal.quoteRequests.createQuoteRequest,
       {
+        organizationId: organization?._id,
         firstName: parsedFields.firstName,
         lastName: parsedFields.lastName,
         email: parsedFields.email,

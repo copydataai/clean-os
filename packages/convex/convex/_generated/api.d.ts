@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as __tests___helpers_orgTestUtils from "../__tests__/helpers/orgTestUtils.js";
 import type * as bookingDb from "../bookingDb.js";
 import type * as bookingLifecycle from "../bookingLifecycle.js";
 import type * as bookingRequests from "../bookingRequests.js";
@@ -33,11 +34,13 @@ import type * as http from "../http.js";
 import type * as httpHandlers_clerkActions from "../httpHandlers/clerkActions.js";
 import type * as httpHandlers_stripeActions from "../httpHandlers/stripeActions.js";
 import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js";
+import type * as lib_orgContext from "../lib/orgContext.js";
 import type * as payments from "../payments.js";
 import type * as paymentsNode from "../paymentsNode.js";
 import type * as pdf_quotePdf from "../pdf/quotePdf.js";
 import type * as queries from "../queries.js";
 import type * as quoteContent from "../quoteContent.js";
+import type * as quoteOrgMigration from "../quoteOrgMigration.js";
 import type * as quotePricing from "../quotePricing.js";
 import type * as quoteProfiles from "../quoteProfiles.js";
 import type * as quoteReminderActions from "../quoteReminderActions.js";
@@ -56,6 +59,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "__tests__/helpers/orgTestUtils": typeof __tests___helpers_orgTestUtils;
   bookingDb: typeof bookingDb;
   bookingLifecycle: typeof bookingLifecycle;
   bookingRequests: typeof bookingRequests;
@@ -81,11 +85,13 @@ declare const fullApi: ApiFromModules<{
   "httpHandlers/clerkActions": typeof httpHandlers_clerkActions;
   "httpHandlers/stripeActions": typeof httpHandlers_stripeActions;
   "httpHandlers/tallyActions": typeof httpHandlers_tallyActions;
+  "lib/orgContext": typeof lib_orgContext;
   payments: typeof payments;
   paymentsNode: typeof paymentsNode;
   "pdf/quotePdf": typeof pdf_quotePdf;
   queries: typeof queries;
   quoteContent: typeof quoteContent;
+  quoteOrgMigration: typeof quoteOrgMigration;
   quotePricing: typeof quotePricing;
   quoteProfiles: typeof quoteProfiles;
   quoteReminderActions: typeof quoteReminderActions;

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { requireActiveOrganization } from "./lib/orgContext";
 
 const DEFAULT_PROFILE_KEY = "kathy_clean_default";
 
@@ -23,12 +24,21 @@ const DEFAULT_PROFILE = {
 } as const;
 
 export const ensureDefaultProfile = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const existing = await ctx.db
-      .query("quoteProfiles")
-      .withIndex("by_key", (q) => q.eq("key", DEFAULT_PROFILE_KEY))
-      .first();
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const existing = args.organizationId
+      ? await ctx.db
+          .query("quoteProfiles")
+          .withIndex("by_org_key", (q) =>
+            q.eq("organizationId", args.organizationId).eq("key", DEFAULT_PROFILE_KEY)
+          )
+          .first()
+      : await ctx.db
+          .query("quoteProfiles")
+          .withIndex("by_key", (q) => q.eq("key", DEFAULT_PROFILE_KEY))
+          .first();
 
     const now = Date.now();
     if (existing) {
@@ -36,6 +46,7 @@ export const ensureDefaultProfile = internalMutation({
     }
 
     return await ctx.db.insert("quoteProfiles", {
+      organizationId: args.organizationId,
       ...DEFAULT_PROFILE,
       createdAt: now,
       updatedAt: now,
@@ -46,16 +57,23 @@ export const ensureDefaultProfile = internalMutation({
 export const getActiveProfile = query({
   args: {},
   handler: async (ctx) => {
+    const { organization } = await requireActiveOrganization(ctx);
+
     const byKey = await ctx.db
       .query("quoteProfiles")
-      .withIndex("by_key", (q) => q.eq("key", DEFAULT_PROFILE_KEY))
+      .withIndex("by_org_key", (q) =>
+        q.eq("organizationId", organization._id).eq("key", DEFAULT_PROFILE_KEY)
+      )
       .first();
 
     if (byKey) {
       return byKey;
     }
 
-    return await ctx.db.query("quoteProfiles").first();
+    return await ctx.db
+      .query("quoteProfiles")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .first();
   },
 });
 
@@ -79,23 +97,33 @@ export const updateProfile = mutation({
     quoteValidityDays: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+
     let profile =
       (args.key
         ? await ctx.db
             .query("quoteProfiles")
-            .withIndex("by_key", (q) => q.eq("key", args.key!))
+            .withIndex("by_org_key", (q) =>
+              q.eq("organizationId", organization._id).eq("key", args.key!)
+            )
             .first()
         : null) ??
       (await ctx.db
         .query("quoteProfiles")
-        .withIndex("by_key", (q) => q.eq("key", DEFAULT_PROFILE_KEY))
+        .withIndex("by_org_key", (q) =>
+          q.eq("organizationId", organization._id).eq("key", DEFAULT_PROFILE_KEY)
+        )
         .first()) ??
-      (await ctx.db.query("quoteProfiles").first());
+      (await ctx.db
+        .query("quoteProfiles")
+        .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+        .first());
 
     const now = Date.now();
     if (!profile) {
       const key = args.key ?? DEFAULT_PROFILE_KEY;
       const id = await ctx.db.insert("quoteProfiles", {
+        organizationId: organization._id,
         key,
         displayName: args.displayName ?? DEFAULT_PROFILE.displayName,
         legalName: args.legalName ?? DEFAULT_PROFILE.legalName,
@@ -129,4 +157,3 @@ export const updateProfile = mutation({
     return profile;
   },
 });
-

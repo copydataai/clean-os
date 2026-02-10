@@ -9,6 +9,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
 
 const priorityValues = ["low", "normal", "high", "urgent"] as const;
 
@@ -129,8 +130,15 @@ export const getBookingsByDateRange = query({
     cleanerId: v.optional(v.id("cleaners")),
   },
   handler: async (ctx, { startDate, endDate, status, cleanerId }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     // If filtering by cleaner, get their assignments first.
     if (cleanerId) {
+      const cleaner = await ctx.db.get(cleanerId);
+      if (!cleaner) {
+        return [];
+      }
+      assertRecordInActiveOrg(cleaner.organizationId, organization._id);
+
       const assignments = await ctx.db
         .query("bookingAssignments")
         .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -142,6 +150,7 @@ export const getBookingsByDateRange = query({
       return bookings
         .filter((b): b is NonNullable<typeof b> => {
           if (!b || !b.serviceDate) return false;
+          if (b.organizationId !== organization._id) return false;
           if (status && b.status !== status) return false;
           return b.serviceDate >= startDate && b.serviceDate <= endDate;
         })
@@ -151,15 +160,17 @@ export const getBookingsByDateRange = query({
         }));
     }
 
-    let allBookings;
-    if (status) {
-      allBookings = await ctx.db
-        .query("bookings")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .collect();
-    } else {
-      allBookings = await ctx.db.query("bookings").collect();
-    }
+    const allBookings = status
+      ? await ctx.db
+          .query("bookings")
+          .withIndex("by_org_status", (q) =>
+            q.eq("organizationId", organization._id).eq("status", status)
+          )
+          .collect()
+      : await ctx.db
+          .query("bookings")
+          .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+          .collect();
 
     return allBookings.filter((b) => {
       if (!b.serviceDate) return false;
@@ -180,17 +191,38 @@ export const getDispatchDay = query({
     priority: v.optional(filterPriorityValidator),
   },
   handler: async (ctx, { date, status, cleanerId, assignmentState, priority }) => {
-    const dayBookings = status
-      ? await ctx.db
-          .query("bookings")
-          .withIndex("by_service_date_status", (q) =>
-            q.eq("serviceDate", date).eq("status", status)
-          )
-          .collect()
-      : await ctx.db
-          .query("bookings")
-          .withIndex("by_service_date", (q) => q.eq("serviceDate", date))
-          .collect();
+    const { organization } = await requireActiveOrganization(ctx);
+    if (cleanerId) {
+      const cleaner = await ctx.db.get(cleanerId);
+      if (!cleaner) {
+        return {
+          date,
+          totals: {
+            total: 0,
+            assigned: 0,
+            unassigned: 0,
+            missingLocation: 0,
+          },
+          bookings: [],
+          cleaners: [],
+        };
+      }
+      assertRecordInActiveOrg(cleaner.organizationId, organization._id);
+    }
+
+    const orgBookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .collect();
+    const dayBookings = orgBookings.filter((booking) => {
+      if (booking.serviceDate !== date) {
+        return false;
+      }
+      if (status && booking.status !== status) {
+        return false;
+      }
+      return true;
+    });
 
     const assignmentsByBooking = new Map<
       Id<"bookings">,
@@ -304,7 +336,9 @@ export const getDispatchDay = query({
 
     const activeCleaners = await ctx.db
       .query("cleaners")
-      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .withIndex("by_status_and_org", (q) =>
+        q.eq("status", "active").eq("organizationId", organization._id)
+      )
       .collect();
 
     const enrichedBookings = dayBookings
@@ -515,10 +549,12 @@ export const updateDispatchMeta = mutation({
     dispatchOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) {
       throw new Error("Booking not found");
     }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
 
     const updates: Record<string, string | number> = {};
     if (args.serviceDate !== undefined) {
@@ -570,6 +606,7 @@ export const reorderDispatch = mutation({
     orderedBookingIds: v.array(v.id("bookings")),
   },
   handler: async (ctx, { date, orderedBookingIds }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     if (orderedBookingIds.length === 0) {
       return { updated: 0 };
     }
@@ -584,6 +621,7 @@ export const reorderDispatch = mutation({
       if (!booking) {
         throw new Error("One or more bookings were not found");
       }
+      assertRecordInActiveOrg(booking.organizationId, organization._id);
       if (booking.serviceDate !== date) {
         throw new Error("All reordered bookings must belong to the provided date");
       }
@@ -605,11 +643,18 @@ export const reorderDispatch = mutation({
 export const getBackfillCandidates = internalQuery({
   args: {
     limit: v.number(),
+    organizationId: v.optional(v.id("organizations")),
   },
-  handler: async (ctx, { limit }) => {
+  handler: async (ctx, { limit, organizationId }) => {
     const sampleSize = Math.max(limit * 5, 200);
     const staleThreshold = 90 * 24 * 60 * 60 * 1000;
-    const allBookings = await ctx.db.query("bookings").order("desc").take(sampleSize);
+    const allBookings = organizationId
+      ? await ctx.db
+          .query("bookings")
+          .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
+          .order("desc")
+          .take(sampleSize)
+      : await ctx.db.query("bookings").order("desc").take(sampleSize);
 
     const customerCache = new Map<Id<"customers">, Doc<"customers"> | null>();
     const requestCache = new Map<Id<"bookingRequests">, Doc<"bookingRequests"> | null>();
@@ -728,6 +773,7 @@ async function runBackfill(
     runQuery: (...args: any[]) => Promise<any>;
     runMutation: (...args: any[]) => Promise<any>;
   },
+  organizationId?: Id<"organizations">,
   limit?: number,
   dryRun?: boolean
 ): Promise<BackfillSummary> {
@@ -737,6 +783,7 @@ async function runBackfill(
 
   const candidates = await ctx.runQuery(internal.schedule.getBackfillCandidates, {
     limit: effectiveLimit,
+    organizationId,
   });
 
   const summary: BackfillSummary = {
@@ -832,11 +879,12 @@ async function runBackfill(
 
 export const backfillDispatchLocationsInternal = internalAction({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     limit: v.optional(v.number()),
     dryRun: v.optional(v.boolean()),
   },
-  handler: async (ctx, { limit, dryRun }): Promise<BackfillSummary> => {
-    return await runBackfill(ctx, limit, dryRun);
+  handler: async (ctx, { organizationId, limit, dryRun }): Promise<BackfillSummary> => {
+    return await runBackfill(ctx, organizationId, limit, dryRun);
   },
 });
 
@@ -846,7 +894,8 @@ export const backfillDispatchLocations = action({
     dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, { limit, dryRun }): Promise<BackfillSummary> => {
-    return await runBackfill(ctx, limit, dryRun);
+    const { organization } = await requireActiveOrganization(ctx);
+    return await runBackfill(ctx, organization._id, limit, dryRun);
   },
 });
 
@@ -859,12 +908,15 @@ export const getAvailableCleanersForDate = query({
     date: v.string(), // ISO date string "YYYY-MM-DD"
   },
   handler: async (ctx, { date }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const dateObj = new Date(date + "T00:00:00");
     const dayOfWeek = dateObj.getDay();
 
     const cleaners = await ctx.db
       .query("cleaners")
-      .withIndex("by_status", (q) => q.eq("status", "active"))
+      .withIndex("by_status_and_org", (q) =>
+        q.eq("status", "active").eq("organizationId", organization._id)
+      )
       .collect();
 
     const approvedTimeOff = await ctx.db
@@ -890,10 +942,12 @@ export const getAvailableCleanersForDate = query({
       })
     );
 
-    const bookingsForDate = await ctx.db
-      .query("bookings")
-      .withIndex("by_service_date", (q) => q.eq("serviceDate", date))
-      .collect();
+    const bookingsForDate = (
+      await ctx.db
+        .query("bookings")
+        .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+        .collect()
+    ).filter((booking) => booking.serviceDate === date);
     const bookingIds = bookingsForDate.map((booking) => booking._id);
 
     const allAssignments = await Promise.all(
@@ -940,6 +994,13 @@ export const getCleanerScheduleRange = query({
     endDate: v.string(),
   },
   handler: async (ctx, { cleanerId, startDate, endDate }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const cleaner = await ctx.db.get(cleanerId);
+    if (!cleaner) {
+      return [];
+    }
+    assertRecordInActiveOrg(cleaner.organizationId, organization._id);
+
     const assignments = await ctx.db
       .query("bookingAssignments")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -951,6 +1012,7 @@ export const getCleanerScheduleRange = query({
     return bookings
       .filter((booking): booking is NonNullable<typeof booking> => {
         if (!booking || !booking.serviceDate) return false;
+        if (booking.organizationId !== organization._id) return false;
         return booking.serviceDate >= startDate && booking.serviceDate <= endDate;
       })
       .map((booking) => {

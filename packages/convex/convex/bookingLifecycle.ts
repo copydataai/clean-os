@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { mapOperationalStatusToFunnel } from "./bookingStateMachine";
+import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
 
 const rowTypeValidator = v.union(v.literal("booking"), v.literal("pre_booking"));
 
@@ -76,6 +77,7 @@ export const getUnifiedFunnelStage = query({
     quoteRequestId: v.optional(v.id("quoteRequests")),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     if (!args.bookingId && !args.requestId && !args.quoteRequestId) {
       throw new Error("Provide bookingId, requestId, or quoteRequestId");
     }
@@ -83,6 +85,7 @@ export const getUnifiedFunnelStage = query({
     if (args.bookingId) {
       const booking = await ctx.db.get(args.bookingId);
       if (!booking) return null;
+      assertRecordInActiveOrg(booking.organizationId, organization._id);
 
       return {
         bookingId: booking._id,
@@ -96,6 +99,7 @@ export const getUnifiedFunnelStage = query({
     if (args.requestId) {
       const request = await ctx.db.get(args.requestId);
       if (!request) return null;
+      assertRecordInActiveOrg(request.organizationId, organization._id);
 
       if (request.bookingId) {
         const booking = await ctx.db.get(request.bookingId);
@@ -113,7 +117,9 @@ export const getUnifiedFunnelStage = query({
       const quote = request.quoteRequestId
         ? await ctx.db
             .query("quotes")
-            .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", request.quoteRequestId!))
+            .withIndex("by_org_quote_request", (q) =>
+              q.eq("organizationId", organization._id).eq("quoteRequestId", request.quoteRequestId!)
+            )
             .first()
         : null;
       const quoteRequest = request.quoteRequestId
@@ -135,10 +141,13 @@ export const getUnifiedFunnelStage = query({
 
     const quoteRequest = await ctx.db.get(args.quoteRequestId!);
     if (!quoteRequest) return null;
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
 
     const quote = await ctx.db
       .query("quotes")
-      .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", quoteRequest._id))
+      .withIndex("by_org_quote_request", (q) =>
+        q.eq("organizationId", organization._id).eq("quoteRequestId", quoteRequest._id)
+      )
       .first();
 
     const linkedBookingRequestId = quoteRequest.bookingRequestId ?? quote?.bookingRequestId;
@@ -184,11 +193,16 @@ export const listUnifiedLifecycleRows = query({
     serviceDate: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
     const scanSize = 2000;
     const search = (args.search ?? "").trim().toLowerCase();
 
-    const bookings = await ctx.db.query("bookings").order("desc").take(scanSize);
+    const bookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .order("desc")
+      .take(scanSize);
     const bookingRows = bookings.map((booking) => ({
       rowType: "booking" as const,
       rowId: `booking:${booking._id}`,
@@ -206,7 +220,11 @@ export const listUnifiedLifecycleRows = query({
       updatedAt: booking.updatedAt,
     }));
 
-    const requests = await ctx.db.query("bookingRequests").order("desc").take(scanSize);
+    const requests = await ctx.db
+      .query("bookingRequests")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .order("desc")
+      .take(scanSize);
     const pendingRequests = requests.filter((request) => !request.bookingId);
 
     const preBookingRows = await Promise.all(
@@ -214,7 +232,9 @@ export const listUnifiedLifecycleRows = query({
         const quote = request.quoteRequestId
           ? await ctx.db
               .query("quotes")
-              .withIndex("by_quote_request", (q) => q.eq("quoteRequestId", request.quoteRequestId!))
+              .withIndex("by_org_quote_request", (q) =>
+                q.eq("organizationId", organization._id).eq("quoteRequestId", request.quoteRequestId!)
+              )
               .first()
           : null;
 
@@ -310,8 +330,17 @@ export const getBookingLifecycleTimeline = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = Math.min(Math.max(args.limit ?? 20, 1), 100);
     const decodedCursor = decodeCursor(args.cursor);
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      return {
+        rows: [],
+        nextCursor: null,
+      };
+    }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
 
     const events = await ctx.db
       .query("bookingLifecycleEvents")

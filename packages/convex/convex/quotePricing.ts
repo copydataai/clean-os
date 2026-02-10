@@ -1,6 +1,10 @@
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  assertRecordInActiveOrg,
+  requireActiveOrganization,
+} from "./lib/orgContext";
 
 const DEFAULT_RULES = [
   {
@@ -77,12 +81,21 @@ function normalize(value?: string | null): string {
 }
 
 export const ensureDefaultRules = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    const existing = await ctx.db
-      .query("quotePricingRules")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
-      .first();
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const existing = args.organizationId
+      ? await ctx.db
+          .query("quotePricingRules")
+          .withIndex("by_org_active", (q) =>
+            q.eq("organizationId", args.organizationId).eq("isActive", true)
+          )
+          .first()
+      : await ctx.db
+          .query("quotePricingRules")
+          .withIndex("by_active", (q) => q.eq("isActive", true))
+          .first();
 
     if (existing) {
       return;
@@ -91,6 +104,7 @@ export const ensureDefaultRules = internalMutation({
     const now = Date.now();
     for (const rule of DEFAULT_RULES) {
       await ctx.db.insert("quotePricingRules", {
+        organizationId: args.organizationId,
         ...rule,
         isActive: true,
         createdAt: now,
@@ -103,9 +117,12 @@ export const ensureDefaultRules = internalMutation({
 export const ensureDefaults = mutation({
   args: {},
   handler: async (ctx) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const existing = await ctx.db
       .query("quotePricingRules")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .withIndex("by_org_active", (q) =>
+        q.eq("organizationId", organization._id).eq("isActive", true)
+      )
       .first();
 
     if (existing) {
@@ -115,6 +132,7 @@ export const ensureDefaults = mutation({
     const now = Date.now();
     for (const rule of DEFAULT_RULES) {
       await ctx.db.insert("quotePricingRules", {
+        organizationId: organization._id,
         ...rule,
         isActive: true,
         createdAt: now,
@@ -128,7 +146,13 @@ export const ensureDefaults = mutation({
 export const listRules = query({
   args: {},
   handler: async (ctx) => {
-    const rules = await ctx.db.query("quotePricingRules").collect();
+    const { organization } = await requireActiveOrganization(ctx);
+
+    const rules = await ctx.db
+      .query("quotePricingRules")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .collect();
+
     return rules.sort((a, b) => {
       if (a.sortOrder !== b.sortOrder) {
         return a.sortOrder - b.sortOrder;
@@ -149,8 +173,10 @@ export const createRule = mutation({
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const now = Date.now();
     const id = await ctx.db.insert("quotePricingRules", {
+      organizationId: organization._id,
       serviceType: args.serviceType,
       frequency: args.frequency,
       minSqft: args.minSqft,
@@ -177,11 +203,13 @@ export const updateRule = mutation({
     sortOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const { ruleId, ...updates } = args;
     const rule = await ctx.db.get(ruleId);
     if (!rule) {
       throw new Error("Pricing rule not found");
     }
+    assertRecordInActiveOrg(rule.organizationId, organization._id);
 
     const filtered = Object.fromEntries(
       Object.entries(updates).filter(([, value]) => value !== undefined)
@@ -197,6 +225,12 @@ export const updateRule = mutation({
 export const deleteRule = mutation({
   args: { ruleId: v.id("quotePricingRules") },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const rule = await ctx.db.get(args.ruleId);
+    if (!rule) {
+      return { success: true };
+    }
+    assertRecordInActiveOrg(rule.organizationId, organization._id);
     await ctx.db.delete(args.ruleId);
     return { success: true };
   },
@@ -216,13 +250,16 @@ export const getSuggestedPrice = query({
     squareFootage: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<SuggestedPrice> => {
+    const { organization } = await requireActiveOrganization(ctx);
     const sqft = args.squareFootage ?? 0;
     const serviceTypeNorm = normalize(args.serviceType);
     const frequencyNorm = normalize(args.frequency);
 
     const activeRules = await ctx.db
       .query("quotePricingRules")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .withIndex("by_org_active", (q) =>
+        q.eq("organizationId", organization._id).eq("isActive", true)
+      )
       .collect();
 
     const matches = activeRules

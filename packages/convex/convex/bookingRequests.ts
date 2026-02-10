@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
 
 const FALLBACK_LOOKBACK_DAYS = 7;
 const FALLBACK_SAMPLE_SIZE = 10;
@@ -318,6 +319,13 @@ export const linkQuoteRequestToRequest = internalMutation({
 export const markLinkSent = mutation({
   args: { requestId: v.id("bookingRequests") },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const request = await ctx.db.get(args.requestId);
+    if (!request) {
+      throw new Error("Booking request not found");
+    }
+    assertRecordInActiveOrg(request.organizationId, organization._id);
+
     await ctx.db.patch(args.requestId, {
       linkSentAt: Date.now(),
       updatedAt: Date.now(),
@@ -338,6 +346,13 @@ export const markConfirmLinkSentInternal = internalMutation({
 export const markConfirmLinkSent = mutation({
   args: { requestId: v.id("bookingRequests") },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const request = await ctx.db.get(args.requestId);
+    if (!request) {
+      throw new Error("Booking request not found");
+    }
+    assertRecordInActiveOrg(request.organizationId, organization._id);
+
     await ctx.db.patch(args.requestId, {
       confirmLinkSentAt: Date.now(),
       updatedAt: Date.now(),
@@ -348,7 +363,13 @@ export const markConfirmLinkSent = mutation({
 export const getById = query({
   args: { id: v.id("bookingRequests") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const { organization } = await requireActiveOrganization(ctx);
+    const request = await ctx.db.get(args.id);
+    if (!request) {
+      return null;
+    }
+    assertRecordInActiveOrg(request.organizationId, organization._id);
+    return request;
   },
 });
 
@@ -358,6 +379,7 @@ export const listRecent = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 20;
 
     let requests;
@@ -365,11 +387,17 @@ export const listRecent = query({
       const status = args.status;
       requests = await ctx.db
         .query("bookingRequests")
-        .withIndex("by_status", (q) => q.eq("status", status))
+        .withIndex("by_org_status", (q) =>
+          q.eq("organizationId", organization._id).eq("status", status)
+        )
         .order("desc")
         .take(limit);
     } else {
-      requests = await ctx.db.query("bookingRequests").order("desc").take(limit);
+      requests = await ctx.db
+        .query("bookingRequests")
+        .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+        .order("desc")
+        .take(limit);
     }
 
     const withBookingStatus = await Promise.all(
@@ -395,10 +423,13 @@ export const listByStatus = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 50;
     return await ctx.db
       .query("bookingRequests")
-      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .withIndex("by_org_status", (q) =>
+        q.eq("organizationId", organization._id).eq("status", args.status)
+      )
       .order("desc")
       .take(limit);
   },

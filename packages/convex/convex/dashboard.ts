@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { requireActiveOrganization } from "./lib/orgContext";
 
 /**
  * Get dashboard statistics for the current user
@@ -17,19 +18,18 @@ export const getStats = query({
     confirmedRequests: v.number(),
   }),
   handler: async (ctx) => {
-    const now = Date.now();
+    const { organization } = await requireActiveOrganization(ctx);
+
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
     const startOfMonthTs = startOfMonth.getTime();
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStart = today.getTime();
-    const todayEnd = todayStart + 24 * 60 * 60 * 1000;
-
-    // Get all bookings
-    const allBookings = await ctx.db.query("bookings").collect();
+    // Get all org bookings
+    const allBookings = await ctx.db
+      .query("bookings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .collect();
 
     // Revenue: sum of completed/charged bookings this month
     const completedThisMonth = allBookings.filter(
@@ -54,7 +54,10 @@ export const getStats = query({
       (b) => b.status === "pending_card"
     ).length;
 
-    const allRequests = await ctx.db.query("bookingRequests").collect();
+    const allRequests = await ctx.db
+      .query("bookingRequests")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .collect();
     const pendingRequests = allRequests.filter((r) => r.status === "requested").length;
     const confirmedRequests = allRequests.filter((r) => r.status === "confirmed").length;
 
@@ -97,10 +100,12 @@ export const getRecentBookings = query({
     })
   ),
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 5;
 
     const bookings = await ctx.db
       .query("bookings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
       .order("desc")
       .take(limit);
 
@@ -136,11 +141,13 @@ export const getTodaysSchedule = query({
     })
   ),
   handler: async (ctx) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const todayStr = new Date().toISOString().split("T")[0];
 
-    // Get bookings scheduled for today (by serviceDate)
+    // Get org bookings scheduled for today
     const bookings = await ctx.db
       .query("bookings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
       .filter((q) => q.eq(q.field("serviceDate"), todayStr))
       .collect();
 

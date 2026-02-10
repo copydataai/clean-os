@@ -1,59 +1,52 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import {
+  getUserMemberships,
+  requireActiveOrganization,
+  requireAuthenticatedUser,
+} from "./lib/orgContext";
 
 export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    console.log({ identity });
-    if (identity === null) {
-      console.log("No identity found");
+    try {
+      const { user } = await requireAuthenticatedUser(ctx);
+      return user;
+    } catch {
       return null;
     }
-
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    return user;
   },
 });
 
 export const getUserOrganizations = query({
   args: {},
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (identity === null) {
-      console.log("No identity found");
+    try {
+      const { user } = await requireAuthenticatedUser(ctx);
+      const memberships = await getUserMemberships(ctx, user._id);
+
+      return memberships.map((membership) => ({
+        ...membership.organization,
+        role: membership.role,
+      }));
+    } catch {
       return [];
     }
+  },
+});
 
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-
-    if (user === null) {
-      return [];
+export const getActiveOrganization = query({
+  args: {},
+  handler: async (ctx) => {
+    try {
+      const { organization, membership } = await requireActiveOrganization(ctx);
+      return {
+        ...organization,
+        role: membership.role,
+      };
+    } catch {
+      return null;
     }
-
-    const memberships = await ctx.db
-      .query("organizationMemberships")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-
-    const organizations = await Promise.all(
-      memberships.map(async (membership) => {
-        const org = await ctx.db.get(membership.organizationId);
-        return {
-          ...org,
-          role: membership.role,
-        };
-      })
-    );
-
-    return organizations;
   },
 });
 

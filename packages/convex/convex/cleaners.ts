@@ -3,6 +3,7 @@ import { query, mutation } from "./_generated/server";
 import { computeRatingsWindowSummary } from "./cleanerInsights";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
 
 const ASSIGNMENT_TERMINAL_STATUSES = new Set([
   "declined",
@@ -90,6 +91,26 @@ async function upsertChecklistTemplateDocument(
   });
 }
 
+async function requireCleanerInActiveOrg(ctx: any, cleanerId: Id<"cleaners">) {
+  const { organization } = await requireActiveOrganization(ctx);
+  const cleaner = await ctx.db.get(cleanerId);
+  if (!cleaner) {
+    throw new Error("Cleaner not found");
+  }
+  assertRecordInActiveOrg(cleaner.organizationId, organization._id);
+  return { organization, cleaner };
+}
+
+async function requireBookingInActiveOrg(ctx: any, bookingId: Id<"bookings">) {
+  const { organization } = await requireActiveOrganization(ctx);
+  const booking = await ctx.db.get(bookingId);
+  if (!booking) {
+    throw new Error("Booking not found");
+  }
+  assertRecordInActiveOrg(booking.organizationId, organization._id);
+  return { organization, booking };
+}
+
 // ============================================================================
 // Public Queries
 // ============================================================================
@@ -97,17 +118,20 @@ async function upsertChecklistTemplateDocument(
 export const getById = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
-    return await ctx.db.get(cleanerId);
+    const { cleaner } = await requireCleanerInActiveOrg(ctx, cleanerId);
+    return cleaner;
   },
 });
 
 export const getByEmail = query({
   args: { email: v.string() },
   handler: async (ctx, { email }) => {
-    return await ctx.db
+    const { organization } = await requireActiveOrganization(ctx);
+    const cleaners = await ctx.db
       .query("cleaners")
-      .withIndex("by_email", (q) => q.eq("email", email))
-      .first();
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .collect();
+    return cleaners.find((cleaner) => cleaner.email === email) ?? null;
   },
 });
 
@@ -118,43 +142,36 @@ export const list = query({
     employmentType: v.optional(v.string()),
   },
   handler: async (ctx, { organizationId, status, employmentType }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
     let query = ctx.db.query("cleaners");
 
-    if (organizationId && status) {
+    if (status) {
       return await query
         .withIndex("by_status_and_org", (q) =>
-          q.eq("status", status).eq("organizationId", organizationId)
+          q.eq("status", status).eq("organizationId", resolvedOrganizationId)
         )
         .collect();
     }
 
-    if (organizationId) {
-      return await query
-        .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-        .collect();
-    }
-
-    if (status) {
-      return await query
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .collect();
-    }
-
     if (employmentType) {
-      return await query
-        .withIndex("by_employment_type", (q) => q.eq("employmentType", employmentType))
+      const orgCleaners = await query
+        .withIndex("by_organization", (q) => q.eq("organizationId", resolvedOrganizationId))
         .collect();
+      return orgCleaners.filter((cleaner) => cleaner.employmentType === employmentType);
     }
 
-    return await query.collect();
+    return await query
+      .withIndex("by_organization", (q) => q.eq("organizationId", resolvedOrganizationId))
+      .collect();
   },
 });
 
 export const getWithDetails = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
-    const cleaner = await ctx.db.get(cleanerId);
-    if (!cleaner) return null;
+    const { cleaner } = await requireCleanerInActiveOrg(ctx, cleanerId);
 
     const [skills, certifications, serviceTypes, availability, activePayRate] =
       await Promise.all([
@@ -198,6 +215,7 @@ export const getWithDetails = query({
 export const getSkills = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     return await ctx.db
       .query("cleanerSkills")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -208,6 +226,7 @@ export const getSkills = query({
 export const getCertifications = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     return await ctx.db
       .query("cleanerCertifications")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -218,6 +237,7 @@ export const getCertifications = query({
 export const getAvailability = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     return await ctx.db
       .query("cleanerAvailability")
       .withIndex("by_cleaner_active", (q) =>
@@ -233,6 +253,7 @@ export const getTimeOffRequests = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, { cleanerId, status }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     if (status) {
       return await ctx.db
         .query("cleanerTimeOff")
@@ -254,6 +275,7 @@ export const getAssignments = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, { cleanerId, status }) => {
+    const { organization } = await requireCleanerInActiveOrg(ctx, cleanerId);
     let assignments;
     if (status) {
       assignments = await ctx.db
@@ -272,6 +294,9 @@ export const getAssignments = query({
     const enriched = await Promise.all(
       assignments.map(async (assignment) => {
         const booking = await ctx.db.get(assignment.bookingId);
+        if (booking) {
+          assertRecordInActiveOrg(booking.organizationId, organization._id);
+        }
         return {
           ...assignment,
           booking: booking
@@ -298,6 +323,7 @@ export const getAssignments = query({
 export const getRatings = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     return await ctx.db
       .query("cleanerRatings")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -308,6 +334,7 @@ export const getRatings = query({
 export const getRatingsSummary = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     const ratings = await ctx.db
       .query("cleanerRatings")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -332,6 +359,7 @@ export const getRatingsSummary = query({
 export const getPayRateHistory = query({
   args: { cleanerId: v.id("cleaners") },
   handler: async (ctx, { cleanerId }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     const rates = await ctx.db
       .query("cleanerPayRates")
       .withIndex("by_cleaner", (q) => q.eq("cleanerId", cleanerId))
@@ -346,6 +374,7 @@ export const getDocuments = query({
     documentType: v.optional(v.string()),
   },
   handler: async (ctx, { cleanerId, documentType }) => {
+    await requireCleanerInActiveOrg(ctx, cleanerId);
     if (documentType) {
       return await ctx.db
         .query("cleanerDocuments")
@@ -368,7 +397,13 @@ export const getDocuments = query({
 export const getCrew = query({
   args: { crewId: v.id("crews") },
   handler: async (ctx, { crewId }) => {
-    return await ctx.db.get(crewId);
+    const { organization } = await requireActiveOrganization(ctx);
+    const crew = await ctx.db.get(crewId);
+    if (!crew) {
+      return null;
+    }
+    assertRecordInActiveOrg(crew.organizationId, organization._id);
+    return crew;
   },
 });
 
@@ -378,31 +413,27 @@ export const listCrews = query({
     status: v.optional(v.string()),
   },
   handler: async (ctx, { organizationId, status }) => {
-    if (organizationId) {
-      const crews = await ctx.db
-        .query("crews")
-        .withIndex("by_organization", (q) => q.eq("organizationId", organizationId))
-        .collect();
-      if (status) {
-        return crews.filter((c) => c.status === status);
-      }
-      return crews;
-    }
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
+    const crews = await ctx.db
+      .query("crews")
+      .withIndex("by_organization", (q) => q.eq("organizationId", resolvedOrganizationId))
+      .collect();
     if (status) {
-      return await ctx.db
-        .query("crews")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .collect();
+      return crews.filter((c) => c.status === status);
     }
-    return await ctx.db.query("crews").collect();
+    return crews;
   },
 });
 
 export const getCrewWithMembers = query({
   args: { crewId: v.id("crews") },
   handler: async (ctx, { crewId }) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const crew = await ctx.db.get(crewId);
     if (!crew) return null;
+    assertRecordInActiveOrg(crew.organizationId, organization._id);
 
     const memberships = await ctx.db
       .query("crewMembers")
@@ -427,6 +458,7 @@ export const getCrewWithMembers = query({
 export const getBookingAssignments = query({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, { bookingId }) => {
+    await requireBookingInActiveOrg(ctx, bookingId);
     const assignments = await ctx.db
       .query("bookingAssignments")
       .withIndex("by_booking", (q) => q.eq("bookingId", bookingId))
@@ -462,9 +494,14 @@ export const create = mutation({
     employmentType: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = args.organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
+
     const now = Date.now();
     return await ctx.db.insert("cleaners", {
       ...args,
+      organizationId: resolvedOrganizationId,
       status: args.status ?? "applicant",
       employmentType: args.employmentType ?? "1099",
       createdAt: now,
@@ -523,10 +560,7 @@ export const update = mutation({
     internalNotes: v.optional(v.string()),
   },
   handler: async (ctx, { cleanerId, ...updates }) => {
-    const cleaner = await ctx.db.get(cleanerId);
-    if (!cleaner) {
-      throw new Error("Cleaner not found");
-    }
+    await requireCleanerInActiveOrg(ctx, cleanerId);
 
     // Filter out undefined values
     const filteredUpdates = Object.fromEntries(
@@ -554,6 +588,7 @@ export const addSkill = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireCleanerInActiveOrg(ctx, args.cleanerId);
     const now = Date.now();
     return await ctx.db.insert("cleanerSkills", {
       ...args,
@@ -574,6 +609,12 @@ export const updateSkill = mutation({
     notes: v.optional(v.string()),
   },
   handler: async (ctx, { skillId, ...updates }) => {
+    const skill = await ctx.db.get(skillId);
+    if (!skill) {
+      throw new Error("Skill not found");
+    }
+    await requireCleanerInActiveOrg(ctx, skill.cleanerId);
+
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
@@ -592,6 +633,11 @@ export const updateSkill = mutation({
 export const removeSkill = mutation({
   args: { skillId: v.id("cleanerSkills") },
   handler: async (ctx, { skillId }) => {
+    const skill = await ctx.db.get(skillId);
+    if (!skill) {
+      throw new Error("Skill not found");
+    }
+    await requireCleanerInActiveOrg(ctx, skill.cleanerId);
     await ctx.db.delete(skillId);
     return skillId;
   },
@@ -610,6 +656,7 @@ export const addCertification = mutation({
     documentUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireCleanerInActiveOrg(ctx, args.cleanerId);
     const now = Date.now();
     return await ctx.db.insert("cleanerCertifications", {
       ...args,
@@ -630,6 +677,12 @@ export const updateCertification = mutation({
     documentUrl: v.optional(v.string()),
   },
   handler: async (ctx, { certificationId, ...updates }) => {
+    const certification = await ctx.db.get(certificationId);
+    if (!certification) {
+      throw new Error("Certification not found");
+    }
+    await requireCleanerInActiveOrg(ctx, certification.cleanerId);
+
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
@@ -655,6 +708,7 @@ export const addServiceTypeQualification = mutation({
     isPreferred: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireCleanerInActiveOrg(ctx, args.cleanerId);
     const existing = await ctx.db
       .query("cleanerServiceTypes")
       .withIndex("by_cleaner_service", (q) =>
@@ -688,6 +742,12 @@ export const updateServiceTypeQualification = mutation({
     qualifiedBy: v.optional(v.id("users")),
   },
   handler: async (ctx, { qualificationId, ...updates }) => {
+    const qualification = await ctx.db.get(qualificationId);
+    if (!qualification) {
+      throw new Error("Qualification not found");
+    }
+    await requireCleanerInActiveOrg(ctx, qualification.cleanerId);
+
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, value]) => value !== undefined)
     );
@@ -706,6 +766,11 @@ export const updateServiceTypeQualification = mutation({
 export const removeServiceTypeQualification = mutation({
   args: { qualificationId: v.id("cleanerServiceTypes") },
   handler: async (ctx, { qualificationId }) => {
+    const qualification = await ctx.db.get(qualificationId);
+    if (!qualification) {
+      throw new Error("Qualification not found");
+    }
+    await requireCleanerInActiveOrg(ctx, qualification.cleanerId);
     await ctx.db.delete(qualificationId);
     return qualificationId;
   },
@@ -722,6 +787,7 @@ export const addEquipment = mutation({
     trainedBy: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    await requireCleanerInActiveOrg(ctx, args.cleanerId);
     const now = Date.now();
     return await ctx.db.insert("cleanerEquipment", {
       ...args,
@@ -740,6 +806,7 @@ export const setAvailability = mutation({
     timezone: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireCleanerInActiveOrg(ctx, args.cleanerId);
     // Check for existing availability on this day
     const existing = await ctx.db
       .query("cleanerAvailability")
@@ -775,6 +842,12 @@ export const setAvailability = mutation({
 export const removeAvailability = mutation({
   args: { availabilityId: v.id("cleanerAvailability") },
   handler: async (ctx, { availabilityId }) => {
+    const availability = await ctx.db.get(availabilityId);
+    if (!availability) {
+      throw new Error("Availability not found");
+    }
+    await requireCleanerInActiveOrg(ctx, availability.cleanerId);
+
     await ctx.db.patch(availabilityId, {
       isActive: false,
       updatedAt: Date.now(),
@@ -795,6 +868,7 @@ export const requestTimeOff = mutation({
     reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireCleanerInActiveOrg(ctx, args.cleanerId);
     const now = Date.now();
     return await ctx.db.insert("cleanerTimeOff", {
       ...args,
@@ -813,6 +887,12 @@ export const approveTimeOff = mutation({
     approvedBy: v.id("users"),
   },
   handler: async (ctx, { timeOffId, approvedBy }) => {
+    const timeOff = await ctx.db.get(timeOffId);
+    if (!timeOff) {
+      throw new Error("Time off request not found");
+    }
+    await requireCleanerInActiveOrg(ctx, timeOff.cleanerId);
+
     const now = Date.now();
     await ctx.db.patch(timeOffId, {
       status: "approved",
@@ -830,6 +910,12 @@ export const denyTimeOff = mutation({
     denialReason: v.optional(v.string()),
   },
   handler: async (ctx, { timeOffId, denialReason }) => {
+    const timeOff = await ctx.db.get(timeOffId);
+    if (!timeOff) {
+      throw new Error("Time off request not found");
+    }
+    await requireCleanerInActiveOrg(ctx, timeOff.cleanerId);
+
     await ctx.db.patch(timeOffId, {
       status: "denied",
       denialReason,
@@ -842,6 +928,12 @@ export const denyTimeOff = mutation({
 export const cancelTimeOff = mutation({
   args: { timeOffId: v.id("cleanerTimeOff") },
   handler: async (ctx, { timeOffId }) => {
+    const timeOff = await ctx.db.get(timeOffId);
+    if (!timeOff) {
+      throw new Error("Time off request not found");
+    }
+    await requireCleanerInActiveOrg(ctx, timeOff.cleanerId);
+
     await ctx.db.patch(timeOffId, {
       status: "cancelled",
       updatedAt: Date.now(),
@@ -865,9 +957,14 @@ export const createCrew = mutation({
     preferredZones: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const resolvedOrganizationId = args.organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
+
     const now = Date.now();
     return await ctx.db.insert("crews", {
       ...args,
+      organizationId: resolvedOrganizationId,
       status: "active",
       createdAt: now,
       updatedAt: now,
@@ -887,6 +984,13 @@ export const updateCrew = mutation({
     preferredZones: v.optional(v.array(v.string())),
   },
   handler: async (ctx, { crewId, ...updates }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const crew = await ctx.db.get(crewId);
+    if (!crew) {
+      throw new Error("Crew not found");
+    }
+    assertRecordInActiveOrg(crew.organizationId, organization._id);
+
     const filteredUpdates = Object.fromEntries(
       Object.entries(updates).filter(([, v]) => v !== undefined)
     );
@@ -909,6 +1013,14 @@ export const addCrewMember = mutation({
     role: v.optional(v.string()),
   },
   handler: async (ctx, { crewId, cleanerId, role }) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const crew = await ctx.db.get(crewId);
+    if (!crew) {
+      throw new Error("Crew not found");
+    }
+    assertRecordInActiveOrg(crew.organizationId, organization._id);
+    await requireCleanerInActiveOrg(ctx, cleanerId);
+
     // Check if already a member
     const existing = await ctx.db
       .query("crewMembers")
@@ -975,8 +1087,20 @@ export const assignToBooking = mutation({
     assignedBy: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireBookingInActiveOrg(ctx, args.bookingId);
     if (!args.cleanerId && !args.crewId) {
       throw new Error("Must specify either cleanerId or crewId");
+    }
+
+    if (args.cleanerId) {
+      await requireCleanerInActiveOrg(ctx, args.cleanerId);
+    }
+    if (args.crewId) {
+      const crew = await ctx.db.get(args.crewId);
+      if (!crew) {
+        throw new Error("Crew not found");
+      }
+      assertRecordInActiveOrg(crew.organizationId, organization._id);
     }
 
     const booking = await ctx.db.get(args.bookingId);

@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { mutation, query, action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
+import {
+  assertRecordInActiveOrg,
+  requireActiveOrganization,
+  requireOrganizationAdmin,
+} from "./lib/orgContext";
 
 const BOOKING_STATUS_VALIDATOR = v.union(
   v.literal("pending_card"),
@@ -13,43 +18,6 @@ const BOOKING_STATUS_VALIDATOR = v.union(
   v.literal("charged"),
   v.literal("cancelled")
 );
-
-async function requireAdminActorUserId(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Authentication required for admin override");
-  }
-
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
-    .unique();
-  if (!user) {
-    throw new Error("Authenticated user record not found");
-  }
-
-  const memberships = await ctx.db
-    .query("organizationMemberships")
-    .withIndex("by_user", (q: any) => q.eq("userId", user._id))
-    .collect();
-
-  const isAdmin = memberships.some((membership: { role?: string }) => {
-    const role = (membership.role ?? "").toLowerCase();
-    return (
-      role === "admin" ||
-      role === "owner" ||
-      role.endsWith(":admin") ||
-      role.endsWith(":owner") ||
-      role.includes("admin")
-    );
-  });
-
-  if (!isAdmin) {
-    throw new Error("Admin role required for override transitions");
-  }
-
-  return user._id as Id<"users">;
-}
 
 export const createBookingFromTally = mutation({
   args: {
@@ -123,10 +91,12 @@ export const createBookingFromRequest = mutation({
     organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
+    const { organization } = await requireActiveOrganization(ctx);
     const request = await ctx.db.get(args.requestId);
     if (!request) {
       throw new Error("Booking request not found");
     }
+    assertRecordInActiveOrg(request.organizationId, organization._id);
 
     if (request.bookingId) {
       if (request.customerId) {
@@ -144,10 +114,11 @@ export const createBookingFromRequest = mutation({
       throw new Error("Booking request is missing email");
     }
 
-    const resolvedOrganizationId = request.organizationId ?? args.organizationId;
+    const resolvedOrganizationId = request.organizationId ?? args.organizationId ?? organization._id;
     if (request.organizationId && args.organizationId && request.organizationId !== args.organizationId) {
       throw new Error("ORG_MISMATCH");
     }
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
 
     const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
       organizationId: resolvedOrganizationId,
@@ -233,16 +204,25 @@ export const markCardOnFile = mutation({
 export const getBooking = query({
   args: { id: v.id("bookings") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const { organization } = await requireActiveOrganization(ctx);
+    const booking = await ctx.db.get(args.id);
+    if (!booking) {
+      return null;
+    }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
+    return booking;
   },
 });
 
 export const getBookingsByEmail = query({
   args: { email: v.string() },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     return await ctx.db
       .query("bookings")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .withIndex("by_org_email", (q) =>
+        q.eq("organizationId", organization._id).eq("email", args.email)
+      )
       .collect();
   },
 });
@@ -250,9 +230,12 @@ export const getBookingsByEmail = query({
 export const listPendingBookings = query({
   args: {},
   handler: async (ctx) => {
+    const { organization } = await requireActiveOrganization(ctx);
     return await ctx.db
       .query("bookings")
-      .withIndex("by_status", (q) => q.eq("status", "card_saved"))
+      .withIndex("by_org_status", (q) =>
+        q.eq("organizationId", organization._id).eq("status", "card_saved")
+      )
       .collect();
   },
 });
@@ -260,9 +243,12 @@ export const listPendingBookings = query({
 export const listCompletedBookings = query({
   args: {},
   handler: async (ctx) => {
+    const { organization } = await requireActiveOrganization(ctx);
     return await ctx.db
       .query("bookings")
-      .withIndex("by_status", (q) => q.eq("status", "completed"))
+      .withIndex("by_org_status", (q) =>
+        q.eq("organizationId", organization._id).eq("status", "completed")
+      )
       .collect();
   },
 });
@@ -273,10 +259,12 @@ export const markJobCompleted = mutation({
     finalAmount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) {
       throw new Error("Booking not found");
     }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
     if (booking.status !== "in_progress") {
       throw new Error(
         `Booking must be in_progress before completion (current: ${booking.status})`
@@ -306,10 +294,12 @@ export const updateSchedule = mutation({
     actorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) {
       throw new Error("Booking not found");
     }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
 
     await ctx.runMutation(internal.bookingDb.updateBookingScheduleFields, {
       id: args.bookingId,
@@ -339,10 +329,12 @@ export const rescheduleBooking = mutation({
     actorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) {
       throw new Error("Booking not found");
     }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
 
     await ctx.runMutation(internal.bookingDb.updateBookingScheduleFields, {
       id: args.bookingId,
@@ -386,10 +378,12 @@ export const cancelBooking = mutation({
     actorUserId: v.optional(v.id("users")),
   },
   handler: async (ctx, args): Promise<any> => {
+    const { organization } = await requireActiveOrganization(ctx);
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) {
       throw new Error("Booking not found");
     }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
 
     if (!["pending_card", "card_saved", "scheduled"].includes(booking.status)) {
       throw new Error(
@@ -416,7 +410,12 @@ export const adminOverrideBookingStatus = mutation({
     reason: v.string(),
   },
   handler: async (ctx, args): Promise<any> => {
-    const actorUserId = await requireAdminActorUserId(ctx);
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+    const { user } = await requireOrganizationAdmin(ctx, booking.organizationId);
+    const actorUserId = user._id as Id<"users">;
 
     return await ctx.runMutation(internal.bookingStateMachine.transitionBookingStatus, {
       bookingId: args.bookingId,
@@ -442,6 +441,15 @@ export const chargeCompletedJob = action({
     paymentLinkUrl?: string;
     error?: string;
   }> => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+      id: args.bookingId,
+    });
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
+
     return await ctx.runAction(internal.stripeActions.chargeBooking, {
       bookingId: args.bookingId,
       amount: args.amount,
@@ -453,6 +461,13 @@ export const chargeCompletedJob = action({
 export const getPaymentIntentsForBooking = query({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const booking = await ctx.db.get(args.bookingId);
+    if (!booking) {
+      return [];
+    }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
+
     return await ctx.db
       .query("paymentIntents")
       .withIndex("by_booking", (q) => q.eq("bookingId", args.bookingId))
@@ -467,35 +482,25 @@ export const listBookings = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 50;
+    const resolvedOrganizationId = args.organizationId ?? organization._id;
+    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
 
-    if (args.organizationId && args.status) {
+    if (args.status) {
       return await ctx.db
         .query("bookings")
         .withIndex("by_org_status", (q) =>
-          q.eq("organizationId", args.organizationId).eq("status", args.status!)
+          q.eq("organizationId", resolvedOrganizationId).eq("status", args.status!)
         )
         .order("desc")
         .take(limit);
     }
 
-    if (args.organizationId) {
-      return await ctx.db
-        .query("bookings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
-        .order("desc")
-        .take(limit);
-    }
-
-    if (args.status) {
-      const status = args.status;
-      return await ctx.db
-        .query("bookings")
-        .withIndex("by_status", (q) => q.eq("status", status))
-        .order("desc")
-        .take(limit);
-    }
-
-    return await ctx.db.query("bookings").order("desc").take(limit);
+    return await ctx.db
+      .query("bookings")
+      .withIndex("by_organization", (q) => q.eq("organizationId", resolvedOrganizationId))
+      .order("desc")
+      .take(limit);
   },
 });
