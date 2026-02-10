@@ -15,7 +15,6 @@ import type * as bookingStateMachine from "../bookingStateMachine.js";
 import type * as bookings from "../bookings.js";
 import type * as cardDb from "../cardDb.js";
 import type * as cardWebhooks from "../cardWebhooks.js";
-import type * as cleanerDb from "../cleanerDb.js";
 import type * as cleanerInsights from "../cleanerInsights.js";
 import type * as cleaners from "../cleaners.js";
 import type * as clerkWebhooks from "../clerkWebhooks.js";
@@ -62,7 +61,6 @@ declare const fullApi: ApiFromModules<{
   bookings: typeof bookings;
   cardDb: typeof cardDb;
   cardWebhooks: typeof cardWebhooks;
-  cleanerDb: typeof cleanerDb;
   cleanerInsights: typeof cleanerInsights;
   cleaners: typeof cleaners;
   clerkWebhooks: typeof clerkWebhooks;
