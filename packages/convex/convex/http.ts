@@ -139,11 +139,24 @@ http.route({
     const url = new URL(request.url);
     const org = url.searchParams.get("org");
     if (!org) {
+      await ctx.runMutation(internal.payments.logWebhookAttempt, {
+        httpStatus: 400,
+        failureStage: "route_validation",
+        failureCode: "MISSING_ORG",
+        failureMessage: "Missing org",
+      });
       return new Response("Missing org", { status: 400 });
     }
 
     const signature = request.headers.get("stripe-signature");
     if (!signature) {
+      await ctx.runMutation(internal.payments.logWebhookAttempt, {
+        orgSlug: org,
+        httpStatus: 400,
+        failureStage: "route_validation",
+        failureCode: "MISSING_SIGNATURE",
+        failureMessage: "Missing signature",
+      });
       return new Response("Missing signature", { status: 400 });
     }
 

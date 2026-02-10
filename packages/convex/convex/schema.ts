@@ -385,6 +385,8 @@ const organizationStripeConfigs = defineTable({
     v.literal("incomplete"),
     v.literal("disabled")
   ),
+  mode: v.optional(v.union(v.literal("test"), v.literal("live"))),
+  publishableKey: v.optional(v.string()),
   secretKeyCiphertext: v.optional(v.string()),
   secretKeyIv: v.optional(v.string()),
   secretKeyAuthTag: v.optional(v.string()),
@@ -416,6 +418,29 @@ const paymentWebhookEvents = defineTable({
   .index("by_org_event", ["organizationId", "eventId"])
   .index("by_org_received", ["organizationId", "receivedAt"])
   .index("by_org_status", ["organizationId", "status"]);
+
+const paymentWebhookAttempts = defineTable({
+  orgSlug: v.optional(v.string()),
+  organizationId: v.optional(v.id("organizations")),
+  stripeEventId: v.optional(v.string()),
+  eventType: v.optional(v.string()),
+  receivedAt: v.number(),
+  httpStatus: v.number(),
+  failureStage: v.union(
+    v.literal("route_validation"),
+    v.literal("config_lookup"),
+    v.literal("signature_verification"),
+    v.literal("event_recording"),
+    v.literal("event_processing"),
+    v.literal("success"),
+    v.literal("duplicate")
+  ),
+  failureCode: v.optional(v.string()),
+  failureMessage: v.optional(v.string()),
+})
+  .index("by_org_received", ["organizationId", "receivedAt"])
+  .index("by_slug_received", ["orgSlug", "receivedAt"])
+  .index("by_received", ["receivedAt"]);
 
 const emailSends = defineTable({
   idempotencyKey: v.string(),
@@ -904,6 +929,7 @@ export default defineSchema({
   paymentIntents,
   organizationStripeConfigs,
   paymentWebhookEvents,
+  paymentWebhookAttempts,
   emailSends,
   emailEvents,
   emailSuppressions,
