@@ -33,6 +33,8 @@ import type * as http from "../http.js";
 import type * as httpHandlers_clerkActions from "../httpHandlers/clerkActions.js";
 import type * as httpHandlers_stripeActions from "../httpHandlers/stripeActions.js";
 import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js";
+import type * as payments from "../payments.js";
+import type * as paymentsNode from "../paymentsNode.js";
 import type * as pdf_quotePdf from "../pdf/quotePdf.js";
 import type * as queries from "../queries.js";
 import type * as quoteContent from "../quoteContent.js";
@@ -79,6 +81,8 @@ declare const fullApi: ApiFromModules<{
   "httpHandlers/clerkActions": typeof httpHandlers_clerkActions;
   "httpHandlers/stripeActions": typeof httpHandlers_stripeActions;
   "httpHandlers/tallyActions": typeof httpHandlers_tallyActions;
+  payments: typeof payments;
+  paymentsNode: typeof paymentsNode;
   "pdf/quotePdf": typeof pdf_quotePdf;
   queries: typeof queries;
   quoteContent: typeof quoteContent;

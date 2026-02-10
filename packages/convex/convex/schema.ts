@@ -16,7 +16,8 @@ const organizations = defineTable({
   slug: v.optional(v.string()),
   imageUrl: v.optional(v.string()),
 })
-  .index("by_clerk_id", ["clerkId"]);
+  .index("by_clerk_id", ["clerkId"])
+  .index("by_slug", ["slug"]);
 
 const organizationMemberships = defineTable({
   clerkId: v.string(), // membership ID from Clerk
@@ -30,15 +31,19 @@ const organizationMemberships = defineTable({
   .index("by_user_and_org", ["userId", "organizationId"]);
 
 const stripeCustomers = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   clerkId: v.string(),
   stripeCustomerId: v.string(),
   email: v.string(),
   createdAt: v.number(),
 })
   .index("by_clerk_id", ["clerkId"])
+  .index("by_clerk_id_and_org", ["clerkId", "organizationId"])
+  .index("by_organization", ["organizationId"])
   .index("by_stripe_id", ["stripeCustomerId"]);
 
 const setupIntents = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   clerkId: v.string(),
   setupIntentId: v.string(),
   clientSecret: v.string(),
@@ -51,9 +56,12 @@ const setupIntents = defineTable({
   updatedAt: v.optional(v.number()),
 })
   .index("by_clerk_id", ["clerkId"])
+  .index("by_clerk_id_and_org", ["clerkId", "organizationId"])
+  .index("by_organization", ["organizationId"])
   .index("by_setup_intent_id", ["setupIntentId"]);
 
 const paymentMethods = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   clerkId: v.string(),
   stripePaymentMethodId: v.string(),
   stripeCustomerId: v.string(),
@@ -71,10 +79,13 @@ const paymentMethods = defineTable({
   createdAt: v.number(),
 })
   .index("by_clerk_id", ["clerkId"])
+  .index("by_clerk_id_and_org", ["clerkId", "organizationId"])
+  .index("by_organization", ["organizationId"])
   .index("by_stripe_id", ["stripePaymentMethodId"])
   .index("by_stripe_customer", ["stripeCustomerId"]);
 
 const bookings = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   email: v.string(),
   customerName: v.optional(v.string()),
   stripeCustomerId: v.optional(v.string()),
@@ -113,8 +124,11 @@ const bookings = defineTable({
   updatedAt: v.number(),
 })
   .index("by_email", ["email"])
+  .index("by_org_email", ["organizationId", "email"])
+  .index("by_organization", ["organizationId"])
   .index("by_checkout_session", ["stripeCheckoutSessionId"])
   .index("by_status", ["status"])
+  .index("by_org_status", ["organizationId", "status"])
   .index("by_service_date", ["serviceDate"])
   .index("by_service_date_status", ["serviceDate", "status"])
   .index("by_customer", ["customerId"])
@@ -138,6 +152,7 @@ const bookingLifecycleEvents = defineTable({
   .index("by_event_type", ["eventType"]);
 
 const bookingRequests = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   status: v.string(), // "requested" | "confirmed"
   requestResponseId: v.optional(v.string()),
   confirmationResponseId: v.optional(v.string()),
@@ -170,6 +185,8 @@ const bookingRequests = defineTable({
   confirmedAt: v.optional(v.number()),
 })
   .index("by_email", ["email"])
+  .index("by_org_email", ["organizationId", "email"])
+  .index("by_organization", ["organizationId"])
   .index("by_status", ["status"])
   .index("by_request_response_id", ["requestResponseId"])
   .index("by_confirmation_response_id", ["confirmationResponseId"])
@@ -341,6 +358,7 @@ const sequences = defineTable({
   .index("by_key", ["key"]);
 
 const paymentIntents = defineTable({
+  organizationId: v.optional(v.id("organizations")),
   bookingId: v.id("bookings"),
   stripePaymentIntentId: v.string(),
   stripeCustomerId: v.string(),
@@ -355,7 +373,49 @@ const paymentIntents = defineTable({
 })
   .index("by_booking", ["bookingId"])
   .index("by_stripe_id", ["stripePaymentIntentId"])
+  .index("by_org_stripe_id", ["organizationId", "stripePaymentIntentId"])
+  .index("by_organization", ["organizationId"])
   .index("by_status", ["status"]);
+
+const organizationStripeConfigs = defineTable({
+  organizationId: v.id("organizations"),
+  orgSlug: v.string(),
+  status: v.union(
+    v.literal("configured"),
+    v.literal("incomplete"),
+    v.literal("disabled")
+  ),
+  secretKeyCiphertext: v.optional(v.string()),
+  secretKeyIv: v.optional(v.string()),
+  secretKeyAuthTag: v.optional(v.string()),
+  webhookSecretCiphertext: v.optional(v.string()),
+  webhookSecretIv: v.optional(v.string()),
+  webhookSecretAuthTag: v.optional(v.string()),
+  keyVersion: v.number(),
+  updatedByUserId: v.id("users"),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_organization", ["organizationId"])
+  .index("by_org_slug", ["orgSlug"])
+  .index("by_status", ["status"]);
+
+const paymentWebhookEvents = defineTable({
+  organizationId: v.id("organizations"),
+  eventId: v.string(),
+  eventType: v.string(),
+  receivedAt: v.number(),
+  processedAt: v.optional(v.number()),
+  status: v.union(
+    v.literal("received"),
+    v.literal("processed"),
+    v.literal("failed")
+  ),
+  errorMessage: v.optional(v.string()),
+})
+  .index("by_org_event", ["organizationId", "eventId"])
+  .index("by_org_received", ["organizationId", "receivedAt"])
+  .index("by_org_status", ["organizationId", "status"]);
 
 const emailSends = defineTable({
   idempotencyKey: v.string(),
@@ -842,6 +902,8 @@ export default defineSchema({
   quoteReminderEvents,
   sequences,
   paymentIntents,
+  organizationStripeConfigs,
+  paymentWebhookEvents,
   emailSends,
   emailEvents,
   emailSuppressions,
