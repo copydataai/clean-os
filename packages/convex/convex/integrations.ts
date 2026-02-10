@@ -6,9 +6,9 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { isAdminRole, requireActiveOrganization, requireOrganizationAdmin } from "./lib/orgContext";
+import { requireOrganizationAdmin } from "./lib/orgContext";
 import {
   BOOKING_CONFIRMATION_REQUIRED_TARGETS,
   QUOTE_REQUEST_REQUIRED_TARGETS,
@@ -83,14 +83,6 @@ const CONFIRMATION_TARGET_SYNONYMS: Record<string, string[]> = {
   scheduleAdjustmentWindows: ["schedule adjustment", "adjustment windows"],
   timingShiftOk: ["timing shift", "time shift ok", "schedule shift"],
   additionalNotes: ["notes", "additional notes"],
-};
-
-const CARD_CAPTURE_TARGET_SYNONYMS: Record<string, string[]> = {
-  email: ["email", "email address"],
-  paymentMethod: ["payment method", "card"],
-  cardLast4: ["last 4", "last4"],
-  cardBrand: ["card brand", "brand"],
-  status: ["status"],
 };
 
 function normalizeString(value: string): string {
@@ -221,7 +213,6 @@ function sanitizeMappings(mappings?: TallyMappings | null): TallyMappings {
   return {
     quoteRequest: sanitizeFlow(mappings?.quoteRequest),
     bookingConfirmation: sanitizeFlow(mappings?.bookingConfirmation),
-    cardCapture: sanitizeFlow(mappings?.cardCapture),
   };
 }
 
@@ -302,15 +293,8 @@ async function collectActiveFormConflicts(
       q.eq("provider", args.provider).eq("confirmationFormId", args.formId),
     )
     .collect();
-  const cardMatches = await ctx.db
-    .query("organizationIntegrations")
-    .withIndex("by_provider_card_form", (q: any) =>
-      q.eq("provider", args.provider).eq("cardFormId", args.formId),
-    )
-    .collect();
-
   const map = new Map<string, TallyIntegrationDoc>();
-  for (const entry of [...requestMatches, ...confirmationMatches, ...cardMatches]) {
+  for (const entry of [...requestMatches, ...confirmationMatches]) {
     map.set(String(entry._id), entry);
   }
 
@@ -321,29 +305,20 @@ async function collectActiveFormConflicts(
   );
 }
 
-async function requireActionAdminContext(ctx: any): Promise<{
+async function requireActionAdminContext(
+  ctx: any,
+  organizationId?: Id<"organizations">,
+): Promise<{
   organizationId: Id<"organizations">;
   userId: Id<"users">;
   orgHandle: string;
 }> {
-  const activeOrganization = await ctx.runQuery(api.queries.getActiveOrganization, {});
-  if (!activeOrganization) {
-    throw new Error("ORG_CONTEXT_REQUIRED");
-  }
-
-  if (!isAdminRole(activeOrganization.role)) {
-    throw new Error("ORG_UNAUTHORIZED");
-  }
-
-  const currentUser = await ctx.runQuery(api.queries.getCurrentUser, {});
-  if (!currentUser) {
-    throw new Error("AUTH_USER_NOT_FOUND");
-  }
+  const { user, organization } = await requireOrganizationAdmin(ctx, organizationId);
 
   return {
-    organizationId: activeOrganization._id,
-    userId: currentUser._id,
-    orgHandle: activeOrganization.slug ?? activeOrganization.clerkId,
+    organizationId: organization._id,
+    userId: user._id,
+    orgHandle: organization.slug ?? organization.clerkId,
   };
 }
 
@@ -372,22 +347,18 @@ async function fetchQuestionsForForm(ctx: any, apiKey: string, formId: string) {
 }
 
 function inferTargetFromEndpoint(
-  endpoint: "request" | "confirmation" | "card",
+  endpoint: "request" | "confirmation",
   config: TallyIntegrationDoc,
 ): string | undefined {
   if (endpoint === "request") {
     return config.requestFormId;
   }
-  if (endpoint === "confirmation") {
-    return config.confirmationFormId;
-  }
-  return config.cardFormId;
+  return config.confirmationFormId;
 }
 
 const endpointValidator = v.union(
   v.literal("request"),
   v.literal("confirmation"),
-  v.literal("card"),
 );
 
 export const getTallyIntegrationByOrganizationId = internalQuery({
@@ -426,9 +397,34 @@ export const getTallyIntegrationByFormId = internalQuery({
     if (matches.length === 0) {
       return null;
     }
+    if (matches.length > 1) {
+      throw new Error(`FORM_ID_AMBIGUOUS:${args.formId}`);
+    }
 
-    const byMostRecent = [...matches].sort((left, right) => right.updatedAt - left.updatedAt);
-    return byMostRecent[0] ?? null;
+    return matches[0] ?? null;
+  },
+});
+
+export const getTallyIntegrationByWebhookRouteToken = internalQuery({
+  args: {
+    routeToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const matches = await ctx.db
+      .query("organizationIntegrations")
+      .withIndex("by_provider_route_token", (q: any) =>
+        q.eq("provider", TALLY_PROVIDER).eq("webhookRouteToken", args.routeToken),
+      )
+      .collect();
+
+    const active = matches.filter((entry: TallyIntegrationDoc) => entry.status !== "disabled");
+    if (active.length === 0) {
+      return null;
+    }
+    if (active.length > 1) {
+      throw new Error(`WEBHOOK_ROUTE_TOKEN_AMBIGUOUS:${args.routeToken}`);
+    }
+    return active[0] ?? null;
   },
 });
 
@@ -438,6 +434,7 @@ export const logIntegrationWebhookAttempt = internalMutation({
     organizationId: v.optional(v.id("organizations")),
     endpoint: endpointValidator,
     routeOrgHandle: v.optional(v.string()),
+    routeToken: v.optional(v.string()),
     formId: v.optional(v.string()),
     eventType: v.optional(v.string()),
     webhookId: v.optional(v.string()),
@@ -463,6 +460,7 @@ export const upsertTallyIntegrationEncrypted = internalMutation({
     webhookSecretCiphertext: v.string(),
     webhookSecretIv: v.string(),
     webhookSecretAuthTag: v.string(),
+    webhookRouteToken: v.string(),
   },
   handler: async (ctx, args): Promise<Id<"organizationIntegrations">> => {
     const now = Date.now();
@@ -483,6 +481,7 @@ export const upsertTallyIntegrationEncrypted = internalMutation({
         webhookSecretCiphertext: args.webhookSecretCiphertext,
         webhookSecretIv: args.webhookSecretIv,
         webhookSecretAuthTag: args.webhookSecretAuthTag,
+        webhookRouteToken: existing.webhookRouteToken ?? args.webhookRouteToken,
         updatedByUserId: args.updatedByUserId,
         updatedAt: now,
       });
@@ -499,6 +498,7 @@ export const upsertTallyIntegrationEncrypted = internalMutation({
       webhookSecretCiphertext: args.webhookSecretCiphertext,
       webhookSecretIv: args.webhookSecretIv,
       webhookSecretAuthTag: args.webhookSecretAuthTag,
+      webhookRouteToken: args.webhookRouteToken,
       updatedByUserId: args.updatedByUserId,
       createdAt: now,
       updatedAt: now,
@@ -550,7 +550,6 @@ export const saveTallyWebhookIdsInternal = internalMutation({
     webhookIds: v.object({
       request: v.optional(v.string()),
       confirmation: v.optional(v.string()),
-      card: v.optional(v.string()),
     }),
     updatedByUserId: v.id("users"),
   },
@@ -570,6 +569,32 @@ export const saveTallyWebhookIdsInternal = internalMutation({
   },
 });
 
+export const ensureTallyWebhookRouteTokenInternal = internalMutation({
+  args: {
+    integrationId: v.id("organizationIntegrations"),
+    webhookRouteToken: v.string(),
+    updatedByUserId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, args) => {
+    const integration = await ctx.db.get(args.integrationId);
+    if (!integration || integration.provider !== TALLY_PROVIDER) {
+      throw new Error("TALLY_NOT_CONFIGURED");
+    }
+
+    if (integration.webhookRouteToken) {
+      return integration.webhookRouteToken;
+    }
+
+    await ctx.db.patch(integration._id, {
+      webhookRouteToken: args.webhookRouteToken,
+      updatedByUserId: args.updatedByUserId ?? integration.updatedByUserId,
+      updatedAt: Date.now(),
+    });
+
+    return args.webhookRouteToken;
+  },
+});
+
 export const bootstrapTallyIntegrationFromEnvInternal = internalMutation({
   args: {
     organizationId: v.id("organizations"),
@@ -580,15 +605,15 @@ export const bootstrapTallyIntegrationFromEnvInternal = internalMutation({
     webhookSecretCiphertext: v.string(),
     webhookSecretIv: v.string(),
     webhookSecretAuthTag: v.string(),
+    webhookRouteToken: v.string(),
     requestFormId: v.optional(v.string()),
     confirmationFormId: v.optional(v.string()),
-    cardFormId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await getIntegrationByOrganization(ctx, args.organizationId);
     const now = Date.now();
 
-    for (const formId of [args.requestFormId, args.confirmationFormId, args.cardFormId].filter(Boolean) as string[]) {
+    for (const formId of [args.requestFormId, args.confirmationFormId].filter(Boolean) as string[]) {
       const conflicts = await collectActiveFormConflicts(ctx, {
         organizationId: args.organizationId,
         provider: TALLY_PROVIDER,
@@ -606,7 +631,6 @@ export const bootstrapTallyIntegrationFromEnvInternal = internalMutation({
       formIds: {
         request: args.requestFormId,
         confirmation: args.confirmationFormId,
-        card: args.cardFormId,
       },
     };
 
@@ -622,13 +646,12 @@ export const bootstrapTallyIntegrationFromEnvInternal = internalMutation({
         webhookSecretCiphertext: args.webhookSecretCiphertext,
         webhookSecretIv: args.webhookSecretIv,
         webhookSecretAuthTag: args.webhookSecretAuthTag,
+        webhookRouteToken: existing.webhookRouteToken ?? args.webhookRouteToken,
         requestFormId: args.requestFormId,
         confirmationFormId: args.confirmationFormId,
-        cardFormId: args.cardFormId,
         formIds: {
           request: args.requestFormId,
           confirmation: args.confirmationFormId,
-          card: args.cardFormId,
         },
         updatedByUserId: args.updatedByUserId,
         updatedAt: now,
@@ -647,13 +670,12 @@ export const bootstrapTallyIntegrationFromEnvInternal = internalMutation({
       webhookSecretCiphertext: args.webhookSecretCiphertext,
       webhookSecretIv: args.webhookSecretIv,
       webhookSecretAuthTag: args.webhookSecretAuthTag,
+      webhookRouteToken: args.webhookRouteToken,
       requestFormId: args.requestFormId,
       confirmationFormId: args.confirmationFormId,
-      cardFormId: args.cardFormId,
       formIds: {
         request: args.requestFormId,
         confirmation: args.confirmationFormId,
-        card: args.cardFormId,
       },
       updatedByUserId: args.updatedByUserId,
       createdAt: now,
@@ -663,10 +685,13 @@ export const bootstrapTallyIntegrationFromEnvInternal = internalMutation({
 });
 
 export const getTallyIntegrationStatus = query({
-  args: {},
-  handler: async (ctx) => {
-    const { organization } = await requireActiveOrganization(ctx);
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const { organization } = await requireOrganizationAdmin(ctx, args.organizationId);
     const integration = await getIntegrationByOrganization(ctx, organization._id);
+    const baseUrl = process.env.NEXT_PUBLIC_CONVEX_URL?.trim() ?? "";
 
     if (!integration) {
       return {
@@ -675,20 +700,23 @@ export const getTallyIntegrationStatus = query({
         orgHandle: organization.slug ?? organization.clerkId,
         hasApiKey: false,
         hasWebhookSecret: false,
+        hasWebhookRouteToken: false,
+        routeMode: "legacy_query" as const,
+        webhookUrls: {
+          request: null,
+          confirmation: null,
+        },
         formIds: {
           request: null,
           confirmation: null,
-          card: null,
         },
         webhookIds: {
           request: null,
           confirmation: null,
-          card: null,
         },
         fieldMappings: {
           quoteRequest: {},
           bookingConfirmation: {},
-          cardCapture: {},
         } as TallyMappings,
         lastSyncAt: null,
         lastValidationAt: null,
@@ -696,22 +724,30 @@ export const getTallyIntegrationStatus = query({
       };
     }
 
+    const routeToken = integration.webhookRouteToken?.trim();
+    const canBuildWebhookUrls = Boolean(baseUrl && routeToken);
+    const webhookUrls = {
+      request: canBuildWebhookUrls ? `${baseUrl}/tally-request-webhook/${routeToken}` : null,
+      confirmation: canBuildWebhookUrls ? `${baseUrl}/tally-confirmation-webhook/${routeToken}` : null,
+    };
+
     return {
       provider: integration.provider,
       status: integration.status,
       orgHandle: organization.slug ?? organization.clerkId,
       hasApiKey: Boolean(integration.apiKeyCiphertext),
       hasWebhookSecret: Boolean(integration.webhookSecretCiphertext),
+      hasWebhookRouteToken: Boolean(integration.webhookRouteToken),
+      routeMode: integration.webhookRouteToken ? ("path_token" as const) : ("legacy_query" as const),
+      webhookUrls,
       formIds: {
         request: integration.requestFormId ?? integration.formIds?.request ?? null,
         confirmation:
           integration.confirmationFormId ?? integration.formIds?.confirmation ?? null,
-        card: integration.cardFormId ?? integration.formIds?.card ?? null,
       },
       webhookIds: {
         request: integration.webhookIds?.request ?? null,
         confirmation: integration.webhookIds?.confirmation ?? null,
-        card: integration.webhookIds?.card ?? null,
       },
       fieldMappings: sanitizeMappings(integration.fieldMappings as TallyMappings | undefined),
       lastSyncAt: integration.lastSyncAt ?? null,
@@ -723,20 +759,26 @@ export const getTallyIntegrationStatus = query({
 
 export const upsertTallyCredentials = action({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     apiKey: v.string(),
     webhookSecret: v.string(),
   },
   handler: async (ctx, args) => {
-    const { organizationId, userId } = await requireActionAdminContext(ctx);
+    const { organizationId, userId } = await requireActionAdminContext(ctx, args.organizationId);
 
     const encrypted = await ctx.runAction(internalApi.integrationsNode.encryptIntegrationSecrets, {
       apiKey: args.apiKey,
       webhookSecret: args.webhookSecret,
     });
+    const webhookRouteToken = await ctx.runAction(
+      internalApi.integrationsNode.generateTallyWebhookRouteToken,
+      {},
+    );
 
     const id = await ctx.runMutation(internalApi.integrations.upsertTallyIntegrationEncrypted, {
       organizationId,
       updatedByUserId: userId,
+      webhookRouteToken,
       ...encrypted,
     });
 
@@ -746,10 +788,11 @@ export const upsertTallyCredentials = action({
 
 export const validateTallyConnection = action({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     apiKey: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { organizationId } = await requireActionAdminContext(ctx);
+    const { organizationId } = await requireActionAdminContext(ctx, args.organizationId);
 
     let apiKey = trimOrUndefined(args.apiKey);
 
@@ -783,9 +826,11 @@ export const validateTallyConnection = action({
 });
 
 export const syncTallyFormsAndQuestions = action({
-  args: {},
-  handler: async (ctx) => {
-    const { organizationId } = await requireActionAdminContext(ctx);
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const { organizationId } = await requireActionAdminContext(ctx, args.organizationId);
 
     const decrypted = await ctx.runAction(internalApi.integrationsNode.decryptTallyConfig, {
       organizationId,
@@ -814,15 +859,12 @@ export const syncTallyFormsAndQuestions = action({
       questionMap.get(decrypted.requestFormId ?? "") ?? [];
     const confirmationQuestions =
       questionMap.get(decrypted.confirmationFormId ?? "") ?? [];
-    const cardQuestions = questionMap.get(decrypted.cardFormId ?? "") ?? [];
-
     const suggestions: TallyMappings = {
       quoteRequest: suggestMappingForTargets(requestQuestions, QUOTE_TARGET_SYNONYMS),
       bookingConfirmation: suggestMappingForTargets(
         confirmationQuestions,
         CONFIRMATION_TARGET_SYNONYMS,
       ),
-      cardCapture: suggestMappingForTargets(cardQuestions, CARD_CAPTURE_TARGET_SYNONYMS),
     };
 
     await ctx.runMutation(internalApi.integrations.touchTallySync, {
@@ -836,32 +878,31 @@ export const syncTallyFormsAndQuestions = action({
   },
 });
 
-export const saveTallyMappingsAndForms = mutation({
+export const saveTallyMappingsAndFormsInternal = internalMutation({
   args: {
+    organizationId: v.id("organizations"),
+    updatedByUserId: v.id("users"),
+    webhookRouteToken: v.string(),
     requestFormId: v.string(),
     confirmationFormId: v.string(),
-    cardFormId: v.optional(v.string()),
     fieldMappings: tallyMappingsValidator,
   },
   handler: async (ctx, args) => {
-    const { organization, user } = await requireOrganizationAdmin(ctx);
-
     const requestFormId = trimOrUndefined(args.requestFormId);
     const confirmationFormId = trimOrUndefined(args.confirmationFormId);
-    const cardFormId = trimOrUndefined(args.cardFormId);
 
     if (!requestFormId || !confirmationFormId) {
       throw new Error("REQUEST_AND_CONFIRMATION_FORMS_REQUIRED");
     }
 
-    const uniqueLocal = new Set([requestFormId, confirmationFormId, cardFormId].filter(Boolean));
-    if (uniqueLocal.size !== [requestFormId, confirmationFormId, cardFormId].filter(Boolean).length) {
+    const uniqueLocal = new Set([requestFormId, confirmationFormId].filter(Boolean));
+    if (uniqueLocal.size !== [requestFormId, confirmationFormId].filter(Boolean).length) {
       throw new Error("FORM_IDS_MUST_BE_UNIQUE");
     }
 
-    for (const formId of [requestFormId, confirmationFormId, cardFormId].filter(Boolean) as string[]) {
+    for (const formId of [requestFormId, confirmationFormId].filter(Boolean) as string[]) {
       const conflicts = await collectActiveFormConflicts(ctx, {
-        organizationId: organization._id,
+        organizationId: args.organizationId,
         provider: TALLY_PROVIDER,
         formId,
       });
@@ -872,33 +913,33 @@ export const saveTallyMappingsAndForms = mutation({
 
     const sanitizedMappings = sanitizeMappings(args.fieldMappings as TallyMappings);
 
-    const existing = await getIntegrationByOrganization(ctx, organization._id);
+    const existing = await getIntegrationByOrganization(ctx, args.organizationId);
     const now = Date.now();
+    const webhookRouteToken = existing?.webhookRouteToken ?? args.webhookRouteToken;
 
     const next: Partial<TallyIntegrationDoc> = {
       ...existing,
       requestFormId,
       confirmationFormId,
-      cardFormId,
+      webhookRouteToken,
       fieldMappings: sanitizedMappings as any,
     };
     const status = deriveConfigStatus(next);
 
     if (!existing) {
       return await ctx.db.insert("organizationIntegrations", {
-        organizationId: organization._id,
+        organizationId: args.organizationId,
         provider: TALLY_PROVIDER,
         status,
+        webhookRouteToken,
         requestFormId,
         confirmationFormId,
-        cardFormId,
         formIds: {
           request: requestFormId,
           confirmation: confirmationFormId,
-          card: cardFormId,
         },
         fieldMappings: sanitizedMappings as any,
-        updatedByUserId: user._id,
+        updatedByUserId: args.updatedByUserId,
         createdAt: now,
         updatedAt: now,
       });
@@ -908,14 +949,13 @@ export const saveTallyMappingsAndForms = mutation({
       status,
       requestFormId,
       confirmationFormId,
-      cardFormId,
+      webhookRouteToken,
       formIds: {
         request: requestFormId,
         confirmation: confirmationFormId,
-        card: cardFormId,
       },
       fieldMappings: sanitizedMappings as any,
-      updatedByUserId: user._id,
+      updatedByUserId: args.updatedByUserId,
       updatedAt: now,
     });
 
@@ -923,12 +963,39 @@ export const saveTallyMappingsAndForms = mutation({
   },
 });
 
+export const saveTallyMappingsAndForms = action({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    requestFormId: v.string(),
+    confirmationFormId: v.string(),
+    fieldMappings: tallyMappingsValidator,
+  },
+  handler: async (ctx, args) => {
+    const { organizationId: requestedOrganizationId, requestFormId, confirmationFormId, fieldMappings } = args;
+    const { organizationId, userId } = await requireActionAdminContext(ctx, requestedOrganizationId);
+    const webhookRouteToken = await ctx.runAction(
+      internalApi.integrationsNode.generateTallyWebhookRouteToken,
+      {},
+    );
+
+    return await ctx.runMutation(internalApi.integrations.saveTallyMappingsAndFormsInternal, {
+      organizationId,
+      updatedByUserId: userId,
+      webhookRouteToken,
+      requestFormId,
+      confirmationFormId,
+      fieldMappings,
+    });
+  },
+});
+
 export const listTallyWebhookHealth = query({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { organization } = await requireActiveOrganization(ctx);
+    const { organization } = await requireOrganizationAdmin(ctx, args.organizationId);
     const limit = args.limit ?? 25;
 
     return await ctx.db
@@ -943,11 +1010,12 @@ export const listTallyWebhookHealth = query({
 
 export const ensureTallyWebhooks = action({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     operation: v.union(v.literal("list"), v.literal("ensure"), v.literal("delete")),
     target: v.optional(v.union(v.literal("all"), endpointValidator)),
   },
   handler: async (ctx, args) => {
-    const { organizationId, orgHandle, userId } = await requireActionAdminContext(ctx);
+    const { organizationId, userId } = await requireActionAdminContext(ctx, args.organizationId);
 
     const decrypted = await ctx.runAction(internalApi.integrationsNode.decryptTallyConfig, {
       organizationId,
@@ -969,31 +1037,28 @@ export const ensureTallyWebhooks = action({
     const targetList =
       args.target && args.target !== "all"
         ? [args.target]
-        : (["request", "confirmation", "card"] as const);
+        : (["request", "confirmation"] as const);
 
     const baseUrl = process.env.NEXT_PUBLIC_CONVEX_URL?.trim();
     if (!baseUrl) {
       throw new Error("MISSING_NEXT_PUBLIC_CONVEX_URL");
     }
 
-    const pathByEndpoint: Record<"request" | "confirmation" | "card", string> = {
+    const pathByEndpoint: Record<"request" | "confirmation", string> = {
       request: "/tally-request-webhook",
       confirmation: "/tally-confirmation-webhook",
-      card: "/tally-card-webhook",
     };
 
     const nextWebhookIds = {
       request: decrypted.webhookIds?.request,
       confirmation: decrypted.webhookIds?.confirmation,
-      card: decrypted.webhookIds?.card,
     } as {
       request?: string;
       confirmation?: string;
-      card?: string;
     };
 
     const operationResults: Array<{
-      endpoint: "request" | "confirmation" | "card";
+      endpoint: "request" | "confirmation";
       action: "created" | "updated" | "deleted" | "unchanged" | "skipped";
       webhookId?: string;
       reason?: string;
@@ -1010,7 +1075,11 @@ export const ensureTallyWebhooks = action({
         continue;
       }
 
-      const targetUrl = `${baseUrl}${pathByEndpoint[endpoint]}?org=${encodeURIComponent(orgHandle)}`;
+      const routeToken = decrypted.webhookRouteToken;
+      if (!routeToken) {
+        throw new Error("MISSING_WEBHOOK_ROUTE_TOKEN");
+      }
+      const targetUrl = `${baseUrl}${pathByEndpoint[endpoint]}/${encodeURIComponent(routeToken)}`;
       const knownId = nextWebhookIds[endpoint];
 
       const knownWebhook = knownId
@@ -1116,9 +1185,11 @@ export const ensureTallyWebhooks = action({
 });
 
 export const bootstrapTallyIntegrationFromEnv = action({
-  args: {},
-  handler: async (ctx) => {
-    const { organizationId, userId } = await requireActionAdminContext(ctx);
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const { organizationId, userId } = await requireActionAdminContext(ctx, args.organizationId);
 
     const apiKey = trimOrUndefined(process.env.TALLY_API_KEY);
     const webhookSecret = trimOrUndefined(process.env.TALLY_WEBHOOK_SECRET);
@@ -1134,14 +1205,18 @@ export const bootstrapTallyIntegrationFromEnv = action({
       apiKey,
       webhookSecret,
     });
+    const webhookRouteToken = await ctx.runAction(
+      internalApi.integrationsNode.generateTallyWebhookRouteToken,
+      {},
+    );
 
     const id = await ctx.runMutation(internalApi.integrations.bootstrapTallyIntegrationFromEnvInternal, {
       organizationId,
       updatedByUserId: userId,
+      webhookRouteToken,
       ...encrypted,
       requestFormId: trimOrUndefined(process.env.TALLY_REQUEST_FORM_ID),
       confirmationFormId: trimOrUndefined(process.env.TALLY_CONFIRM_FORM_ID),
-      cardFormId: trimOrUndefined(process.env.TALLY_CARD_FORM_ID),
     });
 
     return {

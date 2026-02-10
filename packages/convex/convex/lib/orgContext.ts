@@ -167,6 +167,11 @@ export async function requireActiveOrganization(ctx: any) {
 
   const activeFromIdentity = await resolveActiveOrganizationFromIdentity(ctx, identity);
   if (!activeFromIdentity) {
+    if (memberships.length > 1) {
+      throw new Error(
+        "ORG_CONTEXT_AMBIGUOUS: user belongs to multiple organizations but no orgId claim was provided"
+      );
+    }
     const fallback = memberships[0];
     return {
       identity,
@@ -214,10 +219,28 @@ export async function requireOrganizationAdmin(
   ctx: any,
   organizationId?: Id<"organizations">
 ) {
-  const { user, memberships, organization } = await requireActiveOrganization(ctx);
+  if (organizationId) {
+    const { user } = await requireAuthenticatedUser(ctx);
+    const memberships = await getUserMemberships(ctx, user._id);
+    const membership = memberships.find((item) => item.organizationId === organizationId);
 
-  const targetOrganizationId = organizationId ?? organization._id;
-  const membership = memberships.find((item) => item.organizationId === targetOrganizationId);
+    if (!membership) {
+      throw new Error("ORG_UNAUTHORIZED");
+    }
+
+    if (!isAdminRole(membership.role)) {
+      throw new Error("ORG_UNAUTHORIZED");
+    }
+
+    return {
+      user,
+      organization: membership.organization,
+      membership,
+    };
+  }
+
+  const { user, memberships, organization } = await requireActiveOrganization(ctx);
+  const membership = memberships.find((item) => item.organizationId === organization._id);
 
   if (!membership) {
     throw new Error("ORG_UNAUTHORIZED");
