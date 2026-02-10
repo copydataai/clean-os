@@ -470,6 +470,7 @@ export const chargeBooking = internalAction({
           stripePaymentIntentId: paymentIntent.id,
           status: "requires_action",
           paymentLinkUrl: paymentLink,
+          errorMessage: paymentLink ? undefined : "Publishable key missing for 3DS recovery",
         });
 
         await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
@@ -531,6 +532,7 @@ export const chargeBooking = internalAction({
             stripePaymentIntentId: paymentIntentId,
             status: "requires_action",
             paymentLinkUrl: paymentLink,
+            errorMessage: paymentLink ? undefined : "Publishable key missing for 3DS recovery",
           });
 
           await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
