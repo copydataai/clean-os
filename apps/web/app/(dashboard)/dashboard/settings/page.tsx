@@ -21,6 +21,12 @@ const settingsSections = [
     href: "/dashboard/payments",
     cta: "Open payments",
   },
+  {
+    title: "Integrations",
+    description: "Connect Tally, manage forms/mappings, and monitor webhook health.",
+    href: "/dashboard/settings/integrations",
+    cta: "Open integrations",
+  },
 ];
 
 const recommendedNext = [
@@ -45,7 +51,7 @@ export default function SettingsPage() {
         </Link>
       </PageHeader>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {settingsSections.map((section) => (
           <div key={section.href} className="surface-card flex flex-col gap-4 p-5">
             <div>
