@@ -37,6 +37,7 @@ import type * as httpHandlers_stripeActions from "../httpHandlers/stripeActions.
 import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js";
 import type * as integrations from "../integrations.js";
 import type * as integrationsNode from "../integrationsNode.js";
+import type * as lib_bookingFlowDebug from "../lib/bookingFlowDebug.js";
 import type * as lib_orgContext from "../lib/orgContext.js";
 import type * as lib_publicBookingContext from "../lib/publicBookingContext.js";
 import type * as lib_tallyMappings from "../lib/tallyMappings.js";
@@ -94,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   "httpHandlers/tallyActions": typeof httpHandlers_tallyActions;
   integrations: typeof integrations;
   integrationsNode: typeof integrationsNode;
+  "lib/bookingFlowDebug": typeof lib_bookingFlowDebug;
   "lib/orgContext": typeof lib_orgContext;
   "lib/publicBookingContext": typeof lib_publicBookingContext;
   "lib/tallyMappings": typeof lib_tallyMappings;
