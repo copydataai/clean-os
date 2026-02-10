@@ -4,10 +4,24 @@ import { internal } from "./_generated/api";
 import Stripe from "stripe";
 import { Id } from "./_generated/dataModel";
 
-function getStripeClient(): Stripe {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+function createStripeClient(secretKey: string): Stripe {
+  return new Stripe(secretKey, {
     apiVersion: "2025-12-15.clover" as any,
   });
+}
+
+async function getStripeClientForOrganization(
+  ctx: any,
+  organizationId: Id<"organizations">
+): Promise<{ stripe: Stripe; orgSlug: string }> {
+  const config = await ctx.runAction(internal.paymentsNode.getDecryptedStripeConfigForOrganization, {
+    organizationId,
+  });
+
+  return {
+    stripe: createStripeClient(config.secretKey),
+    orgSlug: config.orgSlug,
+  };
 }
 
 type StripeCustomerRecord = {
@@ -38,12 +52,14 @@ async function dedupeStripeCustomersForClerkIdInternal(
   ctx: any,
   stripe: Stripe,
   clerkId: string,
+  organizationId: Id<"organizations">,
   records?: StripeCustomerRecord[]
 ): Promise<{ stripeCustomerId?: string; cleaned: boolean; skippedCleanup?: boolean }> {
   const customers =
     records ??
     (await ctx.runQuery(internal.cardDb.listStripeCustomersByClerkId, {
       clerkId,
+      organizationId,
     }));
 
   if (!customers || customers.length === 0) {
@@ -130,10 +146,12 @@ async function dedupeStripeCustomersForClerkIdInternal(
 async function resolveStripeCustomerForClerkIdInternal(
   ctx: any,
   stripe: Stripe,
-  clerkId: string
+  clerkId: string,
+  organizationId: Id<"organizations">
 ): Promise<{ stripeCustomerId?: string; cleaned?: boolean }> {
   const customers = await ctx.runQuery(internal.cardDb.listStripeCustomersByClerkId, {
     clerkId,
+    organizationId,
   });
 
   if (!customers || customers.length === 0) {
@@ -144,7 +162,7 @@ async function resolveStripeCustomerForClerkIdInternal(
     return { stripeCustomerId: customers[0].stripeCustomerId };
   }
 
-  return await dedupeStripeCustomersForClerkIdInternal(ctx, stripe, clerkId, customers);
+  return await dedupeStripeCustomersForClerkIdInternal(ctx, stripe, clerkId, organizationId, customers);
 }
 
 export const createCheckoutSession = action({
@@ -154,8 +172,6 @@ export const createCheckoutSession = action({
     cancelUrl: v.string(),
   },
   handler: async (ctx, args): Promise<{ checkoutUrl: string }> => {
-    const stripe = getStripeClient();
-
     const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
       id: args.bookingId,
     });
@@ -163,16 +179,26 @@ export const createCheckoutSession = action({
     if (!booking) {
       throw new Error("Booking not found");
     }
+    if (!booking.organizationId) {
+      throw new Error("ORG_NOT_FOUND");
+    }
+
+    const { stripe, orgSlug } = await getStripeClientForOrganization(ctx, booking.organizationId);
 
     let customerId: string | undefined;
     if (booking.stripeCustomerId) {
       customerId = booking.stripeCustomerId;
     } else {
-      const resolved = await resolveStripeCustomerForClerkIdInternal(ctx, stripe, booking.email);
+      const resolved = await resolveStripeCustomerForClerkIdInternal(
+        ctx,
+        stripe,
+        booking.email,
+        booking.organizationId
+      );
       if (resolved.stripeCustomerId) {
         customerId = resolved.stripeCustomerId;
       } else {
-        const idempotencyKey = `stripe_customer:${booking.email}`;
+        const idempotencyKey = `org:${booking.organizationId}:stripe_customer:${booking.email}`;
         const customer = await stripe.customers.create(
           {
             email: booking.email,
@@ -180,12 +206,15 @@ export const createCheckoutSession = action({
             metadata: {
               clerkId: booking.email,
               bookingId: args.bookingId,
+              organizationId: booking.organizationId,
+              orgSlug,
             },
           },
           { idempotencyKey }
         );
 
         const saved = await ctx.runMutation(internal.cardDb.saveStripeCustomerIfAbsent, {
+          organizationId: booking.organizationId,
           clerkId: booking.email,
           stripeCustomerId: customer.id,
           email: booking.email,
@@ -205,6 +234,8 @@ export const createCheckoutSession = action({
       metadata: {
         bookingId: args.bookingId,
         email: booking.email,
+        organizationId: booking.organizationId,
+        orgSlug,
       },
     });
 
@@ -231,17 +262,22 @@ export const getCardOnFileStatus = action({
     stripeCustomerId?: string;
     cardSummary?: CardSummary;
   }> => {
-    const stripe = getStripeClient();
-
     const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
       id: args.bookingId,
     });
 
-    if (!booking?.email) {
+    if (!booking?.email || !booking.organizationId) {
       return { hasCard: false };
     }
 
-    const resolved = await resolveStripeCustomerForClerkIdInternal(ctx, stripe, booking.email);
+    const { stripe } = await getStripeClientForOrganization(ctx, booking.organizationId);
+
+    const resolved = await resolveStripeCustomerForClerkIdInternal(
+      ctx,
+      stripe,
+      booking.email,
+      booking.organizationId
+    );
     if (!resolved.stripeCustomerId) {
       return { hasCard: false };
     }
@@ -277,23 +313,35 @@ export const getCardOnFileStatus = action({
 export const resolveStripeCustomerForEmail = internalAction({
   args: {
     clerkId: v.string(),
+    organizationId: v.id("organizations"),
   },
   handler: async (ctx, args): Promise<{ stripeCustomerId?: string; cleaned?: boolean }> => {
-    const stripe = getStripeClient();
-    return await resolveStripeCustomerForClerkIdInternal(ctx, stripe, args.clerkId);
+    const { stripe } = await getStripeClientForOrganization(ctx, args.organizationId);
+    return await resolveStripeCustomerForClerkIdInternal(
+      ctx,
+      stripe,
+      args.clerkId,
+      args.organizationId
+    );
   },
 });
 
 export const dedupeStripeCustomersForClerkId = internalAction({
   args: {
     clerkId: v.string(),
+    organizationId: v.id("organizations"),
   },
   handler: async (
     ctx,
     args
   ): Promise<{ stripeCustomerId?: string; cleaned: boolean; skippedCleanup?: boolean }> => {
-    const stripe = getStripeClient();
-    return await dedupeStripeCustomersForClerkIdInternal(ctx, stripe, args.clerkId);
+    const { stripe } = await getStripeClientForOrganization(ctx, args.organizationId);
+    return await dedupeStripeCustomersForClerkIdInternal(
+      ctx,
+      stripe,
+      args.clerkId,
+      args.organizationId
+    );
   },
 });
 
@@ -310,8 +358,6 @@ export const chargeBooking = internalAction({
     paymentLinkUrl?: string;
     error?: string;
   }> => {
-    const stripe = getStripeClient();
-
     const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
       id: args.bookingId,
     });
@@ -323,6 +369,11 @@ export const chargeBooking = internalAction({
     if (!booking.stripeCustomerId) {
       return { success: false, error: "No Stripe customer linked to booking" };
     }
+    if (!booking.organizationId) {
+      return { success: false, error: "ORG_NOT_FOUND" };
+    }
+
+    const { stripe, orgSlug } = await getStripeClientForOrganization(ctx, booking.organizationId);
 
     if (!["completed", "payment_failed"].includes(booking.status)) {
       return {
@@ -357,11 +408,14 @@ export const chargeBooking = internalAction({
         metadata: {
           bookingId: args.bookingId,
           email: booking.email,
+          organizationId: booking.organizationId,
+          orgSlug,
         },
       });
 
       // Save payment intent to database
       await ctx.runMutation(internal.bookingDb.createPaymentIntent, {
+        organizationId: booking.organizationId,
         bookingId: args.bookingId,
         stripePaymentIntentId: paymentIntent.id,
         stripeCustomerId: booking.stripeCustomerId,
@@ -383,9 +437,10 @@ export const chargeBooking = internalAction({
 
       if (paymentIntent.status === "requires_action") {
         // 3DS authentication required - generate payment link
-        const paymentLink = await createPaymentLinkForIntent(stripe, paymentIntent.id, booking.email);
+        const paymentLink = await createPaymentLinkForIntent(stripe, paymentIntent.id, orgSlug);
         
         await ctx.runMutation(internal.bookingDb.updatePaymentIntentStatus, {
+          organizationId: booking.organizationId,
           stripePaymentIntentId: paymentIntent.id,
           status: "requires_action",
           paymentLinkUrl: paymentLink,
@@ -418,9 +473,10 @@ export const chargeBooking = internalAction({
         const paymentIntentId = err.raw?.payment_intent?.id;
         
         if (paymentIntentId && err.code === "authentication_required") {
-          const paymentLink = await createPaymentLinkForIntent(stripe, paymentIntentId, booking.email);
+          const paymentLink = await createPaymentLinkForIntent(stripe, paymentIntentId, orgSlug);
           
           await ctx.runMutation(internal.bookingDb.createPaymentIntent, {
+            organizationId: booking.organizationId,
             bookingId: args.bookingId,
             stripePaymentIntentId: paymentIntentId,
             stripeCustomerId: booking.stripeCustomerId,
@@ -431,6 +487,7 @@ export const chargeBooking = internalAction({
           });
 
           await ctx.runMutation(internal.bookingDb.updatePaymentIntentStatus, {
+            organizationId: booking.organizationId,
             stripePaymentIntentId: paymentIntentId,
             status: "requires_action",
             paymentLinkUrl: paymentLink,
@@ -476,7 +533,7 @@ export const chargeBooking = internalAction({
 async function createPaymentLinkForIntent(
   stripe: Stripe,
   paymentIntentId: string,
-  email: string
+  orgSlug?: string
 ): Promise<string> {
   // Retrieve the payment intent to get the client secret
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
@@ -487,7 +544,8 @@ async function createPaymentLinkForIntent(
   
   // Create a URL that directs customer to complete payment
   // This points to our custom payment completion page
-  return `${baseUrl}/complete-payment?payment_intent=${paymentIntentId}&payment_intent_client_secret=${paymentIntent.client_secret}`;
+  const orgParam = orgSlug ? `&org=${encodeURIComponent(orgSlug)}` : "";
+  return `${baseUrl}/complete-payment?payment_intent=${paymentIntentId}&payment_intent_client_secret=${paymentIntent.client_secret}${orgParam}`;
 }
 
 export const getBookingPaymentStatus = internalAction({
@@ -520,9 +578,10 @@ export const getBookingPaymentStatus = internalAction({
 export const handleCheckoutCompleted = internalAction({
   args: {
     checkoutSessionId: v.string(),
+    organizationId: v.id("organizations"),
   },
   handler: async (ctx, args): Promise<void> => {
-    const stripe = getStripeClient();
+    const { stripe } = await getStripeClientForOrganization(ctx, args.organizationId);
 
     // Retrieve the checkout session with setup intent expanded
     const session = await stripe.checkout.sessions.retrieve(args.checkoutSessionId, {
@@ -567,8 +626,17 @@ export const handleCheckoutCompleted = internalAction({
       console.error("Booking not found:", bookingId);
       return;
     }
+    if (booking.organizationId !== args.organizationId) {
+      console.error("Organization mismatch for checkout completion", {
+        bookingId,
+        expected: args.organizationId,
+        actual: booking.organizationId,
+      });
+      return;
+    }
 
     await ctx.runMutation(internal.cardDb.savePaymentMethodToDb, {
+      organizationId: booking.organizationId,
       clerkId: booking.email,
       stripePaymentMethodId: paymentMethod.id,
       stripeCustomerId: session.customer as string,

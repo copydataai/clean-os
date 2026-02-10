@@ -4,28 +4,36 @@ import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import Stripe from "stripe";
 
-function getStripeClient(): Stripe {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+function createStripeClient(secretKey: string): Stripe {
+  return new Stripe(secretKey, {
     apiVersion: "2025-12-15.clover" as any,
   });
 }
 
 export const handleStripeWebhook = internalAction({
   args: {
+    orgSlug: v.string(),
     payload: v.string(),
     signature: v.string(),
   },
-  handler: async (ctx, { payload, signature }) => {
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      console.error("Missing STRIPE_WEBHOOK_SECRET");
-      return { error: "Server configuration error", status: 500 };
+  handler: async (ctx, { orgSlug, payload, signature }) => {
+    let stripe: Stripe;
+    let webhookSecret: string;
+    let organizationId: any;
+    try {
+      const config = await ctx.runAction(internal.paymentsNode.getDecryptedStripeConfigForOrgSlug, {
+        orgSlug,
+      });
+      stripe = createStripeClient(config.secretKey);
+      webhookSecret = config.webhookSecret;
+      organizationId = config.organizationId;
+    } catch (err) {
+      console.error("[Stripe Webhook] Missing or invalid organization config", { orgSlug, err });
+      return { error: "ORG_NOT_CONFIGURED", status: 400 };
     }
 
     let evt: Stripe.Event;
     try {
-      const stripe = getStripeClient();
       evt = await stripe.webhooks.constructEventAsync(
         payload,
         signature,
@@ -34,6 +42,15 @@ export const handleStripeWebhook = internalAction({
     } catch (err) {
       console.error("Stripe webhook verification failed:", err);
       return { error: "Invalid signature", status: 400 };
+    }
+
+    const recorded = await ctx.runMutation(internal.payments.recordWebhookEventReceived, {
+      organizationId,
+      eventId: evt.id,
+      eventType: evt.type,
+    });
+    if (recorded.duplicate) {
+      return { success: true, status: 200 };
     }
 
     try {
@@ -47,6 +64,7 @@ export const handleStripeWebhook = internalAction({
           if (session.mode === "setup" && session.metadata?.bookingId) {
             await ctx.runAction(internal.stripeActions.handleCheckoutCompleted, {
               checkoutSessionId: session.id,
+              organizationId,
             });
 
             // Send payment saved email
@@ -99,6 +117,7 @@ export const handleStripeWebhook = internalAction({
           });
           if (setupIntent.metadata?.clerkId && setupIntent.payment_method) {
             await ctx.runAction(internal.cardWebhooks.saveCardFromSetupIntent, {
+              organizationId,
               setupIntentId: setupIntent.id,
               clerkId: setupIntent.metadata.clerkId,
             });
@@ -168,7 +187,19 @@ export const handleStripeWebhook = internalAction({
           console.log(`[Stripe Webhook] Payment succeeded: ${paymentIntent.id}`);
 
           if (paymentIntent.metadata?.bookingId) {
+            const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+              id: paymentIntent.metadata.bookingId as any,
+            });
+            if (!booking || booking.organizationId !== organizationId) {
+              console.warn("[Stripe Webhook] Ignoring cross-org payment_intent.succeeded", {
+                paymentIntentId: paymentIntent.id,
+                organizationId,
+                bookingOrganizationId: booking?.organizationId,
+              });
+              break;
+            }
             await ctx.runMutation(internal.bookingDb.updatePaymentIntentStatus, {
+              organizationId,
               stripePaymentIntentId: paymentIntent.id,
               status: "succeeded",
             });
@@ -189,12 +220,24 @@ export const handleStripeWebhook = internalAction({
           const errorMessage =
             paymentIntent.last_payment_error?.message ?? "Payment failed";
           await ctx.runMutation(internal.bookingDb.updatePaymentIntentStatus, {
+            organizationId,
             stripePaymentIntentId: paymentIntent.id,
             status: "failed",
             errorMessage: errorMessage,
           });
 
           if (paymentIntent.metadata?.bookingId) {
+            const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+              id: paymentIntent.metadata.bookingId as any,
+            });
+            if (!booking || booking.organizationId !== organizationId) {
+              console.warn("[Stripe Webhook] Ignoring cross-org payment_intent.payment_failed", {
+                paymentIntentId: paymentIntent.id,
+                organizationId,
+                bookingOrganizationId: booking?.organizationId,
+              });
+              break;
+            }
             await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
               id: paymentIntent.metadata.bookingId as any,
               status: "payment_failed",
@@ -212,11 +255,23 @@ export const handleStripeWebhook = internalAction({
           );
 
           await ctx.runMutation(internal.bookingDb.updatePaymentIntentStatus, {
+            organizationId,
             stripePaymentIntentId: paymentIntent.id,
             status: "requires_action",
           });
 
           if (paymentIntent.metadata?.bookingId) {
+            const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+              id: paymentIntent.metadata.bookingId as any,
+            });
+            if (!booking || booking.organizationId !== organizationId) {
+              console.warn("[Stripe Webhook] Ignoring cross-org payment_intent.requires_action", {
+                paymentIntentId: paymentIntent.id,
+                organizationId,
+                bookingOrganizationId: booking?.organizationId,
+              });
+              break;
+            }
             await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
               id: paymentIntent.metadata.bookingId as any,
               status: "payment_failed",
@@ -236,8 +291,17 @@ export const handleStripeWebhook = internalAction({
         default:
           console.log(`[Stripe Webhook] Ignoring unhandled event: ${evt.type}`);
       }
+      await ctx.runMutation(internal.payments.markWebhookEventProcessed, {
+        organizationId,
+        eventId: evt.id,
+      });
     } catch (err) {
       console.error(`Error processing Stripe event ${evt.type}:`, err);
+      await ctx.runMutation(internal.payments.markWebhookEventFailed, {
+        organizationId,
+        eventId: evt.id,
+        errorMessage: err instanceof Error ? err.message : "unknown_error",
+      });
       return { error: "Error processing webhook", status: 500 };
     }
 

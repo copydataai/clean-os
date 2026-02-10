@@ -3,19 +3,23 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import Stripe from "stripe";
 
-function getStripeClient(): Stripe {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!, {
+function createStripeClient(secretKey: string): Stripe {
+  return new Stripe(secretKey, {
     apiVersion: "2025-12-15.clover" as any,
   });
 }
 
 export const saveCardFromSetupIntent = internalAction({
   args: {
+    organizationId: v.id("organizations"),
     setupIntentId: v.string(),
     clerkId: v.string(),
   },
   handler: async (ctx, args): Promise<string> => {
-    const stripe = getStripeClient();
+    const config = await ctx.runAction(internal.paymentsNode.getDecryptedStripeConfigForOrganization, {
+      organizationId: args.organizationId,
+    });
+    const stripe = createStripeClient(config.secretKey);
     const setupIntent = await stripe.setupIntents.retrieve(args.setupIntentId);
 
     if (setupIntent.status !== "succeeded") {
@@ -28,6 +32,7 @@ export const saveCardFromSetupIntent = internalAction({
 
     const customerRecord = await ctx.runQuery(internal.cardDb.getCustomerByClerkId, {
       clerkId: args.clerkId,
+      organizationId: args.organizationId,
     });
 
     if (!customerRecord) {
@@ -49,6 +54,7 @@ export const saveCardFromSetupIntent = internalAction({
       : undefined;
 
     await ctx.runMutation(internal.cardDb.savePaymentMethodToDb, {
+      organizationId: args.organizationId,
       clerkId: args.clerkId,
       stripePaymentMethodId: paymentMethod.id,
       stripeCustomerId: customerRecord.stripeCustomerId,

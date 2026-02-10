@@ -136,6 +136,12 @@ http.route({
   path: "/stripe-webhook",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const org = url.searchParams.get("org");
+    if (!org) {
+      return new Response("Missing org", { status: 400 });
+    }
+
     const signature = request.headers.get("stripe-signature");
     if (!signature) {
       return new Response("Missing signature", { status: 400 });
@@ -143,6 +149,7 @@ http.route({
 
     const payload = await request.text();
     const result = await ctx.runAction(internal.httpHandlers.stripeActions.handleStripeWebhook, {
+      orgSlug: org,
       payload,
       signature,
     });
