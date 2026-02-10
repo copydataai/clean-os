@@ -437,21 +437,19 @@ const organizationIntegrations = defineTable({
   webhookSecretCiphertext: v.optional(v.string()),
   webhookSecretIv: v.optional(v.string()),
   webhookSecretAuthTag: v.optional(v.string()),
+  webhookRouteToken: v.optional(v.string()),
   requestFormId: v.optional(v.string()),
   confirmationFormId: v.optional(v.string()),
-  cardFormId: v.optional(v.string()),
   formIds: v.optional(
     v.object({
       request: v.optional(v.string()),
       confirmation: v.optional(v.string()),
-      card: v.optional(v.string()),
     })
   ),
   webhookIds: v.optional(
     v.object({
       request: v.optional(v.string()),
       confirmation: v.optional(v.string()),
-      card: v.optional(v.string()),
     })
   ),
   fieldMappings: v.optional(
@@ -476,16 +474,6 @@ const organizationIntegrations = defineTable({
           })
         )
       ),
-      cardCapture: v.optional(
-        v.record(
-          v.string(),
-          v.object({
-            questionId: v.optional(v.string()),
-            key: v.optional(v.string()),
-            label: v.optional(v.string()),
-          })
-        )
-      ),
     })
   ),
   lastSyncAt: v.optional(v.number()),
@@ -495,19 +483,19 @@ const organizationIntegrations = defineTable({
   updatedAt: v.number(),
 })
   .index("by_org_provider", ["organizationId", "provider"])
+  .index("by_provider_route_token", ["provider", "webhookRouteToken"])
   .index("by_provider_request_form", ["provider", "requestFormId"])
-  .index("by_provider_confirmation_form", ["provider", "confirmationFormId"])
-  .index("by_provider_card_form", ["provider", "cardFormId"]);
+  .index("by_provider_confirmation_form", ["provider", "confirmationFormId"]);
 
 const integrationWebhookAttempts = defineTable({
   provider: v.union(v.literal("tally")),
   organizationId: v.optional(v.id("organizations")),
   endpoint: v.union(
     v.literal("request"),
-    v.literal("confirmation"),
-    v.literal("card")
+    v.literal("confirmation")
   ),
   routeOrgHandle: v.optional(v.string()),
+  routeToken: v.optional(v.string()),
   formId: v.optional(v.string()),
   eventType: v.optional(v.string()),
   webhookId: v.optional(v.string()),

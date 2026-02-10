@@ -1039,9 +1039,9 @@ export const ensureTallyWebhooks = action({
         ? [args.target]
         : (["request", "confirmation"] as const);
 
-    const baseUrl = process.env.NEXT_PUBLIC_CONVEX_URL?.trim();
+    const baseUrl = process.env.CONVEX_SITE_URL?.trim();
     if (!baseUrl) {
-      throw new Error("MISSING_NEXT_PUBLIC_CONVEX_URL");
+      throw new Error("MISSING_CONVEX_SITE_URL");
     }
 
     const pathByEndpoint: Record<"request" | "confirmation", string> = {
@@ -1126,7 +1126,7 @@ export const ensureTallyWebhooks = action({
             method: "PATCH",
             body: {
               url: targetUrl,
-              eventType: "FORM_RESPONSE",
+              eventTypes: ["FORM_RESPONSE"],
               formId,
             },
           });
@@ -1154,7 +1154,7 @@ export const ensureTallyWebhooks = action({
         method: "POST",
         body: {
           url: targetUrl,
-          eventType: "FORM_RESPONSE",
+          eventTypes: ["FORM_RESPONSE"],
           formId,
         },
       });

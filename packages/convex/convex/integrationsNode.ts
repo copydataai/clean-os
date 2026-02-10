@@ -67,6 +67,11 @@ function normalizePath(path: string): string {
   return path;
 }
 
+function createWebhookRouteToken(): string {
+  // Base64url token (32 random bytes) used in path-based webhook routing.
+  return randomBytes(32).toString("base64url");
+}
+
 export const encryptIntegrationSecrets = internalAction({
   args: {
     apiKey: v.string(),
@@ -92,13 +97,18 @@ export const decryptTallyConfig = internalAction({
   args: {
     organizationId: v.optional(v.id("organizations")),
     orgHandle: v.optional(v.string()),
+    routeToken: v.optional(v.string()),
     formId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const integration = args.organizationId
+    let integration = args.organizationId
       ? await ctx.runQuery(internalApi.integrations.getTallyIntegrationByOrganizationId, {
           organizationId: args.organizationId,
         })
+      : args.routeToken
+        ? await ctx.runQuery(internalApi.integrations.getTallyIntegrationByWebhookRouteToken, {
+            routeToken: args.routeToken,
+          })
       : args.orgHandle
         ? await ctx.runQuery(internalApi.integrations.getTallyIntegrationByOrgHandle, {
             orgHandle: args.orgHandle,
@@ -111,6 +121,21 @@ export const decryptTallyConfig = internalAction({
 
     if (!integration || integration.status === "disabled") {
       throw new Error("TALLY_NOT_CONFIGURED");
+    }
+
+    if (!integration.webhookRouteToken) {
+      const mintedToken = createWebhookRouteToken();
+      const persistedToken = await ctx.runMutation(
+        internalApi.integrations.ensureTallyWebhookRouteTokenInternal,
+        {
+          integrationId: integration._id,
+          webhookRouteToken: mintedToken,
+        },
+      );
+      integration = {
+        ...integration,
+        webhookRouteToken: persistedToken,
+      };
     }
 
     const key = getMasterKey();
@@ -141,6 +166,13 @@ export const decryptTallyConfig = internalAction({
       apiKey,
       webhookSecret,
     };
+  },
+});
+
+export const generateTallyWebhookRouteToken = internalAction({
+  args: {},
+  handler: async () => {
+    return createWebhookRouteToken();
   },
 });
 

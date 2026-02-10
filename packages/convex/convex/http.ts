@@ -5,6 +5,25 @@ import { resend } from "./resend";
 
 const http = httpRouter();
 
+function extractTallyRouteToken(pathname: string, prefix: string): string | null {
+  if (!pathname.startsWith(prefix)) {
+    return null;
+  }
+  const raw = pathname.slice(prefix.length);
+  if (!raw || raw.includes("/")) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+}
+
+function requireTallySignature(request: Request): string | null {
+  return request.headers.get("tally-signature");
+}
+
 http.route({
   path: "/clerk-webhook",
   method: "POST",
@@ -32,23 +51,27 @@ http.route({
   }),
 });
 
+
 http.route({
-  path: "/tally-request-webhook",
+  pathPrefix: "/tally-request-webhook/",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    console.log("[Tally Request Webhook] Received request");
-    const url = new URL(request.url);
-    const orgHandle = url.searchParams.get("org") ?? undefined;
-    const signature = request.headers.get("tally-signature");
+    const signature = requireTallySignature(request);
     if (!signature) {
       return new Response("Missing signature", { status: 400 });
+    }
+
+    const pathname = new URL(request.url).pathname;
+    const routeToken = extractTallyRouteToken(pathname, "/tally-request-webhook/");
+    if (!routeToken) {
+      return new Response("Missing route token", { status: 400 });
     }
 
     const payload = await request.text();
     const result = await ctx.runAction(internal.httpHandlers.tallyActions.handleTallyRequestWebhook, {
       payload,
       signature,
-      orgHandle,
+      routeToken,
     });
 
     if ("error" in result) {
@@ -61,101 +84,38 @@ http.route({
         bookingRequestId: "bookingRequestId" in result ? result.bookingRequestId : undefined,
       }),
       {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
+        status: 200,
+        headers: { "Content-Type": "application/json" },
       }
     );
   }),
 });
 
 http.route({
-  path: "/tally-booking-webhook",
+  pathPrefix: "/tally-confirmation-webhook/",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
-    console.log("[Tally Booking Webhook] Received request (alias)");
-    const url = new URL(request.url);
-    const orgHandle = url.searchParams.get("org") ?? undefined;
-    const signature = request.headers.get("tally-signature");
+    const signature = requireTallySignature(request);
     if (!signature) {
       return new Response("Missing signature", { status: 400 });
     }
 
-    const payload = await request.text();
-    const result = await ctx.runAction(internal.httpHandlers.tallyActions.handleTallyRequestWebhook, {
-      payload,
-      signature,
-      orgHandle,
-    });
-
-    if ("error" in result) {
-      return new Response(result.error, { status: result.status });
-    }
-    return new Response(
-      JSON.stringify({
-        success: true,
-        requestId: result.requestId,
-        bookingRequestId: "bookingRequestId" in result ? result.bookingRequestId : undefined,
-      }),
-      {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-      }
-    );
-  }),
-});
-
-http.route({
-  path: "/tally-confirmation-webhook",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    console.log("[Tally Confirmation Webhook] Received request");
-    const url = new URL(request.url);
-    const orgHandle = url.searchParams.get("org") ?? undefined;
-    const signature = request.headers.get("tally-signature");
-    if (!signature) {
-      return new Response("Missing signature", { status: 400 });
+    const pathname = new URL(request.url).pathname;
+    const routeToken = extractTallyRouteToken(pathname, "/tally-confirmation-webhook/");
+    if (!routeToken) {
+      return new Response("Missing route token", { status: 400 });
     }
 
     const payload = await request.text();
     const result = await ctx.runAction(internal.httpHandlers.tallyActions.handleTallyConfirmationWebhook, {
       payload,
       signature,
-      orgHandle,
+      routeToken,
     });
 
     if ("error" in result) {
       return new Response(result.error, { status: result.status });
     }
-    return new Response(JSON.stringify({ success: true, requestId: result.requestId }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }),
-});
-
-http.route({
-  path: "/tally-card-webhook",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    console.log("[Tally Card Webhook] Received request");
-    const url = new URL(request.url);
-    const orgHandle = url.searchParams.get("org") ?? undefined;
-    const signature = request.headers.get("tally-signature");
-    if (!signature) {
-      return new Response("Missing signature", { status: 400 });
-    }
-
-    const payload = await request.text();
-    const result = await ctx.runAction(internal.httpHandlers.tallyActions.handleTallyCardWebhook, {
-      payload,
-      signature,
-      orgHandle,
-    });
-
-    if ("error" in result) {
-      return new Response(result.error, { status: result.status });
-    }
-
     return new Response(JSON.stringify({ success: true, requestId: result.requestId }), {
       status: 200,
       headers: { "Content-Type": "application/json" },

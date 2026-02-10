@@ -15,8 +15,9 @@ import {
   readHiddenField,
   toStringArray,
 } from "../lib/tallyRuntime";
+import { bookingFlowLog, bookingFlowWarn } from "../lib/bookingFlowDebug";
 
-type Endpoint = "request" | "confirmation" | "card";
+type Endpoint = "request" | "confirmation";
 
 type WebhookResult =
   | { error: string; status: number }
@@ -32,11 +33,9 @@ type VerifiedWebhookPayload = {
     orgHandle?: string | null;
     requestFormId?: string;
     confirmationFormId?: string;
-    cardFormId?: string;
     webhookIds?: {
       request?: string;
       confirmation?: string;
-      card?: string;
     };
     fieldMappings?: TallyMappings;
     webhookSecret: string;
@@ -84,10 +83,7 @@ function expectedFormIdForEndpoint(config: VerifiedWebhookPayload["config"], end
   if (endpoint === "request") {
     return config.requestFormId;
   }
-  if (endpoint === "confirmation") {
-    return config.confirmationFormId;
-  }
-  return config.cardFormId;
+  return config.confirmationFormId;
 }
 
 function logMissingFields(
@@ -165,25 +161,13 @@ function parseBookingRequestFields(fields: any[], mappings?: TallyMappings) {
   };
 }
 
-function parseCardCaptureFields(fields: any[], mappings?: TallyMappings) {
-  const maps = buildTallyFieldMaps(fields);
-  const mapped = parseFlowValuesFromMapping(maps, mappings?.cardCapture);
-
-  return {
-    email: mapped.email,
-    paymentMethod: mapped.paymentMethod,
-    cardLast4: mapped.cardLast4,
-    cardBrand: mapped.cardBrand,
-    status: mapped.status,
-  };
-}
-
 async function logTallyAttempt(
   ctx: any,
   args: {
     endpoint: Endpoint;
     organizationId?: any;
     routeOrgHandle?: string;
+    routeToken?: string;
     formId?: string;
     eventType?: string;
     webhookId?: string;
@@ -197,6 +181,7 @@ async function logTallyAttempt(
     organizationId: args.organizationId,
     endpoint: args.endpoint,
     routeOrgHandle: args.routeOrgHandle,
+    routeToken: args.routeToken,
     formId: args.formId,
     eventType: args.eventType,
     webhookId: args.webhookId,
@@ -212,16 +197,27 @@ async function verifyAndResolveTallyPayload(
     payload: string;
     signature: string;
     endpoint: Endpoint;
-    orgHandle?: string;
+    routeToken?: string;
   },
 ): Promise<{ error: string; status: number } | VerifiedWebhookPayload> {
+  const routeToken = args.routeToken?.trim();
+  if (!routeToken) {
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      httpStatus: 400,
+      stage: "route_validation",
+      message: "Missing route token",
+    });
+    return { error: "Missing route token", status: 400 };
+  }
+
   let data: any;
   try {
     data = JSON.parse(args.payload);
   } catch (err) {
     await logTallyAttempt(ctx, {
       endpoint: args.endpoint,
-      routeOrgHandle: args.orgHandle,
+      routeToken,
       httpStatus: 400,
       stage: "payload_parse",
       message: err instanceof Error ? err.message : "Invalid JSON payload",
@@ -234,19 +230,13 @@ async function verifyAndResolveTallyPayload(
 
   let config: any;
   try {
-    config = args.orgHandle
-      ? await ctx.runAction(internal.integrationsNode.decryptTallyConfig, {
-          orgHandle: args.orgHandle,
-        })
-      : formId
-        ? await ctx.runAction(internal.integrationsNode.decryptTallyConfig, {
-            formId,
-          })
-        : null;
+    config = await ctx.runAction(internal.integrationsNode.decryptTallyConfig, {
+      routeToken,
+    });
   } catch (err) {
     await logTallyAttempt(ctx, {
       endpoint: args.endpoint,
-      routeOrgHandle: args.orgHandle,
+      routeToken,
       formId,
       eventType,
       httpStatus: 400,
@@ -259,7 +249,7 @@ async function verifyAndResolveTallyPayload(
   if (!config) {
     await logTallyAttempt(ctx, {
       endpoint: args.endpoint,
-      routeOrgHandle: args.orgHandle,
+      routeToken,
       formId,
       eventType,
       httpStatus: 400,
@@ -273,7 +263,7 @@ async function verifyAndResolveTallyPayload(
     await logTallyAttempt(ctx, {
       endpoint: args.endpoint,
       organizationId: config.organizationId,
-      routeOrgHandle: args.orgHandle,
+      routeToken,
       formId,
       eventType,
       webhookId: config.webhookIds?.[args.endpoint],
@@ -288,7 +278,7 @@ async function verifyAndResolveTallyPayload(
     await logTallyAttempt(ctx, {
       endpoint: args.endpoint,
       organizationId: config.organizationId,
-      routeOrgHandle: args.orgHandle,
+      routeToken,
       formId,
       eventType,
       webhookId: config.webhookIds?.[args.endpoint],
@@ -304,7 +294,7 @@ async function verifyAndResolveTallyPayload(
     await logTallyAttempt(ctx, {
       endpoint: args.endpoint,
       organizationId: config.organizationId,
-      routeOrgHandle: args.orgHandle,
+      routeToken,
       formId,
       eventType,
       webhookId: config.webhookIds?.[args.endpoint],
@@ -328,14 +318,14 @@ export const handleTallyRequestWebhook = internalAction({
   args: {
     payload: v.string(),
     signature: v.string(),
-    orgHandle: v.optional(v.string()),
+    routeToken: v.optional(v.string()),
   },
-  handler: async (ctx, { payload, signature, orgHandle }): Promise<WebhookResult> => {
+  handler: async (ctx, { payload, signature, routeToken }): Promise<WebhookResult> => {
     const verified = await verifyAndResolveTallyPayload(ctx, {
       payload,
       signature,
       endpoint: "request",
-      orgHandle,
+      routeToken,
     });
 
     if ("error" in verified) {
@@ -413,7 +403,7 @@ export const handleTallyRequestWebhook = internalAction({
     await logTallyAttempt(ctx, {
       endpoint: "request",
       organizationId: verified.config.organizationId,
-      routeOrgHandle: orgHandle,
+      routeToken,
       formId: verified.formId,
       eventType: "FORM_RESPONSE",
       webhookId: verified.config.webhookIds?.request,
@@ -429,14 +419,14 @@ export const handleTallyConfirmationWebhook = internalAction({
   args: {
     payload: v.string(),
     signature: v.string(),
-    orgHandle: v.optional(v.string()),
+    routeToken: v.optional(v.string()),
   },
-  handler: async (ctx, { payload, signature, orgHandle }): Promise<WebhookResult> => {
+  handler: async (ctx, { payload, signature, routeToken }): Promise<WebhookResult> => {
     const verified = await verifyAndResolveTallyPayload(ctx, {
       payload,
       signature,
       endpoint: "confirmation",
-      orgHandle,
+      routeToken,
     });
 
     if ("error" in verified) {
@@ -477,7 +467,7 @@ export const handleTallyConfirmationWebhook = internalAction({
       await logTallyAttempt(ctx, {
         endpoint: "confirmation",
         organizationId: verified.config.organizationId,
-        routeOrgHandle: orgHandle,
+        routeToken,
         formId: verified.formId,
         eventType: "FORM_RESPONSE",
         webhookId: verified.config.webhookIds?.confirmation,
@@ -511,18 +501,28 @@ export const handleTallyConfirmationWebhook = internalAction({
         }
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-        const organization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
-          id: verified.config.organizationId,
-        });
-        const orgHandleForLink =
-          verified.config.orgHandle ?? organization?.slug ?? organization?.clerkId;
-
-        if (!orgHandleForLink) {
-          throw new Error("ORG_HANDLE_MISSING_FOR_BOOKING_LINK");
+        const canonicalRoute = await ctx.runQuery(
+          internal.bookingRequests.resolveCanonicalBookingRouteInternal,
+          {
+            requestId: updatedRequestId,
+          }
+        );
+        if (!canonicalRoute?.handle) {
+          bookingFlowWarn("booking_link_emit_failed", {
+            source: "tally_confirmation_email",
+            requestId: updatedRequestId,
+            reason: "canonical_route_unavailable",
+          });
+          throw new Error("CANONICAL_BOOKING_ROUTE_UNAVAILABLE");
         }
 
-        const bookingPath = `/book/${orgHandleForLink}?request_id=${updatedRequestId}`;
+        const bookingPath = `/book/${canonicalRoute.handle}?request_id=${updatedRequestId}`;
         const bookingLink = `${appUrl}${bookingPath}`;
+        bookingFlowLog("booking_link_emit_success", {
+          source: "tally_confirmation_email",
+          requestId: updatedRequestId,
+          handle: canonicalRoute.handle,
+        });
 
         await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {
           to: confirmEmail,
@@ -543,7 +543,7 @@ export const handleTallyConfirmationWebhook = internalAction({
     await logTallyAttempt(ctx, {
       endpoint: "confirmation",
       organizationId: verified.config.organizationId,
-      routeOrgHandle: orgHandle,
+      routeToken,
       formId: verified.formId,
       eventType: "FORM_RESPONSE",
       webhookId: verified.config.webhookIds?.confirmation,
@@ -552,44 +552,5 @@ export const handleTallyConfirmationWebhook = internalAction({
     });
 
     return { success: true, requestId: updatedRequestId, status: 200 };
-  },
-});
-
-export const handleTallyCardWebhook = internalAction({
-  args: {
-    payload: v.string(),
-    signature: v.string(),
-    orgHandle: v.optional(v.string()),
-  },
-  handler: async (ctx, { payload, signature, orgHandle }): Promise<WebhookResult> => {
-    const verified = await verifyAndResolveTallyPayload(ctx, {
-      payload,
-      signature,
-      endpoint: "card",
-      orgHandle,
-    });
-
-    if ("error" in verified) {
-      return verified;
-    }
-
-    const parsed = parseCardCaptureFields(verified.fields, verified.config.fieldMappings);
-
-    await logTallyAttempt(ctx, {
-      endpoint: "card",
-      organizationId: verified.config.organizationId,
-      routeOrgHandle: orgHandle,
-      formId: verified.formId,
-      eventType: "FORM_RESPONSE",
-      webhookId: verified.config.webhookIds?.card,
-      httpStatus: 200,
-      stage: "success",
-      message: JSON.stringify({
-        email: parsed.email,
-        status: parsed.status,
-      }),
-    });
-
-    return { success: true, requestId: verified.responseId, status: 200 };
   },
 });
