@@ -26,8 +26,8 @@ function BookPageContent() {
   const existingBookingId = searchParams.get("booking_id") as Id<"bookings"> | null;
   const requestId = searchParams.get("request_id") as Id<"bookingRequests"> | null;
   const organization = useQuery(
-    api.payments.getOrganizationBySlug,
-    orgSlug ? { slug: orgSlug } : "skip"
+    api.payments.getOrganizationByPublicHandle,
+    orgSlug ? { handle: orgSlug } : "skip"
   );
   const existingBooking = useQuery(
     api.bookings.getBooking,

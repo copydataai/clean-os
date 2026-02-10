@@ -69,8 +69,9 @@ export default function RequestDetailPage() {
     ];
   }, [request]);
 
-  const orgSlug = organizations?.find((org) => org?._id === request?.organizationId)?.slug ??
-    organizations?.[0]?.slug ??
+  const orgHandle =
+    organizations?.find((org) => org?._id === request?.organizationId)?.slug ??
+    organizations?.find((org) => org?._id === request?.organizationId)?.clerkId ??
     null;
 
   if (request === null) {
@@ -157,7 +158,12 @@ export default function RequestDetailPage() {
                 size="sm"
                 variant="outline"
                 onClick={async () => {
-                  const link = getBookingRequestLink(request._id, orgSlug);
+                  const link = getBookingRequestLink(request._id, orgHandle);
+                  if (!link) {
+                    setCopyState("error");
+                    setTimeout(() => setCopyState("idle"), 2000);
+                    return;
+                  }
                   try {
                     if (navigator?.clipboard?.writeText) {
                       await navigator.clipboard.writeText(link);
@@ -216,8 +222,9 @@ export default function RequestDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
+                disabled={!orgHandle}
                 onClick={async () => {
-                  const link = getConfirmRequestLink(request._id, orgSlug);
+                  const link = getConfirmRequestLink(request._id, orgHandle);
                   if (!link) {
                     setConfirmCopyState("error");
                     setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -283,6 +290,11 @@ export default function RequestDetailPage() {
               ) : null}
               {actionState === "error" ? (
                 <p className="text-xs text-red-600">Failed to create booking.</p>
+              ) : null}
+              {!orgHandle ? (
+                <p className="text-xs text-amber-700">
+                  Missing organization public handle. Add a slug to safely generate customer links.
+                </p>
               ) : null}
             </div>
           </div>

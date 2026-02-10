@@ -44,8 +44,9 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
   const organizations = useQuery(api.queries.getUserOrganizations);
-  const orgSlug = organizations?.find((org) => org?._id === request.organizationId)?.slug ??
-    organizations?.[0]?.slug ??
+  const orgHandle =
+    organizations?.find((org) => org?._id === request.organizationId)?.slug ??
+    organizations?.find((org) => org?._id === request.organizationId)?.clerkId ??
     null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
@@ -56,7 +57,12 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   ].slice(0, 4);
 
   async function copyBookingLink() {
-    const link = getBookingRequestLink(request._id, orgSlug);
+    if (!orgHandle) {
+      setCopyState("error");
+      setTimeout(() => setCopyState("idle"), 2000);
+      return;
+    }
+    const link = getBookingRequestLink(request._id, orgHandle);
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
@@ -82,7 +88,12 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   }
 
   async function copyConfirmLink() {
-    const link = getConfirmRequestLink(request._id, orgSlug);
+    if (!orgHandle) {
+      setConfirmCopyState("error");
+      setTimeout(() => setConfirmCopyState("idle"), 2000);
+      return;
+    }
+    const link = getConfirmRequestLink(request._id, orgHandle);
     if (!link) {
       setConfirmCopyState("error");
       setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -145,14 +156,14 @@ export default function RequestCard({ request, className }: RequestCardProps) {
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">Request ID: {request._id}</p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="outline" onClick={copyBookingLink}>
+          <Button size="sm" variant="outline" onClick={copyBookingLink} disabled={!orgHandle}>
             {copyState === "copied"
               ? "Copied"
               : copyState === "error"
               ? "Copy failed"
               : "Copy booking link"}
           </Button>
-          <Button size="sm" variant="outline" onClick={copyConfirmLink}>
+          <Button size="sm" variant="outline" onClick={copyConfirmLink} disabled={!orgHandle}>
             {confirmCopyState === "copied"
               ? "Copied"
               : confirmCopyState === "error"
@@ -166,6 +177,11 @@ export default function RequestCard({ request, className }: RequestCardProps) {
             View
           </Link>
         </div>
+        {!orgHandle ? (
+          <p className="text-xs text-amber-700">
+            Missing organization public handle. Add a slug to generate organization-safe links.
+          </p>
+        ) : null}
       </div>
     </div>
   );

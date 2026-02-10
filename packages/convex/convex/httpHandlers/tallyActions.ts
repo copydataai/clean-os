@@ -351,7 +351,7 @@ export const handleTallyRequestWebhook = internalAction({
       readHiddenField(verified.fields, "org_slug") ??
       readHiddenField(verified.fields, "organizationSlug");
     const organization = orgSlug
-      ? await ctx.runQuery(internal.payments.getOrganizationBySlugInternal, { slug: orgSlug })
+      ? await ctx.runQuery(internal.payments.getOrganizationByPublicHandleInternal, { handle: orgSlug })
       : null;
 
     const bookingRequestId = await ctx.runMutation(
@@ -446,8 +446,8 @@ export const handleTallyConfirmationWebhook = internalAction({
       readHiddenField(verified.fields, "org_slug") ??
       readHiddenField(verified.fields, "organizationSlug");
     const organizationFromHidden = orgSlugFromHidden
-      ? await ctx.runQuery(internal.payments.getOrganizationBySlugInternal, {
-          slug: orgSlugFromHidden,
+      ? await ctx.runQuery(internal.payments.getOrganizationByPublicHandleInternal, {
+          handle: orgSlugFromHidden,
         })
       : null;
     logMissingFields("booking confirmation", parsedFields, [
@@ -512,16 +512,18 @@ export const handleTallyConfirmationWebhook = internalAction({
         }
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-        let orgSlug: string | undefined = organizationFromHidden?.slug ?? undefined;
-        if (!orgSlug && bookingRequest?.organizationId) {
+        let orgHandle: string | undefined =
+          organizationFromHidden?.slug ?? organizationFromHidden?.clerkId ?? undefined;
+        if (!orgHandle && bookingRequest?.organizationId) {
           const requestOrganization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
             id: bookingRequest.organizationId,
           });
-          orgSlug = requestOrganization?.slug ?? undefined;
+          orgHandle = requestOrganization?.slug ?? requestOrganization?.clerkId ?? undefined;
         }
-        const bookingPath = orgSlug
-          ? `/book/${orgSlug}?request_id=${updatedRequestId}`
-          : `/book?request_id=${updatedRequestId}`;
+        if (!orgHandle) {
+          throw new Error("ORG_HANDLE_MISSING_FOR_BOOKING_LINK");
+        }
+        const bookingPath = `/book/${orgHandle}?request_id=${updatedRequestId}`;
         const bookingLink = `${appUrl}${bookingPath}`;
 
         await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {

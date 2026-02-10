@@ -403,3 +403,29 @@ export const listByStatus = query({
       .take(limit);
   },
 });
+
+export const resolvePublicBookingRoute = query({
+  args: {
+    requestId: v.id("bookingRequests"),
+  },
+  handler: async (ctx, args) => {
+    const request = await ctx.db.get(args.requestId);
+    if (!request?.organizationId) {
+      return null;
+    }
+
+    const organization = await ctx.db.get(request.organizationId);
+    if (!organization) {
+      return null;
+    }
+
+    const handle = organization.slug ?? organization.clerkId;
+    if (!handle) {
+      return null;
+    }
+
+    return {
+      handle,
+    };
+  },
+});
