@@ -52,6 +52,7 @@ function BookPageContent() {
       const baseUrl = window.location.origin;
       const { checkoutUrl } = await createCheckoutSession({
         bookingId: resolvedBookingId,
+        organizationId: organization?._id ?? undefined,
         successUrl: `${baseUrl}/book/success?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}`,
         cancelUrl: `${baseUrl}/book/cancel?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}`,
       });
@@ -104,7 +105,10 @@ function BookPageContent() {
           }
           resolvedBookingId = existingBookingId;
         } else if (requestId) {
-          resolvedBookingId = await createBookingFromRequest({ requestId });
+          resolvedBookingId = await createBookingFromRequest({
+            requestId,
+            organizationId: organization._id,
+          });
         } else {
           // Create new booking from query params (direct Tally redirect)
           const email = searchParams.get("email");

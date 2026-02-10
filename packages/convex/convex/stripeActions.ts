@@ -168,6 +168,7 @@ async function resolveStripeCustomerForClerkIdInternal(
 export const createCheckoutSession = action({
   args: {
     bookingId: v.id("bookings"),
+    organizationId: v.optional(v.id("organizations")),
     successUrl: v.string(),
     cancelUrl: v.string(),
   },
@@ -179,11 +180,22 @@ export const createCheckoutSession = action({
     if (!booking) {
       throw new Error("Booking not found");
     }
-    if (!booking.organizationId) {
+    if (!booking.organizationId && !args.organizationId) {
       throw new Error("ORG_NOT_FOUND");
     }
+    if (booking.organizationId && args.organizationId && booking.organizationId !== args.organizationId) {
+      throw new Error("ORG_MISMATCH");
+    }
 
-    const { stripe, orgSlug } = await getStripeClientForOrganization(ctx, booking.organizationId);
+    const resolvedOrganizationId = booking.organizationId ?? args.organizationId!;
+    if (!booking.organizationId) {
+      await ctx.runMutation(internal.bookingDb.updateBookingOrganization, {
+        id: booking._id,
+        organizationId: resolvedOrganizationId,
+      });
+    }
+
+    const { stripe, orgSlug } = await getStripeClientForOrganization(ctx, resolvedOrganizationId);
 
     let customerId: string | undefined;
     if (booking.stripeCustomerId) {
@@ -193,12 +205,12 @@ export const createCheckoutSession = action({
         ctx,
         stripe,
         booking.email,
-        booking.organizationId
+        resolvedOrganizationId
       );
       if (resolved.stripeCustomerId) {
         customerId = resolved.stripeCustomerId;
       } else {
-        const idempotencyKey = `org:${booking.organizationId}:stripe_customer:${booking.email}`;
+        const idempotencyKey = `org:${resolvedOrganizationId}:stripe_customer:${booking.email}`;
         const customer = await stripe.customers.create(
           {
             email: booking.email,
@@ -206,7 +218,7 @@ export const createCheckoutSession = action({
             metadata: {
               clerkId: booking.email,
               bookingId: args.bookingId,
-              organizationId: booking.organizationId,
+              organizationId: resolvedOrganizationId,
               orgSlug,
             },
           },
@@ -214,7 +226,7 @@ export const createCheckoutSession = action({
         );
 
         const saved = await ctx.runMutation(internal.cardDb.saveStripeCustomerIfAbsent, {
-          organizationId: booking.organizationId,
+          organizationId: resolvedOrganizationId,
           clerkId: booking.email,
           stripeCustomerId: customer.id,
           email: booking.email,
@@ -234,7 +246,7 @@ export const createCheckoutSession = action({
       metadata: {
         bookingId: args.bookingId,
         email: booking.email,
-        organizationId: booking.organizationId,
+        organizationId: resolvedOrganizationId,
         orgSlug,
       },
     });

@@ -120,6 +120,7 @@ export const createBookingFromTally = mutation({
 export const createBookingFromRequest = mutation({
   args: {
     requestId: v.id("bookingRequests"),
+    organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
     const request = await ctx.db.get(args.requestId);
@@ -143,8 +144,13 @@ export const createBookingFromRequest = mutation({
       throw new Error("Booking request is missing email");
     }
 
+    const resolvedOrganizationId = request.organizationId ?? args.organizationId;
+    if (request.organizationId && args.organizationId && request.organizationId !== args.organizationId) {
+      throw new Error("ORG_MISMATCH");
+    }
+
     const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
-      organizationId: request.organizationId,
+      organizationId: resolvedOrganizationId,
       email: request.email,
       fullName: request.contactDetails,
       contactDetails: request.contactDetails,
@@ -155,7 +161,7 @@ export const createBookingFromRequest = mutation({
 
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
-      organizationId: request.organizationId,
+      organizationId: resolvedOrganizationId,
       email: request.email,
       customerName: request.contactDetails,
       customerId,

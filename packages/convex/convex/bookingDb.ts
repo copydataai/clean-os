@@ -133,6 +133,19 @@ export const updateBookingCheckoutSession = internalMutation({
   },
 });
 
+export const updateBookingOrganization = internalMutation({
+  args: {
+    id: v.id("bookings"),
+    organizationId: v.id("organizations"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      organizationId: args.organizationId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const updateBookingStatus = internalMutation({
   args: {
     id: v.id("bookings"),
