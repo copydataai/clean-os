@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Id } from "@clean-os/convex/data-model";
 import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
-import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 
 type RequestCardProps = {
   request: {
@@ -25,6 +24,7 @@ type RequestCardProps = {
     organizationId?: Id<"organizations"> | null;
     bookingId?: Id<"bookings"> | null;
     bookingStatus?: string | null;
+    canonicalBookingHandle?: string | null;
     linkSentAt?: number | null;
     confirmLinkSentAt?: number | null;
   };
@@ -44,8 +44,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
-  const { activeOrg } = useActiveOrganization();
-  const orgHandle = activeOrg?.slug ?? null;
+  const canonicalBookingHandle = request.canonicalBookingHandle ?? null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
   const tags = [
@@ -55,12 +54,12 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   ].slice(0, 4);
 
   async function copyBookingLink() {
-    if (!orgHandle) {
+    if (!canonicalBookingHandle) {
       setCopyState("error");
       setTimeout(() => setCopyState("idle"), 2000);
       return;
     }
-    const link = getBookingRequestLink(request._id, orgHandle);
+    const link = getBookingRequestLink(request._id, canonicalBookingHandle);
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
@@ -86,12 +85,12 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   }
 
   async function copyConfirmLink() {
-    if (!orgHandle) {
+    if (!canonicalBookingHandle) {
       setConfirmCopyState("error");
       setTimeout(() => setConfirmCopyState("idle"), 2000);
       return;
     }
-    const link = getConfirmRequestLink(request._id, orgHandle);
+    const link = getConfirmRequestLink(request._id, canonicalBookingHandle);
     if (!link) {
       setConfirmCopyState("error");
       setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -154,14 +153,14 @@ export default function RequestCard({ request, className }: RequestCardProps) {
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">Request ID: {request._id}</p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="outline" onClick={copyBookingLink} disabled={!orgHandle}>
+          <Button size="sm" variant="outline" onClick={copyBookingLink} disabled={!canonicalBookingHandle}>
             {copyState === "copied"
               ? "Copied"
               : copyState === "error"
               ? "Copy failed"
               : "Copy booking link"}
           </Button>
-          <Button size="sm" variant="outline" onClick={copyConfirmLink} disabled={!orgHandle}>
+          <Button size="sm" variant="outline" onClick={copyConfirmLink} disabled={!canonicalBookingHandle}>
             {confirmCopyState === "copied"
               ? "Copied"
               : confirmCopyState === "error"
@@ -175,9 +174,9 @@ export default function RequestCard({ request, className }: RequestCardProps) {
             View
           </Link>
         </div>
-        {!orgHandle ? (
+        {!canonicalBookingHandle ? (
           <p className="text-xs text-amber-700">
-            Missing organization public handle. Add a slug to generate organization-safe links.
+            Link unavailable: missing canonical org slug.
           </p>
         ) : null}
       </div>

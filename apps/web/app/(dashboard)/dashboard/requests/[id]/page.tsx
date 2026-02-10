@@ -13,7 +13,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
-import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 
 function formatDate(timestamp?: number) {
   if (!timestamp) {
@@ -36,7 +35,6 @@ export default function RequestDetailPage() {
     api.bookingRequests.getById,
     requestId ? { id: requestId } : "skip"
   );
-  const { activeOrg } = useActiveOrganization();
   const booking = useQuery(
     api.bookings.getBooking,
     request?.bookingId ? { id: request.bookingId } : "skip"
@@ -70,7 +68,7 @@ export default function RequestDetailPage() {
     ];
   }, [request]);
 
-  const orgHandle = activeOrg?.slug ?? null;
+  const canonicalBookingHandle = request?.canonicalBookingHandle ?? null;
 
   if (request === null) {
     return (
@@ -155,8 +153,16 @@ export default function RequestDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
+                disabled={!canonicalBookingHandle}
                 onClick={async () => {
-                  const link = getBookingRequestLink(request._id, orgHandle);
+                  if (!canonicalBookingHandle) {
+                    setCopyState("error");
+                    setTimeout(() => setCopyState("idle"), 2000);
+                    return;
+                  }
+                  console.log("canonicalBookingHandle", canonicalBookingHandle);
+                  const link = getBookingRequestLink(request._id, canonicalBookingHandle);
+                  console.log("link", link);
                   if (!link) {
                     setCopyState("error");
                     setTimeout(() => setCopyState("idle"), 2000);
@@ -220,9 +226,14 @@ export default function RequestDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!orgHandle}
+                disabled={!canonicalBookingHandle}
                 onClick={async () => {
-                  const link = getConfirmRequestLink(request._id, orgHandle);
+                  if (!canonicalBookingHandle) {
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                    return;
+                  }
+                  const link = getConfirmRequestLink(request._id, canonicalBookingHandle);
                   if (!link) {
                     setConfirmCopyState("error");
                     setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -289,9 +300,9 @@ export default function RequestDetailPage() {
               {actionState === "error" ? (
                 <p className="text-xs text-red-600">Failed to create booking.</p>
               ) : null}
-              {!orgHandle ? (
+              {!canonicalBookingHandle ? (
                 <p className="text-xs text-amber-700">
-                  Missing organization public handle. Add a slug to safely generate customer links.
+                  Link unavailable: missing canonical org slug.
                 </p>
               ) : null}
             </div>
