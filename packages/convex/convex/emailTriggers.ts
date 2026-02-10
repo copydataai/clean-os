@@ -2,6 +2,7 @@
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { bookingFlowLog, bookingFlowWarn } from "./lib/bookingFlowDebug";
 
 export const sendConfirmationEmail = action({
   args: {
@@ -35,14 +36,36 @@ export const sendConfirmationEmail = action({
     }
     const confirmUrlObj = new URL(confirmBaseUrl);
     confirmUrlObj.searchParams.set("request_id", requestId);
-    if (request.organizationId) {
+    const canonicalRoute = await ctx.runQuery(
+      internal.bookingRequests.resolveCanonicalBookingRouteInternal,
+      { requestId }
+    );
+    if (canonicalRoute?.handle) {
+      confirmUrlObj.searchParams.set("org_slug", canonicalRoute.handle);
+      bookingFlowLog("confirmation_link_org_slug_resolved", {
+        source: "email_triggers.sendConfirmationEmail",
+        requestId,
+        handle: canonicalRoute.handle,
+      });
+    } else if (request.organizationId) {
       const organization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
         id: request.organizationId,
       });
-      const orgHandle = organization?.slug ?? organization?.clerkId;
-      if (orgHandle) {
-        confirmUrlObj.searchParams.set("org_slug", orgHandle);
+      const fallbackHandle = organization?.slug ?? organization?.clerkId ?? null;
+      if (fallbackHandle) {
+        confirmUrlObj.searchParams.set("org_slug", fallbackHandle);
       }
+      bookingFlowWarn("confirmation_link_org_slug_fallback", {
+        source: "email_triggers.sendConfirmationEmail",
+        requestId,
+        reason: fallbackHandle ? "used_request_organization" : "missing_fallback_handle",
+      });
+    } else {
+      bookingFlowWarn("confirmation_link_org_slug_missing", {
+        source: "email_triggers.sendConfirmationEmail",
+        requestId,
+        reason: "canonical_route_unavailable",
+      });
     }
     const confirmUrl = confirmUrlObj.toString();
 
