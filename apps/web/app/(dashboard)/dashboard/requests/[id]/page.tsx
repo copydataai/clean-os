@@ -35,6 +35,7 @@ export default function RequestDetailPage() {
     api.bookingRequests.getById,
     requestId ? { id: requestId } : "skip"
   );
+  const organizations = useQuery(api.queries.getUserOrganizations);
   const booking = useQuery(
     api.bookings.getBooking,
     request?.bookingId ? { id: request.bookingId } : "skip"
@@ -67,6 +68,10 @@ export default function RequestDetailPage() {
       { label: "Pets", value: renderList(request.pets) },
     ];
   }, [request]);
+
+  const orgSlug = organizations?.find((org) => org?._id === request?.organizationId)?.slug ??
+    organizations?.[0]?.slug ??
+    null;
 
   if (request === null) {
     return (
@@ -152,7 +157,7 @@ export default function RequestDetailPage() {
                 size="sm"
                 variant="outline"
                 onClick={async () => {
-                  const link = getBookingRequestLink(request._id);
+                  const link = getBookingRequestLink(request._id, orgSlug);
                   try {
                     if (navigator?.clipboard?.writeText) {
                       await navigator.clipboard.writeText(link);
@@ -212,7 +217,7 @@ export default function RequestDetailPage() {
                 size="sm"
                 variant="outline"
                 onClick={async () => {
-                  const link = getConfirmRequestLink(request._id);
+                  const link = getConfirmRequestLink(request._id, orgSlug);
                   if (!link) {
                     setConfirmCopyState("error");
                     setTimeout(() => setConfirmCopyState("idle"), 2000);

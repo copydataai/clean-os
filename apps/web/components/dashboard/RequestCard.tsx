@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ type RequestCardProps = {
     accessMethod?: string[] | null;
     floorTypes?: string[] | null;
     pets?: string[] | null;
+    organizationId?: Id<"organizations"> | null;
     bookingId?: Id<"bookings"> | null;
     bookingStatus?: string | null;
     linkSentAt?: number | null;
@@ -42,6 +43,10 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
+  const organizations = useQuery(api.queries.getUserOrganizations);
+  const orgSlug = organizations?.find((org) => org?._id === request.organizationId)?.slug ??
+    organizations?.[0]?.slug ??
+    null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
   const tags = [
@@ -51,7 +56,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   ].slice(0, 4);
 
   async function copyBookingLink() {
-    const link = getBookingRequestLink(request._id);
+    const link = getBookingRequestLink(request._id, orgSlug);
     try {
       if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
@@ -77,7 +82,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   }
 
   async function copyConfirmLink() {
-    const link = getConfirmRequestLink(request._id);
+    const link = getConfirmRequestLink(request._id, orgSlug);
     if (!link) {
       setConfirmCopyState("error");
       setTimeout(() => setConfirmCopyState("idle"), 2000);
