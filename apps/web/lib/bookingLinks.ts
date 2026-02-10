@@ -20,24 +20,24 @@ function appendQueryParam(url: string, key: string, value: string): string {
 
 export function getBookingRequestLink(
   requestId: Id<"bookingRequests">,
-  orgHandle?: string | null
+  canonicalHandle: string
 ): string {
-  if (!orgHandle) {
+  if (!canonicalHandle?.trim()) {
     return "";
   }
   const baseUrl = getBaseUrl();
-  const path = `/book/${orgHandle}?request_id=${requestId}`;
+  const path = `/book/${canonicalHandle}?request_id=${requestId}`;
   return baseUrl ? `${baseUrl}${path}` : path;
 }
 
 export function getConfirmRequestLink(
   requestId: Id<"bookingRequests">,
-  orgHandle?: string | null
+  canonicalHandle: string
 ): string {
   const confirmUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL ?? "";
-  if (!confirmUrl || !orgHandle) {
+  if (!confirmUrl || !canonicalHandle?.trim()) {
     return "";
   }
   const withRequestId = appendQueryParam(confirmUrl, "request_id", requestId);
-  return appendQueryParam(withRequestId, "org_slug", orgHandle);
+  return appendQueryParam(withRequestId, "org_slug", canonicalHandle);
 }

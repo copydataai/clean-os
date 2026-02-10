@@ -3,7 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
-import { resolvePublicBookingContext } from "./lib/publicBookingContext";
+import { resolveCanonicalBookingRoute, resolvePublicBookingContext } from "./lib/publicBookingContext";
 
 const FALLBACK_LOOKBACK_DAYS = 7;
 const FALLBACK_SAMPLE_SIZE = 10;
@@ -370,7 +370,12 @@ export const getById = query({
       return null;
     }
     assertRecordInActiveOrg(request.organizationId, organization._id);
-    return request;
+
+    const canonicalRoute = await resolveCanonicalBookingRoute(ctx, request._id);
+    return {
+      ...request,
+      canonicalBookingHandle: canonicalRoute.errorCode ? null : canonicalRoute.canonicalSlug,
+    };
   },
 });
 
@@ -403,13 +408,17 @@ export const listRecent = query({
 
     const withBookingStatus = await Promise.all(
       requests.map(async (request) => {
+        const canonicalRoute = await resolveCanonicalBookingRoute(ctx, request._id);
+        const canonicalBookingHandle = canonicalRoute.errorCode ? null : canonicalRoute.canonicalSlug;
+
         if (!request.bookingId) {
-          return { ...request, bookingStatus: null };
+          return { ...request, bookingStatus: null, canonicalBookingHandle };
         }
         const booking = await ctx.db.get(request.bookingId);
         return {
           ...request,
           bookingStatus: booking?.status ?? null,
+          canonicalBookingHandle,
         };
       })
     );
@@ -441,13 +450,31 @@ export const resolvePublicBookingRoute = query({
     requestId: v.id("bookingRequests"),
   },
   handler: async (ctx, args) => {
-    const context = await resolvePublicBookingContext(ctx, args.requestId);
-    if (context.errorCode || !context.canonicalSlug) {
+    const route = await resolveCanonicalBookingRoute(ctx, args.requestId);
+    if (route.errorCode) {
       return null;
     }
 
     return {
-      handle: context.canonicalSlug,
+      handle: route.canonicalSlug,
+      organizationId: route.organizationId,
+    };
+  },
+});
+
+export const resolveCanonicalBookingRouteInternal = internalQuery({
+  args: {
+    requestId: v.id("bookingRequests"),
+  },
+  handler: async (ctx, args) => {
+    const route = await resolveCanonicalBookingRoute(ctx, args.requestId);
+    if (route.errorCode) {
+      return null;
+    }
+
+    return {
+      handle: route.canonicalSlug,
+      organizationId: route.organizationId,
     };
   },
 });
