@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Badge } from "@/components/ui/badge";
 import CustomerStatusBadge from "@/components/customers/CustomerStatusBadge";
 import { cn } from "@/lib/utils";
 import type { Id } from "@clean-os/convex/data-model";
@@ -14,6 +15,7 @@ type CustomerCardProps = {
     totalBookings?: number | null;
     totalSpent?: number | null;
     lastBookingDate?: number | null;
+    stripeCustomerId?: string | null;
   };
   className?: string;
 };
@@ -38,6 +40,7 @@ function formatDate(timestamp?: number | null): string {
 export default function CustomerCard({ customer, className }: CustomerCardProps) {
   const initials = getInitials(customer.firstName, customer.lastName);
   const fullName = `${customer.firstName} ${customer.lastName}`;
+  const hasCardOnFile = Boolean(customer.stripeCustomerId);
 
   return (
     <div
@@ -56,7 +59,18 @@ export default function CustomerCard({ customer, className }: CustomerCardProps)
             <p className="text-sm text-muted-foreground">{customer.email}</p>
           </div>
         </div>
-        <CustomerStatusBadge status={customer.status} />
+        <div className="flex flex-wrap items-center gap-2">
+          <CustomerStatusBadge status={customer.status} />
+          <Badge
+            className={cn(
+              hasCardOnFile
+                ? "bg-green-100 text-green-700"
+                : "bg-zinc-100 text-zinc-700"
+            )}
+          >
+            {hasCardOnFile ? "Card on file" : "No card"}
+          </Badge>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">

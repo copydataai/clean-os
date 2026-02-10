@@ -15,6 +15,7 @@ type StatusFilter = "all" | "lead" | "active" | "inactive" | "churned";
 export default function CustomersPage() {
   const customers = useQuery(api.customers.list, {});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [hasCard, setHasCard] = useState(false);
 
   const filteredCustomers = useMemo(() => {
     if (!customers) {
@@ -25,9 +26,12 @@ export default function CustomersPage() {
       if (statusFilter !== "all" && customer.status !== statusFilter) {
         return false;
       }
+      if (hasCard && !customer.stripeCustomerId) {
+        return false;
+      }
       return true;
     });
-  }, [customers, statusFilter]);
+  }, [customers, statusFilter, hasCard]);
 
   return (
     <div className="space-y-6">
@@ -73,6 +77,12 @@ export default function CustomersPage() {
               active: statusFilter === "churned",
               onClick: () => setStatusFilter("churned"),
             },
+            {
+              key: "has-card",
+              label: "Has card",
+              active: hasCard,
+              onClick: () => setHasCard((prev) => !prev),
+            },
           ]}
         />
       </div>
@@ -90,7 +100,10 @@ export default function CustomersPage() {
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                onClick={() => setStatusFilter("all")}
+                onClick={() => {
+                  setStatusFilter("all");
+                  setHasCard(false);
+                }}
               >
                 Reset filters
               </Button>
