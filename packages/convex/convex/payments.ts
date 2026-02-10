@@ -111,6 +111,36 @@ export const getOrganizationByIdInternal = internalQuery({
   },
 });
 
+export const getPaymentsEnvironmentStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        ready: false,
+        code: "AUTH_REQUIRED",
+        message: "Authentication required.",
+      };
+    }
+
+    const masterKey = process.env.PAYMENT_SECRETS_MASTER_KEY?.trim();
+    if (!masterKey) {
+      return {
+        ready: false,
+        code: "MISSING_MASTER_KEY",
+        message:
+          "PAYMENT_SECRETS_MASTER_KEY is not configured on the Convex deployment.",
+      };
+    }
+
+    return {
+      ready: true,
+      code: "OK",
+      message: null as string | null,
+    };
+  },
+});
+
 export const upsertOrganizationStripeConfigEncrypted = internalMutation({
   args: {
     organizationId: v.id("organizations"),
@@ -334,17 +364,29 @@ export const upsertOrganizationStripeConfig = action({
       throw new Error("ORG_UNAUTHORIZED");
     }
 
-    const encrypted: {
+    let encrypted: {
       secretKeyCiphertext: string;
       secretKeyIv: string;
       secretKeyAuthTag: string;
       webhookSecretCiphertext: string;
       webhookSecretIv: string;
       webhookSecretAuthTag: string;
-    } = await ctx.runAction(internal.paymentsNode.encryptStripeSecrets, {
-      secretKey: args.secretKey,
-      webhookSecret: args.webhookSecret,
-    });
+    };
+    try {
+      encrypted = await ctx.runAction(internal.paymentsNode.encryptStripeSecrets, {
+        secretKey: args.secretKey,
+        webhookSecret: args.webhookSecret,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("Missing PAYMENT_SECRETS_MASTER_KEY")) {
+        throw new Error("PAYMENT_ENV_NOT_CONFIGURED");
+      }
+      if (message.includes("Invalid PAYMENT_SECRETS_MASTER_KEY length")) {
+        throw new Error("PAYMENT_ENV_INVALID_MASTER_KEY");
+      }
+      throw error;
+    }
 
     return await ctx.runMutation(internal.payments.upsertOrganizationStripeConfigEncrypted, {
       organizationId: args.organizationId,

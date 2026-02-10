@@ -22,6 +22,7 @@ function isAdminRole(role?: string | null) {
 
 export default function PaymentsPage() {
   const organizations = useQuery(api.queries.getUserOrganizations);
+  const environmentStatus = useQuery(api.payments.getPaymentsEnvironmentStatus);
   const upsertStripeConfig = useAction(api.payments.upsertOrganizationStripeConfig);
   const disableStripeConfig = useMutation(api.payments.disableOrganizationStripeConfig);
   const [selectedOrgId, setSelectedOrgId] = useState<Id<"organizations"> | null>(null);
@@ -73,6 +74,11 @@ export default function PaymentsPage() {
     );
   }
 
+  const environmentReady = environmentStatus?.ready ?? false;
+  const environmentMessage =
+    environmentStatus?.message ??
+    "Checking payment environment configuration...";
+
   if (organizations.length === 0) {
     return (
       <div className="space-y-6">
@@ -123,6 +129,16 @@ export default function PaymentsPage() {
       </div>
 
       <div className="surface-card space-y-4 p-6">
+        {!environmentReady ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <p className="font-medium">Platform Payment Configuration Required</p>
+            <p className="mt-1">{environmentMessage}</p>
+            <p className="mt-1">
+              Set <code>PAYMENT_SECRETS_MASTER_KEY</code> in Convex environment variables, then
+              reload this page.
+            </p>
+          </div>
+        ) : null}
         <h2 className="text-base font-semibold text-foreground">Stripe Credentials</h2>
         {!canManage ? (
           <p className="text-sm text-muted-foreground">
@@ -163,7 +179,14 @@ export default function PaymentsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Button
-            disabled={!canManage || !selectedOrgId || isSaving || !secretKey || !webhookSecret}
+            disabled={
+              !canManage ||
+              !environmentReady ||
+              !selectedOrgId ||
+              isSaving ||
+              !secretKey ||
+              !webhookSecret
+            }
             onClick={async () => {
               if (!selectedOrgId) return;
               setIsSaving(true);
@@ -179,7 +202,18 @@ export default function PaymentsPage() {
                 setWebhookSecret("");
                 setMessage("Stripe credentials saved.");
               } catch (err: any) {
-                setError(err?.message ?? "Failed to save Stripe credentials.");
+                const raw = err?.message ?? "Failed to save Stripe credentials.";
+                if (raw.includes("PAYMENT_ENV_NOT_CONFIGURED")) {
+                  setError(
+                    "Payment encryption is not configured. Add PAYMENT_SECRETS_MASTER_KEY to Convex environment variables."
+                  );
+                } else if (raw.includes("PAYMENT_ENV_INVALID_MASTER_KEY")) {
+                  setError(
+                    "PAYMENT_SECRETS_MASTER_KEY is invalid. It must be a base64-encoded 32-byte key."
+                  );
+                } else {
+                  setError(raw);
+                }
               } finally {
                 setIsSaving(false);
               }
