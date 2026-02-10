@@ -29,7 +29,7 @@ const navItems = [
   { label: "Schedule", href: "/dashboard/schedule" },
   { label: "Cleaners", href: "/dashboard/cleaners" },
   { label: "Customers", href: "/dashboard/customers" },
-  { label: "Payments", href: "/dashboard/payments", disabled: true },
+  { label: "Payments", href: "/dashboard/payments" },
   { label: "Settings", href: "/dashboard/settings", disabled: true },
 ];
 
