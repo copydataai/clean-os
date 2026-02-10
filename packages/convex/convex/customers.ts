@@ -160,8 +160,21 @@ function chooseCanonicalCustomer(customers: Doc<"customers">[]): Doc<"customers"
 
 async function getCustomersByNormalizedEmail(
   ctx: any,
-  normalizedEmail: string
+  normalizedEmail: string,
+  organizationId?: Id<"organizations">
 ): Promise<Doc<"customers">[]> {
+  if (organizationId) {
+    const orgCustomers = await ctx.db
+      .query("customers")
+      .withIndex("by_organization", (q: any) => q.eq("organizationId", organizationId))
+      .collect();
+
+    return orgCustomers.filter((customer: Doc<"customers">) => {
+      const emailNormalized = customer.emailNormalized ?? normalizeEmailAddress(customer.email);
+      return emailNormalized === normalizedEmail;
+    });
+  }
+
   const indexed = await ctx.db
     .query("customers")
     .withIndex("by_email_normalized", (q: any) => q.eq("emailNormalized", normalizedEmail))
@@ -271,7 +284,7 @@ async function ensureLifecycleCustomerRecord(
   args: LifecycleCustomerArgs
 ): Promise<Id<"customers">> {
   const normalizedEmail = normalizeEmailAddress(args.email);
-  const candidates = await getCustomersByNormalizedEmail(ctx, normalizedEmail);
+  const candidates = await getCustomersByNormalizedEmail(ctx, normalizedEmail, args.organizationId);
 
   if (candidates.length === 0) {
     const now = Date.now();
@@ -422,11 +435,12 @@ export const getById = query({
 });
 
 export const getByEmail = query({
-  args: { email: v.string() },
-  handler: async (ctx, { email }) => {
+  args: { email: v.string(), organizationId: v.optional(v.id("organizations")) },
+  handler: async (ctx, { email, organizationId }) => {
     const candidates = await getCustomersByNormalizedEmail(
       ctx,
-      normalizeEmailAddress(email)
+      normalizeEmailAddress(email),
+      organizationId
     );
     if (candidates.length === 0) {
       return null;
@@ -586,7 +600,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const normalizedEmail = normalizeEmailAddress(args.email);
-    const existing = await getCustomersByNormalizedEmail(ctx, normalizedEmail);
+    const existing = await getCustomersByNormalizedEmail(ctx, normalizedEmail, args.organizationId);
     if (existing.length > 0) {
       throw new Error("A customer with this email already exists");
     }
@@ -629,7 +643,11 @@ export const update = mutation({
 
     if (updates.email && updates.email !== customer.email) {
       const normalizedEmail = normalizeEmailAddress(updates.email);
-      const existing = await getCustomersByNormalizedEmail(ctx, normalizedEmail);
+      const existing = await getCustomersByNormalizedEmail(
+        ctx,
+        normalizedEmail,
+        customer.organizationId
+      );
       if (existing.some((candidate) => candidate._id !== customerId)) {
         throw new Error("A customer with this email already exists");
       }

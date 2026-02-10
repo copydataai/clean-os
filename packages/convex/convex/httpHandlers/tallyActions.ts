@@ -346,10 +346,18 @@ export const handleTallyRequestWebhook = internalAction({
       .filter(Boolean)
       .join(" ")
       .trim();
+    const orgSlug =
+      readHiddenField(verified.fields, "orgSlug") ??
+      readHiddenField(verified.fields, "org_slug") ??
+      readHiddenField(verified.fields, "organizationSlug");
+    const organization = orgSlug
+      ? await ctx.runQuery(internal.payments.getOrganizationBySlugInternal, { slug: orgSlug })
+      : null;
 
     const bookingRequestId = await ctx.runMutation(
       internal.bookingRequests.createRequest,
       {
+        organizationId: organization?._id,
         requestResponseId: verified.responseId,
         requestFormId: verified.formId,
         email: parsedFields.email,
@@ -433,6 +441,15 @@ export const handleTallyConfirmationWebhook = internalAction({
       readHiddenField(verified.fields, "requestId") ??
       readHiddenField(verified.fields, "request_id");
     const parsedFields = parseBookingRequestFields(verified.fields);
+    const orgSlugFromHidden =
+      readHiddenField(verified.fields, "orgSlug") ??
+      readHiddenField(verified.fields, "org_slug") ??
+      readHiddenField(verified.fields, "organizationSlug");
+    const organizationFromHidden = orgSlugFromHidden
+      ? await ctx.runQuery(internal.payments.getOrganizationBySlugInternal, {
+          slug: orgSlugFromHidden,
+        })
+      : null;
     logMissingFields("booking confirmation", parsedFields, [
       "contactDetails",
       "phoneNumber",
@@ -442,6 +459,7 @@ export const handleTallyConfirmationWebhook = internalAction({
     const updatedRequestId = await ctx.runMutation(
       internal.bookingRequests.confirmRequest,
       {
+        organizationId: organizationFromHidden?._id,
         requestId: requestId ? (requestId as any) : undefined,
         email: parsedFields.email,
         confirmationResponseId: verified.responseId,
@@ -494,7 +512,17 @@ export const handleTallyConfirmationWebhook = internalAction({
         }
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-        const bookingLink = `${appUrl}/book?request_id=${updatedRequestId}`;
+        let orgSlug: string | undefined = organizationFromHidden?.slug ?? undefined;
+        if (!orgSlug && bookingRequest?.organizationId) {
+          const requestOrganization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
+            id: bookingRequest.organizationId,
+          });
+          orgSlug = requestOrganization?.slug ?? undefined;
+        }
+        const bookingPath = orgSlug
+          ? `/book/${orgSlug}?request_id=${updatedRequestId}`
+          : `/book?request_id=${updatedRequestId}`;
+        const bookingLink = `${appUrl}${bookingPath}`;
 
         await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {
           to: confirmEmail,

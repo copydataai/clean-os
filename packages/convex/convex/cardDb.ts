@@ -2,12 +2,19 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 
 export const getCustomerByClerkId = internalQuery({
-  args: { clerkId: v.string() },
+  args: { clerkId: v.string(), organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, args) => {
-    const customers = await ctx.db
-      .query("stripeCustomers")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .collect();
+    const customers = args.organizationId
+      ? await ctx.db
+          .query("stripeCustomers")
+          .withIndex("by_clerk_id_and_org", (q) =>
+            q.eq("clerkId", args.clerkId).eq("organizationId", args.organizationId)
+          )
+          .collect()
+      : await ctx.db
+          .query("stripeCustomers")
+          .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+          .collect();
 
     if (customers.length === 0) {
       return null;
@@ -29,12 +36,19 @@ export const getCustomerByClerkId = internalQuery({
 });
 
 export const listStripeCustomersByClerkId = internalQuery({
-  args: { clerkId: v.string() },
+  args: { clerkId: v.string(), organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, args) => {
-    const customers = await ctx.db
-      .query("stripeCustomers")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .collect();
+    const customers = args.organizationId
+      ? await ctx.db
+          .query("stripeCustomers")
+          .withIndex("by_clerk_id_and_org", (q) =>
+            q.eq("clerkId", args.clerkId).eq("organizationId", args.organizationId)
+          )
+          .collect()
+      : await ctx.db
+          .query("stripeCustomers")
+          .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+          .collect();
 
     return customers.sort((a, b) => {
       const aTs = a.createdAt ?? 0;
@@ -46,12 +60,14 @@ export const listStripeCustomersByClerkId = internalQuery({
 
 export const saveStripeCustomerToDb = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     clerkId: v.string(),
     stripeCustomerId: v.string(),
     email: v.string(),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("stripeCustomers", {
+      organizationId: args.organizationId,
       clerkId: args.clerkId,
       stripeCustomerId: args.stripeCustomerId,
       email: args.email,
@@ -62,22 +78,32 @@ export const saveStripeCustomerToDb = internalMutation({
 
 export const saveStripeCustomerIfAbsent = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     clerkId: v.string(),
     stripeCustomerId: v.string(),
     email: v.string(),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("stripeCustomers")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .order("desc")
-      .first();
+    const existing = args.organizationId
+      ? await ctx.db
+          .query("stripeCustomers")
+          .withIndex("by_clerk_id_and_org", (q) =>
+            q.eq("clerkId", args.clerkId).eq("organizationId", args.organizationId)
+          )
+          .order("desc")
+          .first()
+      : await ctx.db
+          .query("stripeCustomers")
+          .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+          .order("desc")
+          .first();
 
     if (existing) {
       return existing;
     }
 
     const id = await ctx.db.insert("stripeCustomers", {
+      organizationId: args.organizationId,
       clerkId: args.clerkId,
       stripeCustomerId: args.stripeCustomerId,
       email: args.email,
@@ -97,6 +123,7 @@ export const deleteStripeCustomerById = internalMutation({
 
 export const saveSetupIntentToDb = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     clerkId: v.string(),
     setupIntentId: v.string(),
     clientSecret: v.string(),
@@ -105,6 +132,7 @@ export const saveSetupIntentToDb = internalMutation({
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("setupIntents", {
+      organizationId: args.organizationId,
       clerkId: args.clerkId,
       setupIntentId: args.setupIntentId,
       clientSecret: args.clientSecret,
@@ -144,6 +172,7 @@ export const updateSetupIntentStatus = internalMutation({
 
 export const savePaymentMethodToDb = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     clerkId: v.string(),
     stripePaymentMethodId: v.string(),
     stripeCustomerId: v.string(),
@@ -164,6 +193,7 @@ export const savePaymentMethodToDb = internalMutation({
     }
 
     return await ctx.db.insert("paymentMethods", {
+      organizationId: args.organizationId,
       clerkId: args.clerkId,
       stripePaymentMethodId: args.stripePaymentMethodId,
       stripeCustomerId: args.stripeCustomerId,
@@ -213,8 +243,17 @@ export const deletePaymentMethodsByStripeCustomerIds = internalMutation({
 });
 
 export const listPaymentMethods = internalMutation({
-  args: { clerkId: v.string() },
+  args: { clerkId: v.string(), organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, args) => {
+    if (args.organizationId) {
+      return await ctx.db
+        .query("paymentMethods")
+        .withIndex("by_clerk_id_and_org", (q) =>
+          q.eq("clerkId", args.clerkId).eq("organizationId", args.organizationId)
+        )
+        .collect();
+    }
+
     return await ctx.db
       .query("paymentMethods")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))

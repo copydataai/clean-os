@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 
 export const createBooking = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     email: v.string(),
     customerName: v.optional(v.string()),
     customerId: v.optional(v.id("customers")),
@@ -19,6 +20,7 @@ export const createBooking = internalMutation({
     const customerId =
       args.customerId ??
       (await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+        organizationId: args.organizationId,
         email: args.email,
         fullName: args.customerName,
         source: "booking",
@@ -31,6 +33,7 @@ export const createBooking = internalMutation({
 
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
+      organizationId: args.organizationId,
       email: args.email,
       customerName: args.customerName,
       customerId,
@@ -87,8 +90,17 @@ export const getBookingByCheckoutSession = internalQuery({
 });
 
 export const getBookingsByEmail = internalQuery({
-  args: { email: v.string() },
+  args: { email: v.string(), organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, args) => {
+    if (args.organizationId) {
+      return await ctx.db
+        .query("bookings")
+        .withIndex("by_org_email", (q) =>
+          q.eq("organizationId", args.organizationId).eq("email", args.email)
+        )
+        .collect();
+    }
+
     return await ctx.db
       .query("bookings")
       .withIndex("by_email", (q) => q.eq("email", args.email))
@@ -219,6 +231,7 @@ export const reassignStripeCustomerId = internalMutation({
 
 export const createPaymentIntent = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     bookingId: v.id("bookings"),
     stripePaymentIntentId: v.string(),
     stripeCustomerId: v.string(),
@@ -230,6 +243,7 @@ export const createPaymentIntent = internalMutation({
   handler: async (ctx, args): Promise<Id<"paymentIntents">> => {
     const now = Date.now();
     return await ctx.db.insert("paymentIntents", {
+      organizationId: args.organizationId,
       bookingId: args.bookingId,
       stripePaymentIntentId: args.stripePaymentIntentId,
       stripeCustomerId: args.stripeCustomerId,
@@ -255,6 +269,21 @@ export const getPaymentIntentByStripeId = internalQuery({
   },
 });
 
+export const getPaymentIntentByStripeIdForOrganization = internalQuery({
+  args: {
+    organizationId: v.id("organizations"),
+    stripePaymentIntentId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("paymentIntents")
+      .withIndex("by_org_stripe_id", (q) =>
+        q.eq("organizationId", args.organizationId).eq("stripePaymentIntentId", args.stripePaymentIntentId)
+      )
+      .unique();
+  },
+});
+
 export const getPaymentIntentsByBooking = internalQuery({
   args: { bookingId: v.id("bookings") },
   handler: async (ctx, args) => {
@@ -267,18 +296,26 @@ export const getPaymentIntentsByBooking = internalQuery({
 
 export const updatePaymentIntentStatus = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     stripePaymentIntentId: v.string(),
     status: v.string(),
     errorMessage: v.optional(v.string()),
     paymentLinkUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const pi = await ctx.db
-      .query("paymentIntents")
-      .withIndex("by_stripe_id", (q) =>
-        q.eq("stripePaymentIntentId", args.stripePaymentIntentId)
-      )
-      .unique();
+    const pi = args.organizationId
+      ? await ctx.db
+          .query("paymentIntents")
+          .withIndex("by_org_stripe_id", (q) =>
+            q.eq("organizationId", args.organizationId).eq("stripePaymentIntentId", args.stripePaymentIntentId)
+          )
+          .unique()
+      : await ctx.db
+          .query("paymentIntents")
+          .withIndex("by_stripe_id", (q) =>
+            q.eq("stripePaymentIntentId", args.stripePaymentIntentId)
+          )
+          .unique();
 
     if (pi) {
       await ctx.db.patch(pi._id, {

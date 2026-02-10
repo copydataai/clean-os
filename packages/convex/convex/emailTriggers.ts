@@ -35,6 +35,14 @@ export const sendConfirmationEmail = action({
     }
     const confirmUrlObj = new URL(confirmBaseUrl);
     confirmUrlObj.searchParams.set("request_id", requestId);
+    if (request.organizationId) {
+      const organization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
+        id: request.organizationId,
+      });
+      if (organization?.slug) {
+        confirmUrlObj.searchParams.set("org_slug", organization.slug);
+      }
+    }
     const confirmUrl = confirmUrlObj.toString();
 
     await ctx.runAction(internal.emailRenderers.sendConfirmationLinkEmail, {

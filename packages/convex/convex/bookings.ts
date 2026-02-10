@@ -53,6 +53,7 @@ async function requireAdminActorUserId(ctx: any) {
 
 export const createBookingFromTally = mutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     email: v.string(),
     customerName: v.optional(v.string()),
     serviceType: v.optional(v.string()),
@@ -64,6 +65,7 @@ export const createBookingFromTally = mutation({
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
     const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+      organizationId: args.organizationId,
       email: args.email,
       fullName: args.customerName,
       source: "booking",
@@ -78,6 +80,7 @@ export const createBookingFromTally = mutation({
 
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
+      organizationId: args.organizationId,
       email: args.email,
       customerName: args.customerName,
       customerId,
@@ -141,6 +144,7 @@ export const createBookingFromRequest = mutation({
     }
 
     const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+      organizationId: request.organizationId,
       email: request.email,
       fullName: request.contactDetails,
       contactDetails: request.contactDetails,
@@ -151,6 +155,7 @@ export const createBookingFromRequest = mutation({
 
     const now = Date.now();
     const bookingId = await ctx.db.insert("bookings", {
+      organizationId: request.organizationId,
       email: request.email,
       customerName: request.contactDetails,
       customerId,
@@ -451,11 +456,30 @@ export const getPaymentIntentsForBooking = query({
 
 export const listBookings = query({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     status: v.optional(v.string()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
+
+    if (args.organizationId && args.status) {
+      return await ctx.db
+        .query("bookings")
+        .withIndex("by_org_status", (q) =>
+          q.eq("organizationId", args.organizationId).eq("status", args.status!)
+        )
+        .order("desc")
+        .take(limit);
+    }
+
+    if (args.organizationId) {
+      return await ctx.db
+        .query("bookings")
+        .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
+        .order("desc")
+        .take(limit);
+    }
 
     if (args.status) {
       const status = args.status;

@@ -8,6 +8,7 @@ const FALLBACK_SAMPLE_SIZE = 10;
 
 export const createRequest = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     requestResponseId: v.optional(v.string()),
     requestFormId: v.optional(v.string()),
     quoteRequestId: v.optional(v.id("quoteRequests")),
@@ -31,6 +32,7 @@ export const createRequest = internalMutation({
   handler: async (ctx, args): Promise<Id<"bookingRequests">> => {
     const customerId = args.email
       ? await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+          organizationId: args.organizationId,
           email: args.email,
           contactDetails: args.contactDetails,
           phone: args.phoneNumber,
@@ -40,6 +42,7 @@ export const createRequest = internalMutation({
 
     const now = Date.now();
     const requestId = await ctx.db.insert("bookingRequests", {
+      organizationId: args.organizationId,
       status: "requested",
       requestResponseId: args.requestResponseId,
       requestFormId: args.requestFormId,
@@ -79,6 +82,7 @@ export const createRequest = internalMutation({
 
 export const confirmRequest = internalMutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     requestId: v.optional(v.id("bookingRequests")),
     email: v.optional(v.string()),
     confirmationResponseId: v.optional(v.string()),
@@ -105,19 +109,35 @@ export const confirmRequest = internalMutation({
     const normalizedEmail = args.email?.trim().toLowerCase();
 
     if (!request && args.email) {
-      const candidates = await ctx.db
-        .query("bookingRequests")
-        .withIndex("by_email", (q) => q.eq("email", args.email))
-        .order("desc")
-        .take(FALLBACK_SAMPLE_SIZE);
+      const candidates = args.organizationId
+        ? await ctx.db
+            .query("bookingRequests")
+            .withIndex("by_org_email", (q) =>
+              q.eq("organizationId", args.organizationId).eq("email", args.email!)
+            )
+            .order("desc")
+            .take(FALLBACK_SAMPLE_SIZE)
+        : await ctx.db
+            .query("bookingRequests")
+            .withIndex("by_email", (q) => q.eq("email", args.email!))
+            .order("desc")
+            .take(FALLBACK_SAMPLE_SIZE);
 
       const normalizedCandidates =
         normalizedEmail && normalizedEmail !== args.email
-          ? await ctx.db
-              .query("bookingRequests")
-              .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
-              .order("desc")
-              .take(FALLBACK_SAMPLE_SIZE)
+          ? args.organizationId
+            ? await ctx.db
+                .query("bookingRequests")
+                .withIndex("by_org_email", (q) =>
+                  q.eq("organizationId", args.organizationId!).eq("email", normalizedEmail)
+                )
+                .order("desc")
+                .take(FALLBACK_SAMPLE_SIZE)
+            : await ctx.db
+                .query("bookingRequests")
+                .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+                .order("desc")
+                .take(FALLBACK_SAMPLE_SIZE)
           : [];
 
       const cutoff = Date.now() - FALLBACK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
@@ -133,6 +153,7 @@ export const confirmRequest = internalMutation({
       }
       const customerId = args.email
         ? await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+            organizationId: args.organizationId,
             email: args.email,
             contactDetails: args.contactDetails,
             phone: args.phoneNumber,
@@ -142,6 +163,7 @@ export const confirmRequest = internalMutation({
 
       const now = Date.now();
       const createdId = await ctx.db.insert("bookingRequests", {
+        organizationId: args.organizationId,
         status: "confirmed",
         confirmationResponseId: args.confirmationResponseId,
         confirmationFormId: args.confirmationFormId,
@@ -188,9 +210,11 @@ export const confirmRequest = internalMutation({
     }
 
     const nextEmail = args.email ?? request.email;
+    const nextOrganizationId = args.organizationId ?? request.organizationId;
     const nextQuoteRequestId = args.quoteRequestId ?? request.quoteRequestId;
     const customerId = nextEmail
       ? await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
+          organizationId: nextOrganizationId,
           email: nextEmail,
           contactDetails: args.contactDetails ?? request.contactDetails,
           phone: args.phoneNumber ?? request.phoneNumber,
@@ -199,6 +223,7 @@ export const confirmRequest = internalMutation({
       : request.customerId;
 
     await ctx.db.patch(request._id, {
+      organizationId: nextOrganizationId,
       status: "confirmed",
       confirmationResponseId: args.confirmationResponseId,
       confirmationFormId: args.confirmationFormId,
