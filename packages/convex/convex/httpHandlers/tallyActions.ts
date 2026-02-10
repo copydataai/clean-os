@@ -1,58 +1,53 @@
 "use node";
+
+import { createHmac, timingSafeEqual } from "crypto";
 import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
-import { createHmac, timingSafeEqual } from "crypto";
+import {
+  BOOKING_CONFIRMATION_REQUIRED_TARGETS,
+  QUOTE_REQUEST_REQUIRED_TARGETS,
+  type TallyMappings,
+} from "../lib/tallyMappings";
+import {
+  buildTallyFieldMaps,
+  parseFlowValuesFromMapping,
+  readHiddenField,
+  toStringArray,
+} from "../lib/tallyRuntime";
 
-const TALLY_FIELD_IDS = {
-  contactDetails: "MboYk0",
-  phoneNumber: "J65Da7",
-  email: "g0KZyK",
-  accessMethod: "0xNJrQ",
-  accessInstructions: "zqPrXE",
-  parkingInstructions: "lyJ7D6",
-  floorTypes: "y6VvKW",
-  finishedBasement: "XDZYVV",
-  delicateSurfaces: "DNgJ2p",
-  attentionAreas: "d6BDqN",
-  pets: "8K7Poo",
-  homeDuringCleanings: "5zWGKb",
-  scheduleAdjustmentWindows: "oyX76M",
-  timingShiftOk: "YQNMD0",
-  additionalNotes: "R0EJKP",
-} as const;
+type Endpoint = "request" | "confirmation" | "card";
 
-const TALLY_QUOTE_FIELD_IDS = {
-  firstName: "9W87bQ",
-  lastName: "e6Vake",
-  email: "WNL8xN",
-  phone: "a6R27B",
-  service: "2epKQj",
-  serviceType: "BXrxMQ",
-  frequency: "ky2NMR",
-  squareFootage: "LbePRv",
-  address: "xpAJOr",
-  addressLine2: "ZNM2qo",
-  postalCode: "N6a7Gl",
-  city: "qd9R0G",
-  state: "QDb7P7",
-  additionalNotes: "67gZak",
-  utm_source: "7WyN6Z",
-  utm_campaign: "b7oWbL",
-  gad_campaignid: "vAlPo0",
-  gclid: "K69Vd8",
-  status: "AdEB1D",
-} as const;
+type WebhookResult =
+  | { error: string; status: number }
+  | { success: true; requestId?: string; bookingRequestId?: string; status: number };
+
+type VerifiedWebhookPayload = {
+  data: any;
+  fields: any[];
+  formId?: string;
+  responseId?: string;
+  config: {
+    organizationId: any;
+    orgHandle?: string | null;
+    requestFormId?: string;
+    confirmationFormId?: string;
+    cardFormId?: string;
+    webhookIds?: {
+      request?: string;
+      confirmation?: string;
+      card?: string;
+    };
+    fieldMappings?: TallyMappings;
+    webhookSecret: string;
+  };
+};
 
 function normalizeTallySignature(signature: string): string {
   return signature.startsWith("sha256=") ? signature.slice(7) : signature;
 }
 
-function verifyTallySignature(
-  payload: string,
-  signature: string,
-  secret: string,
-): boolean {
+function verifyTallySignature(payload: string, signature: string, secret: string): boolean {
   const expected = createHmac("sha256", secret).update(payload).digest("base64");
   const provided = normalizeTallySignature(signature);
   if (provided.length !== expected.length) {
@@ -85,136 +80,20 @@ function getTallyFields(data: any): any[] {
   return data?.data?.fields ?? [];
 }
 
-function deriveIdFromFieldKey(key: any): string | undefined {
-  if (typeof key !== "string") {
-    return undefined;
+function expectedFormIdForEndpoint(config: VerifiedWebhookPayload["config"], endpoint: Endpoint) {
+  if (endpoint === "request") {
+    return config.requestFormId;
   }
-  if (!key.startsWith("question_")) {
-    return undefined;
+  if (endpoint === "confirmation") {
+    return config.confirmationFormId;
   }
-  const withoutPrefix = key.slice("question_".length);
-  const [shortId] = withoutPrefix.split("_");
-  return shortId && shortId.length > 0 ? shortId : undefined;
-}
-
-function normalizeFieldValue(field: any): any {
-  const raw = field?.value === null ? undefined : field?.value;
-  if (Array.isArray(raw)) {
-    if (raw.length === 0) {
-      return undefined;
-    }
-    if (Array.isArray(field?.options)) {
-      const optionById = new Map(
-        field.options
-          .filter((option: any) => option?.id !== undefined)
-          .map((option: any) => [String(option.id), option.text]),
-      );
-      const first = raw[0];
-      const mapped = optionById.get(String(first));
-      return mapped ?? String(first);
-    }
-    return raw.length === 1 ? raw[0] : raw;
-  }
-  return raw;
-}
-
-function buildFieldMaps(fields: any[]): {
-  byId: Record<string, any>;
-  byKey: Record<string, any>;
-} {
-  const byId: Record<string, any> = {};
-  const byKey: Record<string, any> = {};
-
-  for (const field of fields) {
-    const value = normalizeFieldValue(field);
-    const id = field?.id ?? field?.questionId ?? field?.fieldId;
-    const derivedId = deriveIdFromFieldKey(field?.key);
-    if (id && byId[id] === undefined) {
-      byId[id] = value;
-    }
-    if (!id && derivedId && byId[derivedId] === undefined) {
-      byId[derivedId] = value;
-    }
-    if (field?.key) {
-      byKey[field.key] = value;
-    }
-  }
-
-  return { byId, byKey };
-}
-
-function readHiddenField(fields: any[], key: string): string | undefined {
-  const derivedKey = deriveIdFromFieldKey(key);
-  for (const field of fields) {
-    if (
-      field?.key === key ||
-      field?.id === key ||
-      field?.label === key ||
-      field?.name === key ||
-      (derivedKey &&
-        (field?.id === derivedKey ||
-          field?.questionId === derivedKey ||
-          field?.fieldId === derivedKey))
-    ) {
-      return field.value;
-    }
-  }
-  return undefined;
-}
-
-function toStringArray(value: any): string[] | undefined {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-  if (Array.isArray(value)) {
-    return value
-      .map((entry) => String(entry))
-      .filter((entry) => entry.length > 0);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
-  }
-  if (typeof value === "object") {
-    const flattened = Object.values(value).flatMap((entry) =>
-      Array.isArray(entry) ? entry : [entry],
-    );
-    return flattened
-      .map((entry) => String(entry))
-      .filter((entry) => entry.length > 0);
-  }
-  return [String(value)];
-}
-
-function parseBookingRequestFields(fields: any[]) {
-  const { byId } = buildFieldMaps(fields);
-  return {
-    contactDetails: byId[TALLY_FIELD_IDS.contactDetails],
-    phoneNumber: byId[TALLY_FIELD_IDS.phoneNumber],
-    email: byId[TALLY_FIELD_IDS.email],
-    accessMethod: toStringArray(byId[TALLY_FIELD_IDS.accessMethod]),
-    accessInstructions: byId[TALLY_FIELD_IDS.accessInstructions],
-    parkingInstructions: byId[TALLY_FIELD_IDS.parkingInstructions],
-    floorTypes: toStringArray(byId[TALLY_FIELD_IDS.floorTypes]),
-    finishedBasement: byId[TALLY_FIELD_IDS.finishedBasement],
-    delicateSurfaces: byId[TALLY_FIELD_IDS.delicateSurfaces],
-    attentionAreas: byId[TALLY_FIELD_IDS.attentionAreas],
-    pets: toStringArray(byId[TALLY_FIELD_IDS.pets]),
-    homeDuringCleanings: byId[TALLY_FIELD_IDS.homeDuringCleanings],
-    scheduleAdjustmentWindows: toStringArray(
-      byId[TALLY_FIELD_IDS.scheduleAdjustmentWindows],
-    ),
-    timingShiftOk: byId[TALLY_FIELD_IDS.timingShiftOk],
-    additionalNotes: byId[TALLY_FIELD_IDS.additionalNotes],
-  };
+  return config.cardFormId;
 }
 
 function logMissingFields(
   contextLabel: string,
   fields: Record<string, any>,
-  requiredKeys: string[],
+  requiredKeys: readonly string[],
 ) {
   const missing = requiredKeys.filter((key) => {
     const value = fields[key];
@@ -228,180 +107,290 @@ function logMissingFields(
   }
 }
 
-function parseQuoteRequestFields(fields: any[]) {
-  const { byId, byKey } = buildFieldMaps(fields);
-  const squareRaw = byId[TALLY_QUOTE_FIELD_IDS.squareFootage];
+function parseQuoteRequestFields(fields: any[], mappings?: TallyMappings) {
+  const maps = buildTallyFieldMaps(fields);
+  const mapped = parseFlowValuesFromMapping(maps, mappings?.quoteRequest);
+
+  const squareRaw = mapped.squareFootage;
   const squareFootage =
     typeof squareRaw === "number"
       ? squareRaw
       : squareRaw
-      ? Number.parseInt(squareRaw, 10)
+      ? Number.parseInt(String(squareRaw), 10)
       : undefined;
 
   return {
-    firstName: byId[TALLY_QUOTE_FIELD_IDS.firstName],
-    lastName: byId[TALLY_QUOTE_FIELD_IDS.lastName],
-    email: byId[TALLY_QUOTE_FIELD_IDS.email],
-    phone: byId[TALLY_QUOTE_FIELD_IDS.phone],
-    service: byId[TALLY_QUOTE_FIELD_IDS.service],
-    serviceType: byId[TALLY_QUOTE_FIELD_IDS.serviceType],
-    frequency: byId[TALLY_QUOTE_FIELD_IDS.frequency],
+    firstName: mapped.firstName,
+    lastName: mapped.lastName,
+    email: mapped.email,
+    phone: mapped.phone,
+    service: mapped.service,
+    serviceType: mapped.serviceType,
+    frequency: mapped.frequency,
     squareFootage: Number.isNaN(squareFootage) ? undefined : squareFootage,
-    address: byId[TALLY_QUOTE_FIELD_IDS.address],
-    addressLine2: byId[TALLY_QUOTE_FIELD_IDS.addressLine2],
-    postalCode: byId[TALLY_QUOTE_FIELD_IDS.postalCode],
-    city: byId[TALLY_QUOTE_FIELD_IDS.city],
-    state: byId[TALLY_QUOTE_FIELD_IDS.state],
-    additionalNotes: byId[TALLY_QUOTE_FIELD_IDS.additionalNotes],
-    utm_source: byKey.utm_source ?? byId[TALLY_QUOTE_FIELD_IDS.utm_source],
-    utm_campaign: byKey.utm_campaign ?? byId[TALLY_QUOTE_FIELD_IDS.utm_campaign],
-    gad_campaignid: byKey.gad_campaignid ?? byId[TALLY_QUOTE_FIELD_IDS.gad_campaignid],
-    gclid: byKey.gclid ?? byId[TALLY_QUOTE_FIELD_IDS.gclid],
-    status: byKey.Status ?? byKey.status ?? byId[TALLY_QUOTE_FIELD_IDS.status],
+    address: mapped.address,
+    addressLine2: mapped.addressLine2,
+    postalCode: mapped.postalCode,
+    city: mapped.city,
+    state: mapped.state,
+    additionalNotes: mapped.additionalNotes,
+    utm_source: mapped.utm_source,
+    utm_campaign: mapped.utm_campaign,
+    gad_campaignid: mapped.gad_campaignid,
+    gclid: mapped.gclid,
+    status: mapped.status,
   };
 }
 
-function verifyAndParseTallyPayload(
-  payload: string,
-  signature: string,
-  expectedFormId?: string,
-  contextLabel?: string,
-): { error: string; status: number } | { data: any; fields: any[]; formId?: string; responseId?: string } {
-  const webhookSecret = process.env.TALLY_WEBHOOK_SECRET;
+function parseBookingRequestFields(fields: any[], mappings?: TallyMappings) {
+  const maps = buildTallyFieldMaps(fields);
+  const mapped = parseFlowValuesFromMapping(maps, mappings?.bookingConfirmation);
 
-  if (!webhookSecret) {
-    console.error("[Tally Webhook] Missing TALLY_WEBHOOK_SECRET");
-    return { error: "Server configuration error", status: 500 };
-  }
+  return {
+    contactDetails: mapped.contactDetails,
+    phoneNumber: mapped.phoneNumber,
+    email: mapped.email,
+    accessMethod: toStringArray(mapped.accessMethod),
+    accessInstructions: mapped.accessInstructions,
+    parkingInstructions: mapped.parkingInstructions,
+    floorTypes: toStringArray(mapped.floorTypes),
+    finishedBasement: mapped.finishedBasement,
+    delicateSurfaces: mapped.delicateSurfaces,
+    attentionAreas: mapped.attentionAreas,
+    pets: toStringArray(mapped.pets),
+    homeDuringCleanings: mapped.homeDuringCleanings,
+    scheduleAdjustmentWindows: toStringArray(mapped.scheduleAdjustmentWindows),
+    timingShiftOk: mapped.timingShiftOk,
+    additionalNotes: mapped.additionalNotes,
+  };
+}
 
-  if (!verifyTallySignature(payload, signature, webhookSecret)) {
-    console.error("[Tally Webhook] Invalid signature", { contextLabel });
-    return { error: "Invalid signature", status: 400 };
-  }
+function parseCardCaptureFields(fields: any[], mappings?: TallyMappings) {
+  const maps = buildTallyFieldMaps(fields);
+  const mapped = parseFlowValuesFromMapping(maps, mappings?.cardCapture);
 
+  return {
+    email: mapped.email,
+    paymentMethod: mapped.paymentMethod,
+    cardLast4: mapped.cardLast4,
+    cardBrand: mapped.cardBrand,
+    status: mapped.status,
+  };
+}
+
+async function logTallyAttempt(
+  ctx: any,
+  args: {
+    endpoint: Endpoint;
+    organizationId?: any;
+    routeOrgHandle?: string;
+    formId?: string;
+    eventType?: string;
+    webhookId?: string;
+    httpStatus: number;
+    stage: string;
+    message?: string;
+  },
+) {
+  await ctx.runMutation(internal.integrations.logIntegrationWebhookAttempt, {
+    provider: "tally",
+    organizationId: args.organizationId,
+    endpoint: args.endpoint,
+    routeOrgHandle: args.routeOrgHandle,
+    formId: args.formId,
+    eventType: args.eventType,
+    webhookId: args.webhookId,
+    httpStatus: args.httpStatus,
+    stage: args.stage,
+    message: args.message,
+  });
+}
+
+async function verifyAndResolveTallyPayload(
+  ctx: any,
+  args: {
+    payload: string;
+    signature: string;
+    endpoint: Endpoint;
+    orgHandle?: string;
+  },
+): Promise<{ error: string; status: number } | VerifiedWebhookPayload> {
   let data: any;
   try {
-    data = JSON.parse(payload);
+    data = JSON.parse(args.payload);
   } catch (err) {
-    console.error("[Tally Webhook] Invalid JSON payload", err);
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      routeOrgHandle: args.orgHandle,
+      httpStatus: 400,
+      stage: "payload_parse",
+      message: err instanceof Error ? err.message : "Invalid JSON payload",
+    });
     return { error: "Invalid JSON payload", status: 400 };
   }
 
-  if (data.eventType !== "FORM_RESPONSE") {
-    console.error("[Tally Webhook] Unsupported event type", data.eventType);
+  const eventType = data?.eventType;
+  const formId = getTallyFormId(data);
+
+  let config: any;
+  try {
+    config = args.orgHandle
+      ? await ctx.runAction(internal.integrationsNode.decryptTallyConfig, {
+          orgHandle: args.orgHandle,
+        })
+      : formId
+        ? await ctx.runAction(internal.integrationsNode.decryptTallyConfig, {
+            formId,
+          })
+        : null;
+  } catch (err) {
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      routeOrgHandle: args.orgHandle,
+      formId,
+      eventType,
+      httpStatus: 400,
+      stage: "config_lookup",
+      message: err instanceof Error ? err.message : "TALLY_NOT_CONFIGURED",
+    });
+    return { error: "TALLY_NOT_CONFIGURED", status: 400 };
+  }
+
+  if (!config) {
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      routeOrgHandle: args.orgHandle,
+      formId,
+      eventType,
+      httpStatus: 400,
+      stage: "config_lookup",
+      message: "TALLY_NOT_CONFIGURED",
+    });
+    return { error: "TALLY_NOT_CONFIGURED", status: 400 };
+  }
+
+  if (!verifyTallySignature(args.payload, args.signature, config.webhookSecret)) {
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      organizationId: config.organizationId,
+      routeOrgHandle: args.orgHandle,
+      formId,
+      eventType,
+      webhookId: config.webhookIds?.[args.endpoint],
+      httpStatus: 400,
+      stage: "signature_verification",
+      message: "Invalid signature",
+    });
+    return { error: "Invalid signature", status: 400 };
+  }
+
+  if (eventType !== "FORM_RESPONSE") {
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      organizationId: config.organizationId,
+      routeOrgHandle: args.orgHandle,
+      formId,
+      eventType,
+      webhookId: config.webhookIds?.[args.endpoint],
+      httpStatus: 400,
+      stage: "event_type",
+      message: `Unsupported event type: ${String(eventType)}`,
+    });
     return { error: "Unsupported event type", status: 400 };
   }
 
-  const formId = getTallyFormId(data);
+  const expectedFormId = expectedFormIdForEndpoint(config, args.endpoint);
   if (expectedFormId && formId !== expectedFormId) {
-    console.error("[Tally Webhook] Form ID mismatch", {
-      contextLabel,
+    await logTallyAttempt(ctx, {
+      endpoint: args.endpoint,
+      organizationId: config.organizationId,
+      routeOrgHandle: args.orgHandle,
       formId,
-      expectedFormId,
+      eventType,
+      webhookId: config.webhookIds?.[args.endpoint],
+      httpStatus: 400,
+      stage: "form_id_mismatch",
+      message: `Expected ${expectedFormId} but received ${formId ?? "none"}`,
     });
     return { error: "Mismatched form id", status: 400 };
   }
 
   return {
     data,
-    fields: getTallyFields(data),
     formId,
     responseId: getTallyResponseId(data),
+    fields: getTallyFields(data),
+    config,
   };
 }
-
-type WebhookResult = 
-  | { error: string; status: number }
-  | { success: true; requestId: string; status: number; bookingRequestId?: string }
-  | { success: true; requestId: any; status: number; bookingRequestId?: string };
 
 export const handleTallyRequestWebhook = internalAction({
   args: {
     payload: v.string(),
     signature: v.string(),
+    orgHandle: v.optional(v.string()),
   },
-  handler: async (ctx, { payload, signature }): Promise<WebhookResult> => {
-    const expectedFormId = process.env.TALLY_REQUEST_FORM_ID;
-    const verified = verifyAndParseTallyPayload(payload, signature, expectedFormId, "request");
-    
+  handler: async (ctx, { payload, signature, orgHandle }): Promise<WebhookResult> => {
+    const verified = await verifyAndResolveTallyPayload(ctx, {
+      payload,
+      signature,
+      endpoint: "request",
+      orgHandle,
+    });
+
     if ("error" in verified) {
       return verified;
     }
 
-    const parsedFields = parseQuoteRequestFields(verified.fields);
-    logMissingFields("quote request", parsedFields, [
-      "firstName",
-      "lastName",
-      "email",
-      "phone",
-      "service",
-      "serviceType",
-      "squareFootage",
-      "address",
-      "postalCode",
-      "city",
-      "state",
-    ]);
+    const parsedFields = parseQuoteRequestFields(verified.fields, verified.config.fieldMappings);
+    logMissingFields("quote request", parsedFields, QUOTE_REQUEST_REQUIRED_TARGETS);
+
     const contactDetails = [parsedFields.firstName, parsedFields.lastName]
       .filter(Boolean)
       .join(" ")
       .trim();
-    const orgSlug =
-      readHiddenField(verified.fields, "orgSlug") ??
-      readHiddenField(verified.fields, "org_slug") ??
-      readHiddenField(verified.fields, "organizationSlug");
-    const organization = orgSlug
-      ? await ctx.runQuery(internal.payments.getOrganizationByPublicHandleInternal, { handle: orgSlug })
-      : null;
 
-    const bookingRequestId = await ctx.runMutation(
-      internal.bookingRequests.createRequest,
-      {
-        organizationId: organization?._id,
-        requestResponseId: verified.responseId,
-        requestFormId: verified.formId,
-        email: parsedFields.email,
-        contactDetails: contactDetails.length > 0 ? contactDetails : undefined,
-        phoneNumber: parsedFields.phone,
-        rawRequestPayload: verified.data,
-      },
-    );
+    const bookingRequestId = await ctx.runMutation(internal.bookingRequests.createRequest, {
+      organizationId: verified.config.organizationId,
+      requestResponseId: verified.responseId,
+      requestFormId: verified.formId,
+      email: parsedFields.email,
+      contactDetails: contactDetails.length > 0 ? contactDetails : undefined,
+      phoneNumber: parsedFields.phone,
+      rawRequestPayload: verified.data,
+    });
 
-    const quoteRequestId = await ctx.runMutation(
-      internal.quoteRequests.createQuoteRequest,
-      {
-        organizationId: organization?._id,
-        firstName: parsedFields.firstName,
-        lastName: parsedFields.lastName,
-        email: parsedFields.email,
-        phone: parsedFields.phone,
-        service: parsedFields.service,
-        serviceType: parsedFields.serviceType,
-        frequency: parsedFields.frequency,
-        squareFootage: parsedFields.squareFootage,
-        address: parsedFields.address,
-        addressLine2: parsedFields.addressLine2,
-        postalCode: parsedFields.postalCode,
-        city: parsedFields.city,
-        state: parsedFields.state,
-        additionalNotes: parsedFields.additionalNotes,
-        utm_source: parsedFields.utm_source,
-        utm_campaign: parsedFields.utm_campaign,
-        gad_campaignid: parsedFields.gad_campaignid,
-        gclid: parsedFields.gclid,
-        status: parsedFields.status,
-        tallyFormId: verified.formId,
-        bookingRequestId,
-        rawRequestPayload: verified.data,
-      },
-    );
+    const quoteRequestId = await ctx.runMutation(internal.quoteRequests.createQuoteRequest, {
+      organizationId: verified.config.organizationId,
+      firstName: parsedFields.firstName,
+      lastName: parsedFields.lastName,
+      email: parsedFields.email,
+      phone: parsedFields.phone,
+      service: parsedFields.service,
+      serviceType: parsedFields.serviceType,
+      frequency: parsedFields.frequency,
+      squareFootage: parsedFields.squareFootage,
+      address: parsedFields.address,
+      addressLine2: parsedFields.addressLine2,
+      postalCode: parsedFields.postalCode,
+      city: parsedFields.city,
+      state: parsedFields.state,
+      additionalNotes: parsedFields.additionalNotes,
+      utm_source: parsedFields.utm_source,
+      utm_campaign: parsedFields.utm_campaign,
+      gad_campaignid: parsedFields.gad_campaignid,
+      gclid: parsedFields.gclid,
+      status: parsedFields.status,
+      tallyFormId: verified.formId,
+      bookingRequestId,
+      rawRequestPayload: verified.data,
+    });
 
     await ctx.runMutation(internal.bookingRequests.linkQuoteRequestToRequest, {
       requestId: bookingRequestId,
       quoteRequestId,
     });
 
-    // Send quote received email
     if (parsedFields.email) {
       try {
         await ctx.runAction(internal.emailRenderers.sendQuoteReceivedEmail, {
@@ -421,6 +410,17 @@ export const handleTallyRequestWebhook = internalAction({
       }
     }
 
+    await logTallyAttempt(ctx, {
+      endpoint: "request",
+      organizationId: verified.config.organizationId,
+      routeOrgHandle: orgHandle,
+      formId: verified.formId,
+      eventType: "FORM_RESPONSE",
+      webhookId: verified.config.webhookIds?.request,
+      httpStatus: 200,
+      stage: "success",
+    });
+
     return { success: true, requestId: quoteRequestId, bookingRequestId, status: 200 };
   },
 });
@@ -429,11 +429,16 @@ export const handleTallyConfirmationWebhook = internalAction({
   args: {
     payload: v.string(),
     signature: v.string(),
+    orgHandle: v.optional(v.string()),
   },
-  handler: async (ctx, { payload, signature }): Promise<WebhookResult> => {
-    const expectedFormId = process.env.TALLY_CONFIRM_FORM_ID;
-    const verified = verifyAndParseTallyPayload(payload, signature, expectedFormId, "confirmation");
-    
+  handler: async (ctx, { payload, signature, orgHandle }): Promise<WebhookResult> => {
+    const verified = await verifyAndResolveTallyPayload(ctx, {
+      payload,
+      signature,
+      endpoint: "confirmation",
+      orgHandle,
+    });
+
     if ("error" in verified) {
       return verified;
     }
@@ -441,67 +446,60 @@ export const handleTallyConfirmationWebhook = internalAction({
     const requestId =
       readHiddenField(verified.fields, "requestId") ??
       readHiddenField(verified.fields, "request_id");
-    const parsedFields = parseBookingRequestFields(verified.fields);
-    const orgSlugFromHidden =
-      readHiddenField(verified.fields, "orgSlug") ??
-      readHiddenField(verified.fields, "org_slug") ??
-      readHiddenField(verified.fields, "organizationSlug");
-    const organizationFromHidden = orgSlugFromHidden
-      ? await ctx.runQuery(internal.payments.getOrganizationByPublicHandleInternal, {
-          handle: orgSlugFromHidden,
-        })
-      : null;
-    logMissingFields("booking confirmation", parsedFields, [
-      "contactDetails",
-      "phoneNumber",
-      "email",
-    ]);
 
-    const updatedRequestId = await ctx.runMutation(
-      internal.bookingRequests.confirmRequest,
-      {
-        organizationId: organizationFromHidden?._id,
-        requestId: requestId ? (requestId as any) : undefined,
-        email: parsedFields.email,
-        confirmationResponseId: verified.responseId,
-        confirmationFormId: verified.formId,
-        contactDetails: parsedFields.contactDetails,
-        phoneNumber: parsedFields.phoneNumber,
-        accessMethod: parsedFields.accessMethod,
-        accessInstructions: parsedFields.accessInstructions,
-        parkingInstructions: parsedFields.parkingInstructions,
-        floorTypes: parsedFields.floorTypes,
-        finishedBasement: parsedFields.finishedBasement,
-        delicateSurfaces: parsedFields.delicateSurfaces,
-        attentionAreas: parsedFields.attentionAreas,
-        pets: parsedFields.pets,
-        homeDuringCleanings: parsedFields.homeDuringCleanings,
-        scheduleAdjustmentWindows: parsedFields.scheduleAdjustmentWindows,
-        timingShiftOk: parsedFields.timingShiftOk,
-        additionalNotes: parsedFields.additionalNotes,
-        rawConfirmationPayload: verified.data,
-      },
-    );
+    const parsedFields = parseBookingRequestFields(verified.fields, verified.config.fieldMappings);
+    logMissingFields("booking confirmation", parsedFields, BOOKING_CONFIRMATION_REQUIRED_TARGETS);
+
+    const updatedRequestId = await ctx.runMutation(internal.bookingRequests.confirmRequest, {
+      organizationId: verified.config.organizationId,
+      requestId: requestId ? (requestId as any) : undefined,
+      email: parsedFields.email,
+      confirmationResponseId: verified.responseId,
+      confirmationFormId: verified.formId,
+      contactDetails: parsedFields.contactDetails,
+      phoneNumber: parsedFields.phoneNumber,
+      accessMethod: parsedFields.accessMethod,
+      accessInstructions: parsedFields.accessInstructions,
+      parkingInstructions: parsedFields.parkingInstructions,
+      floorTypes: parsedFields.floorTypes,
+      finishedBasement: parsedFields.finishedBasement,
+      delicateSurfaces: parsedFields.delicateSurfaces,
+      attentionAreas: parsedFields.attentionAreas,
+      pets: parsedFields.pets,
+      homeDuringCleanings: parsedFields.homeDuringCleanings,
+      scheduleAdjustmentWindows: parsedFields.scheduleAdjustmentWindows,
+      timingShiftOk: parsedFields.timingShiftOk,
+      additionalNotes: parsedFields.additionalNotes,
+      rawConfirmationPayload: verified.data,
+    });
 
     if (!updatedRequestId) {
-      console.error("[Tally Webhook] No matching request found for confirmation");
+      await logTallyAttempt(ctx, {
+        endpoint: "confirmation",
+        organizationId: verified.config.organizationId,
+        routeOrgHandle: orgHandle,
+        formId: verified.formId,
+        eventType: "FORM_RESPONSE",
+        webhookId: verified.config.webhookIds?.confirmation,
+        httpStatus: 400,
+        stage: "request_resolution",
+        message: "Booking request not found",
+      });
       return { error: "Booking request not found", status: 400 };
     }
 
-    // Send booking confirmed email
     const confirmEmail = parsedFields.email;
     if (confirmEmail && updatedRequestId) {
       try {
-        const bookingRequest = await ctx.runQuery(
-          internal.bookingRequests.getRequestById,
-          { id: updatedRequestId }
-        );
+        const bookingRequest = await ctx.runQuery(internal.bookingRequests.getRequestById, {
+          id: updatedRequestId,
+        });
+
         let quoteData: { service?: string; frequency?: string; address?: string; firstName?: string } = {};
         if (bookingRequest?.quoteRequestId) {
-          const quote = await ctx.runQuery(
-            internal.quoteRequests.getQuoteRequestById,
-            { id: bookingRequest.quoteRequestId }
-          );
+          const quote = await ctx.runQuery(internal.quoteRequests.getQuoteRequestById, {
+            id: bookingRequest.quoteRequestId,
+          });
           if (quote) {
             quoteData = {
               service: quote.service ?? undefined,
@@ -513,18 +511,17 @@ export const handleTallyConfirmationWebhook = internalAction({
         }
 
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-        let orgHandle: string | undefined =
-          organizationFromHidden?.slug ?? organizationFromHidden?.clerkId ?? undefined;
-        if (!orgHandle && bookingRequest?.organizationId) {
-          const requestOrganization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
-            id: bookingRequest.organizationId,
-          });
-          orgHandle = requestOrganization?.slug ?? requestOrganization?.clerkId ?? undefined;
-        }
-        if (!orgHandle) {
+        const organization = await ctx.runQuery(internal.payments.getOrganizationByIdInternal, {
+          id: verified.config.organizationId,
+        });
+        const orgHandleForLink =
+          verified.config.orgHandle ?? organization?.slug ?? organization?.clerkId;
+
+        if (!orgHandleForLink) {
           throw new Error("ORG_HANDLE_MISSING_FOR_BOOKING_LINK");
         }
-        const bookingPath = `/book/${orgHandle}?request_id=${updatedRequestId}`;
+
+        const bookingPath = `/book/${orgHandleForLink}?request_id=${updatedRequestId}`;
         const bookingLink = `${appUrl}${bookingPath}`;
 
         await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {
@@ -543,6 +540,56 @@ export const handleTallyConfirmationWebhook = internalAction({
       }
     }
 
+    await logTallyAttempt(ctx, {
+      endpoint: "confirmation",
+      organizationId: verified.config.organizationId,
+      routeOrgHandle: orgHandle,
+      formId: verified.formId,
+      eventType: "FORM_RESPONSE",
+      webhookId: verified.config.webhookIds?.confirmation,
+      httpStatus: 200,
+      stage: "success",
+    });
+
     return { success: true, requestId: updatedRequestId, status: 200 };
+  },
+});
+
+export const handleTallyCardWebhook = internalAction({
+  args: {
+    payload: v.string(),
+    signature: v.string(),
+    orgHandle: v.optional(v.string()),
+  },
+  handler: async (ctx, { payload, signature, orgHandle }): Promise<WebhookResult> => {
+    const verified = await verifyAndResolveTallyPayload(ctx, {
+      payload,
+      signature,
+      endpoint: "card",
+      orgHandle,
+    });
+
+    if ("error" in verified) {
+      return verified;
+    }
+
+    const parsed = parseCardCaptureFields(verified.fields, verified.config.fieldMappings);
+
+    await logTallyAttempt(ctx, {
+      endpoint: "card",
+      organizationId: verified.config.organizationId,
+      routeOrgHandle: orgHandle,
+      formId: verified.formId,
+      eventType: "FORM_RESPONSE",
+      webhookId: verified.config.webhookIds?.card,
+      httpStatus: 200,
+      stage: "success",
+      message: JSON.stringify({
+        email: parsed.email,
+        status: parsed.status,
+      }),
+    });
+
+    return { success: true, requestId: verified.responseId, status: 200 };
   },
 });
