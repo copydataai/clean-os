@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { createTestOrganization } from "./helpers/orgTestUtils";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -18,12 +19,14 @@ const modules: Record<string, () => Promise<any>> = {
 describe.sequential("schedule dispatch query", () => {
   it("returns checklist rollups per booking in dispatch payload", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
     const date = "2026-02-13";
 
     const { bookingWithChecklistId, assignmentId, bookingWithoutChecklistId } = await t.run(
       async (ctx) => {
         const bookingWithChecklistId = await ctx.db.insert("bookings", {
+          organizationId,
           email: "a@example.com",
           customerName: "Checklist Booking",
           status: "in_progress",
@@ -32,6 +35,7 @@ describe.sequential("schedule dispatch query", () => {
           updatedAt: now,
         });
         const bookingWithoutChecklistId = await ctx.db.insert("bookings", {
+          organizationId,
           email: "b@example.com",
           customerName: "No Checklist Booking",
           status: "scheduled",

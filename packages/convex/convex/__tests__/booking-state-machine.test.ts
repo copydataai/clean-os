@@ -1,7 +1,9 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { createTestOrganization } from "./helpers/orgTestUtils";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -21,11 +23,13 @@ async function insertBooking(
     serviceDate: string;
     serviceWindowStart: string;
     serviceWindowEnd: string;
+    organizationId: Id<"organizations">;
   }> = {}
 ) {
   const now = Date.now();
   return await t.run(async (ctx) => {
     return await ctx.db.insert("bookings", {
+      organizationId: overrides.organizationId,
       email: "customer@example.com",
       customerName: "Customer",
       status: overrides.status ?? "pending_card",
@@ -38,7 +42,7 @@ async function insertBooking(
   });
 }
 
-async function insertUser(t: ReturnType<typeof convexTest>, options?: { admin?: boolean }) {
+async function insertUser(t: ReturnType<typeof convexTest>) {
   const now = Date.now();
   return await t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", {
@@ -48,20 +52,6 @@ async function insertUser(t: ReturnType<typeof convexTest>, options?: { admin?: 
       lastName: "Admin",
     });
 
-    if (options?.admin) {
-      const orgId = await ctx.db.insert("organizations", {
-        clerkId: `org_${now}_${Math.random().toString(36).slice(2, 8)}`,
-        name: "Test Org",
-      });
-
-      await ctx.db.insert("organizationMemberships", {
-        clerkId: `membership_${now}_${Math.random().toString(36).slice(2, 8)}`,
-        userId,
-        organizationId: orgId,
-        role: "admin",
-      });
-    }
-
     return userId;
   });
 }
@@ -69,7 +59,8 @@ async function insertUser(t: ReturnType<typeof convexTest>, options?: { admin?: 
 describe.sequential("booking state machine", () => {
   it("allows valid transitions and rejects invalid transitions in strict mode", async () => {
     const t = convexTest(schema, modules);
-    const bookingId = await insertBooking(t);
+    const { organizationId } = await createTestOrganization(t);
+    const bookingId = await insertBooking(t, { organizationId });
 
     const previousStrictMode = process.env.BOOKING_STATE_MACHINE_STRICT;
     process.env.BOOKING_STATE_MACHINE_STRICT = "true";
@@ -108,7 +99,8 @@ describe.sequential("booking state machine", () => {
 
   it("supports audited override transitions with a required reason", async () => {
     const t = convexTest(schema, modules);
-    const bookingId = await insertBooking(t, { status: "charged" });
+    const { organizationId } = await createTestOrganization(t);
+    const bookingId = await insertBooking(t, { status: "charged", organizationId });
     const actorUserId = await insertUser(t);
 
     await expect(
@@ -156,8 +148,12 @@ describe.sequential("booking state machine", () => {
 
   it("allows cancellation only from pending_card, card_saved, or scheduled", async () => {
     const t = convexTest(schema, modules);
-    const cancellableBookingId = await insertBooking(t, { status: "scheduled" });
-    const blockedBookingId = await insertBooking(t, { status: "in_progress" });
+    const { organizationId } = await createTestOrganization(t);
+    const cancellableBookingId = await insertBooking(t, {
+      status: "scheduled",
+      organizationId,
+    });
+    const blockedBookingId = await insertBooking(t, { status: "in_progress", organizationId });
 
     await t.mutation(api.bookings.cancelBooking, {
       bookingId: cancellableBookingId,
@@ -183,11 +179,13 @@ describe.sequential("booking state machine", () => {
 
   it("applies schedule gate promotion and demotion", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const bookingId = await insertBooking(t, {
       status: "card_saved",
       serviceDate: "2026-02-09",
       serviceWindowStart: "09:00",
       serviceWindowEnd: "12:00",
+      organizationId,
     });
 
     const assignmentId = await t.run(async (ctx) => {
@@ -233,11 +231,13 @@ describe.sequential("booking state machine", () => {
 
   it("rolls booking status from assignments with any-start/all-finish behavior", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const bookingId = await insertBooking(t, {
       status: "scheduled",
       serviceDate: "2026-02-11",
       serviceWindowStart: "09:00",
       serviceWindowEnd: "12:00",
+      organizationId,
     });
 
     const [assignmentA, assignmentB] = await t.run(async (ctx) => {
@@ -283,11 +283,13 @@ describe.sequential("booking state machine", () => {
 
   it("records reschedule lifecycle events and keeps status lifecycle-driven", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const bookingId = await insertBooking(t, {
       status: "card_saved",
       serviceDate: "2026-02-09",
       serviceWindowStart: "09:00",
       serviceWindowEnd: "11:00",
+      organizationId,
     });
 
     await t.mutation(api.bookings.rescheduleBooking, {
@@ -313,7 +315,8 @@ describe.sequential("booking state machine", () => {
 
   it("backfills legacy failed bookings to payment_failed when payment evidence exists", async () => {
     const t = convexTest(schema, modules);
-    const bookingId = await insertBooking(t, { status: "failed" });
+    const { organizationId } = await createTestOrganization(t);
+    const bookingId = await insertBooking(t, { status: "failed", organizationId });
 
     await t.run(async (ctx) => {
       await ctx.db.insert("paymentIntents", {
@@ -342,8 +345,9 @@ describe.sequential("booking state machine", () => {
 
   it("derives unified funnel stage for operational and pre-booking contexts", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
-    const bookingId = await insertBooking(t, { status: "completed" });
+    const bookingId = await insertBooking(t, { status: "completed", organizationId });
     const bookingStage = await t.query(api.bookingLifecycle.getUnifiedFunnelStage, {
       bookingId,
     });
@@ -352,6 +356,7 @@ describe.sequential("booking state machine", () => {
     const now = Date.now();
     const quoteRequestId = await t.run(async (ctx) => {
       return await ctx.db.insert("quoteRequests", {
+        organizationId,
         firstName: "Q",
         lastName: "R",
         email: "q@example.com",
@@ -363,6 +368,7 @@ describe.sequential("booking state machine", () => {
 
     const requestId = await t.run(async (ctx) => {
       return await ctx.db.insert("bookingRequests", {
+        organizationId,
         status: "requested",
         quoteRequestId,
         email: "q@example.com",
@@ -381,10 +387,12 @@ describe.sequential("booking state machine", () => {
 
   it("recomputes customer stats on completed/charged transitions", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
 
     const customerId = await t.run(async (ctx) => {
       return await ctx.db.insert("customers", {
+        organizationId,
         firstName: "Stats",
         lastName: "Hook",
         email: "hook@example.com",
@@ -397,6 +405,7 @@ describe.sequential("booking state machine", () => {
 
     const bookingId = await t.run(async (ctx) => {
       return await ctx.db.insert("bookings", {
+        organizationId,
         email: "hook@example.com",
         customerName: "Stats Hook",
         customerId,
@@ -431,10 +440,12 @@ describe.sequential("booking state machine", () => {
 
   it("lists unified lifecycle rows with filtering and cursor pagination", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const base = Date.now();
 
     await t.run(async (ctx) => {
       await ctx.db.insert("bookings", {
+        organizationId,
         email: "a@example.com",
         customerName: "Alpha",
         status: "card_saved",
@@ -446,6 +457,7 @@ describe.sequential("booking state machine", () => {
       });
 
       await ctx.db.insert("bookings", {
+        organizationId,
         email: "b@example.com",
         customerName: "Beta",
         status: "completed",
@@ -457,6 +469,7 @@ describe.sequential("booking state machine", () => {
       });
 
       await ctx.db.insert("bookingRequests", {
+        organizationId,
         status: "requested",
         email: "lead@example.com",
         contactDetails: "Lead Customer",
@@ -493,7 +506,8 @@ describe.sequential("booking state machine", () => {
 
   it("returns lifecycle timeline rows with actor metadata and pagination", async () => {
     const t = convexTest(schema, modules);
-    const bookingId = await insertBooking(t, { status: "card_saved" });
+    const { organizationId } = await createTestOrganization(t);
+    const bookingId = await insertBooking(t, { status: "card_saved", organizationId });
     const actorUserId = await insertUser(t);
     const base = Date.now();
 

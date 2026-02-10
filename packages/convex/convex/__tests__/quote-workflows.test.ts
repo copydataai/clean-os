@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { createTestOrganization } from "./helpers/orgTestUtils";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -17,6 +18,7 @@ let quoteNumberCounter = 10000;
 
 async function insertQuoteRequest(
   t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
   overrides: Partial<{
     requestStatus: "requested" | "quoted" | "confirmed";
     email: string;
@@ -25,6 +27,7 @@ async function insertQuoteRequest(
   const now = Date.now();
   return await t.run(async (ctx) => {
     return await ctx.db.insert("quoteRequests", {
+      organizationId,
       firstName: "Test",
       lastName: "Customer",
       email: overrides.email ?? `test-${Math.random()}@example.com`,
@@ -40,11 +43,13 @@ async function insertQuoteRequest(
 
 async function insertBookingRequest(
   t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
   quoteRequestId: Id<"quoteRequests">
 ) {
   const now = Date.now();
   return await t.run(async (ctx) => {
     return await ctx.db.insert("bookingRequests", {
+      organizationId,
       status: "requested",
       quoteRequestId,
       email: "booking@example.com",
@@ -56,6 +61,7 @@ async function insertBookingRequest(
 
 async function insertQuote(
   t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
   quoteRequestId: Id<"quoteRequests">,
   overrides: Partial<{
     bookingRequestId: Id<"bookingRequests">;
@@ -72,6 +78,7 @@ async function insertQuote(
 
   return await t.run(async (ctx) => {
     return await ctx.db.insert("quotes", {
+      organizationId,
       quoteRequestId,
       bookingRequestId: overrides.bookingRequestId,
       quoteNumber,
@@ -91,20 +98,32 @@ async function insertQuote(
 describe.sequential("quote workflows", () => {
   it("maps quote statuses to the 3-column board buckets", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
-    const fallbackRequested = await insertQuoteRequest(t, { requestStatus: "quoted" });
-    const draftRequest = await insertQuoteRequest(t);
-    const failedRequest = await insertQuoteRequest(t);
-    const sentRequest = await insertQuoteRequest(t);
-    const expiredRequest = await insertQuoteRequest(t);
-    const acceptedRequest = await insertQuoteRequest(t);
+    const fallbackRequested = await insertQuoteRequest(t, organizationId, {
+      requestStatus: "quoted",
+    });
+    const draftRequest = await insertQuoteRequest(t, organizationId);
+    const failedRequest = await insertQuoteRequest(t, organizationId);
+    const sentRequest = await insertQuoteRequest(t, organizationId);
+    const expiredRequest = await insertQuoteRequest(t, organizationId);
+    const acceptedRequest = await insertQuoteRequest(t, organizationId);
 
     const now = Date.now();
-    await insertQuote(t, draftRequest, { status: "draft" });
-    await insertQuote(t, failedRequest, { status: "send_failed" });
-    await insertQuote(t, sentRequest, { status: "sent", expiresAt: now + 60_000 });
-    await insertQuote(t, expiredRequest, { status: "expired", expiresAt: now - 60_000 });
-    await insertQuote(t, acceptedRequest, { status: "accepted", acceptedAt: now });
+    await insertQuote(t, organizationId, draftRequest, { status: "draft" });
+    await insertQuote(t, organizationId, failedRequest, { status: "send_failed" });
+    await insertQuote(t, organizationId, sentRequest, {
+      status: "sent",
+      expiresAt: now + 60_000,
+    });
+    await insertQuote(t, organizationId, expiredRequest, {
+      status: "expired",
+      expiresAt: now - 60_000,
+    });
+    await insertQuote(t, organizationId, acceptedRequest, {
+      status: "accepted",
+      acceptedAt: now,
+    });
 
     const board = await t.query(api.quotes.listQuoteBoard, { limit: 50 });
     const byId = new Map<Id<"quoteRequests">, any>(board.map((row: any) => [row._id, row]));
@@ -119,9 +138,10 @@ describe.sequential("quote workflows", () => {
 
   it("syncs requested/quoted state and blocks manual confirmed moves", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
-    const quoteRequestId = await insertQuoteRequest(t);
-    const quoteId = await insertQuote(t, quoteRequestId, { status: "draft" });
+    const quoteRequestId = await insertQuoteRequest(t, organizationId);
+    const quoteId = await insertQuote(t, organizationId, quoteRequestId, { status: "draft" });
 
     await t.mutation(api.quotes.moveBoardCard, {
       quoteRequestId,
@@ -160,16 +180,17 @@ describe.sequential("quote workflows", () => {
 
   it("expires sent quotes with past expiry timestamps in the sweep", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
     const now = Date.now();
-    const pastRequest = await insertQuoteRequest(t);
-    const futureRequest = await insertQuoteRequest(t);
-    const pastQuoteId = await insertQuote(t, pastRequest, {
+    const pastRequest = await insertQuoteRequest(t, organizationId);
+    const futureRequest = await insertQuoteRequest(t, organizationId);
+    const pastQuoteId = await insertQuote(t, organizationId, pastRequest, {
       status: "sent",
       sentAt: now - 86_400_000,
       expiresAt: now - 1_000,
     });
-    const futureQuoteId = await insertQuote(t, futureRequest, {
+    const futureQuoteId = await insertQuote(t, organizationId, futureRequest, {
       status: "sent",
       sentAt: now - 60_000,
       expiresAt: now + 86_400_000,
@@ -190,11 +211,14 @@ describe.sequential("quote workflows", () => {
 
   it("marks accepted + review flag when confirmation occurs after expiry", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
     const now = Date.now();
-    const quoteRequestId = await insertQuoteRequest(t, { requestStatus: "quoted" });
-    const bookingRequestId = await insertBookingRequest(t, quoteRequestId);
-    const quoteId = await insertQuote(t, quoteRequestId, {
+    const quoteRequestId = await insertQuoteRequest(t, organizationId, {
+      requestStatus: "quoted",
+    });
+    const bookingRequestId = await insertBookingRequest(t, organizationId, quoteRequestId);
+    const quoteId = await insertQuote(t, organizationId, quoteRequestId, {
       bookingRequestId,
       status: "sent",
       sentAt: now - 7 * 86_400_000,

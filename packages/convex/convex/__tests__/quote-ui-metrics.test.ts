@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { createTestOrganization } from "./helpers/orgTestUtils";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -14,6 +15,7 @@ let quoteNumberCounter = 30000;
 
 async function createRequestAndQuote(
   t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
   args: {
     requestCreatedAt: number;
     sentAt?: number;
@@ -22,6 +24,7 @@ async function createRequestAndQuote(
 ) {
   return await t.run(async (ctx) => {
     const quoteRequestId = await ctx.db.insert("quoteRequests", {
+      organizationId,
       firstName: "Metric",
       lastName: "User",
       email: `metric-${Math.random()}@example.com`,
@@ -31,6 +34,7 @@ async function createRequestAndQuote(
     });
 
     const quoteId = await ctx.db.insert("quotes", {
+      organizationId,
       quoteRequestId,
       quoteNumber: quoteNumberCounter++,
       status: args.acceptedAt ? "accepted" : args.sentAt ? "sent" : "draft",
@@ -48,10 +52,12 @@ async function createRequestAndQuote(
 
 async function createTimelineFixture(
   t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
   nowMs: number
 ): Promise<{ quoteRequestId: Id<"quoteRequests">; quoteId: Id<"quotes"> }> {
   return await t.run(async (ctx) => {
     const quoteRequestId = await ctx.db.insert("quoteRequests", {
+      organizationId,
       firstName: "Timeline",
       lastName: "User",
       email: "timeline@example.com",
@@ -60,6 +66,7 @@ async function createTimelineFixture(
       updatedAt: nowMs,
     });
     const quoteId = await ctx.db.insert("quotes", {
+      organizationId,
       quoteRequestId,
       quoteNumber: quoteNumberCounter++,
       status: "sent",
@@ -69,6 +76,7 @@ async function createTimelineFixture(
       updatedAt: nowMs,
     });
     await ctx.db.insert("quoteReminderEvents", {
+      organizationId,
       quoteId,
       quoteRequestId,
       stage: "r1_24h",
@@ -79,6 +87,7 @@ async function createTimelineFixture(
       createdAt: nowMs + 1000,
     });
     await ctx.db.insert("quoteReminderEvents", {
+      organizationId,
       quoteId,
       quoteRequestId,
       stage: "manual",
@@ -95,21 +104,22 @@ async function createTimelineFixture(
 describe.sequential("quote UI metrics", () => {
   it("computes 30-day cohort counts and rates", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const nowMs = 1_740_000_000_000;
 
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 2 * 24 * 60 * 60 * 1000,
       sentAt: nowMs - 24 * 60 * 60 * 1000,
       acceptedAt: nowMs - 12 * 60 * 60 * 1000,
     });
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 5 * 24 * 60 * 60 * 1000,
       sentAt: nowMs - 4 * 24 * 60 * 60 * 1000,
     });
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 10 * 24 * 60 * 60 * 1000,
     });
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 40 * 24 * 60 * 60 * 1000,
       sentAt: nowMs - 39 * 24 * 60 * 60 * 1000,
       acceptedAt: nowMs - 38 * 24 * 60 * 60 * 1000,
@@ -131,23 +141,24 @@ describe.sequential("quote UI metrics", () => {
 
   it("computes median cycle durations and returns reminder timeline latest-first", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const nowMs = 1_740_000_000_000;
 
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 10 * 24 * 60 * 60 * 1000,
       sentAt: nowMs - 9 * 24 * 60 * 60 * 1000,
       acceptedAt: nowMs - 8 * 24 * 60 * 60 * 1000,
     });
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 7 * 24 * 60 * 60 * 1000,
       sentAt: nowMs - 5 * 24 * 60 * 60 * 1000,
       acceptedAt: nowMs - 4 * 24 * 60 * 60 * 1000,
     });
-    await createRequestAndQuote(t, {
+    await createRequestAndQuote(t, organizationId, {
       requestCreatedAt: nowMs - 6 * 24 * 60 * 60 * 1000,
       sentAt: nowMs - 5 * 24 * 60 * 60 * 1000,
     });
-    const timelineFixture = await createTimelineFixture(t, nowMs);
+    const timelineFixture = await createTimelineFixture(t, organizationId, nowMs);
 
     const originalNow = Date.now;
     Date.now = () => nowMs;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { createTestOrganization } from "./helpers/orgTestUtils";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -29,8 +30,10 @@ async function insertActorUser(t: ReturnType<typeof convexTest>) {
 describe.sequential("customer lifecycle linking + stats", () => {
   it("auto-creates customer from quote request and links customerId", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
     const quoteRequestId = await t.mutation(internal.quoteRequests.createQuoteRequest, {
+      organizationId,
       firstName: "Jane",
       lastName: "Doe",
       email: "Jane.Doe+1@EXAMPLE.com",
@@ -54,10 +57,12 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("reuses oldest canonical customer for normalized email duplicates", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
 
     const ids = await t.run(async (ctx) => {
       const oldId = await ctx.db.insert("customers", {
+        organizationId,
         firstName: "Old",
         lastName: "Record",
         email: "dup@example.com",
@@ -66,6 +71,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
         updatedAt: now - 1000,
       });
       const newId = await ctx.db.insert("customers", {
+        organizationId,
         firstName: "New",
         lastName: "Record",
         email: "DUP@EXAMPLE.COM",
@@ -78,6 +84,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
     });
 
     const requestId = await t.mutation(internal.bookingRequests.createRequest, {
+      organizationId,
       email: "Dup@example.com",
       contactDetails: "Duplicate User",
     });
@@ -89,8 +96,10 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("links quote/request/booking and promotes lead to active on booking creation", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
     const quoteRequestId = await t.mutation(internal.quoteRequests.createQuoteRequest, {
+      organizationId,
       email: "flow@example.com",
       firstName: "Flow",
       lastName: "Lead",
@@ -98,6 +107,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
     });
 
     const bookingRequestId = await t.mutation(internal.bookingRequests.createRequest, {
+      organizationId,
       quoteRequestId,
       email: "flow@example.com",
       contactDetails: "Flow Lead",
@@ -127,8 +137,10 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("sets customerId for direct createBookingFromTally flow", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
     const bookingId = await t.mutation(api.bookings.createBookingFromTally, {
+      organizationId,
       email: "tally@example.com",
       customerName: "Tally User",
       amount: 12000,
@@ -149,8 +161,10 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("derives fallback name from email local-part when name is missing", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
 
     const requestId = await t.mutation(internal.bookingRequests.createRequest, {
+      organizationId,
       email: "mary.jane-smith+vip@example.com",
     });
 
@@ -168,9 +182,11 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("recomputes stats with all-booking count and completed+charged spend", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
 
     const customerId = await t.mutation(internal.customers.ensureLifecycleCustomer, {
+      organizationId,
       email: "stats@example.com",
       firstName: "Stats",
       lastName: "User",
@@ -179,6 +195,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
     await t.run(async (ctx) => {
       await ctx.db.insert("bookings", {
+        organizationId,
         email: "stats@example.com",
         customerName: "Stats User",
         customerId,
@@ -189,6 +206,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
         updatedAt: now,
       });
       await ctx.db.insert("bookings", {
+        organizationId,
         email: "stats@example.com",
         customerName: "Stats User",
         customerId,
@@ -199,6 +217,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
         updatedAt: now,
       });
       await ctx.db.insert("bookings", {
+        organizationId,
         email: "stats@example.com",
         customerName: "Stats User",
         customerId,
@@ -209,6 +228,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
         updatedAt: now,
       });
       await ctx.db.insert("bookings", {
+        organizationId,
         email: "stats@example.com",
         customerName: "Stats User",
         customerId,
@@ -232,9 +252,11 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("refreshes stats when override transition leaves completed/charged states", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
 
     const customerId = await t.mutation(internal.customers.ensureLifecycleCustomer, {
+      organizationId,
       email: "override@example.com",
       firstName: "Override",
       lastName: "Case",
@@ -243,6 +265,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
     const bookingId = await t.run(async (ctx) => {
       return await ctx.db.insert("bookings", {
+        organizationId,
         email: "override@example.com",
         customerName: "Override Case",
         customerId,
@@ -276,10 +299,12 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("backfill dry-run reports work without mutating rows", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
 
     const ids = await t.run(async (ctx) => {
       const customerId = await ctx.db.insert("customers", {
+        organizationId,
         firstName: "Backfill",
         lastName: "User",
         email: "backfill@example.com",
@@ -289,6 +314,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
       });
 
       const quoteRequestId = await ctx.db.insert("quoteRequests", {
+        organizationId,
         email: "backfill@example.com",
         requestStatus: "requested",
         createdAt: now,
@@ -296,6 +322,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
       });
 
       const bookingRequestId = await ctx.db.insert("bookingRequests", {
+        organizationId,
         status: "requested",
         quoteRequestId,
         email: "backfill@example.com",
@@ -304,6 +331,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
       });
 
       const bookingId = await ctx.db.insert("bookings", {
+        organizationId,
         email: "backfill@example.com",
         customerName: "Backfill User",
         bookingRequestId,
@@ -340,10 +368,12 @@ describe.sequential("customer lifecycle linking + stats", () => {
 
   it("backfill execute links rows, fills normalized email, and recomputes stats", async () => {
     const t = convexTest(schema, modules);
+    const { organizationId } = await createTestOrganization(t);
     const now = Date.now();
 
     const ids = await t.run(async (ctx) => {
       const customerId = await ctx.db.insert("customers", {
+        organizationId,
         firstName: "Backfill",
         lastName: "Exec",
         email: "backfill.exec@example.com",
@@ -353,6 +383,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
       });
 
       const quoteRequestId = await ctx.db.insert("quoteRequests", {
+        organizationId,
         email: "backfill.exec@example.com",
         requestStatus: "requested",
         createdAt: now,
@@ -360,6 +391,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
       });
 
       const bookingRequestId = await ctx.db.insert("bookingRequests", {
+        organizationId,
         status: "requested",
         quoteRequestId,
         email: "backfill.exec@example.com",
@@ -368,6 +400,7 @@ describe.sequential("customer lifecycle linking + stats", () => {
       });
 
       const bookingId = await ctx.db.insert("bookings", {
+        organizationId,
         email: "backfill.exec@example.com",
         customerName: "Backfill Exec",
         bookingRequestId,
