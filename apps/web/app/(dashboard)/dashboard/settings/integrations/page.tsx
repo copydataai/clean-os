@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import PageHeader from "@/components/dashboard/PageHeader";
+import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,6 @@ type FlowMappings = Record<string, MappingRef | undefined>;
 type IntegrationMappings = {
   quoteRequest?: FlowMappings;
   bookingConfirmation?: FlowMappings;
-  cardCapture?: FlowMappings;
 };
 
 type TallyQuestion = {
@@ -33,6 +33,20 @@ type TallyForm = {
   id: string;
   name: string;
   questions: TallyQuestion[];
+};
+
+type TallyWebhookRecord = {
+  id?: string;
+  url?: string;
+  formId?: string;
+  eventType?: string;
+};
+
+type WebhookOpResult = {
+  endpoint: string;
+  action: string;
+  webhookId?: string;
+  reason?: string;
 };
 
 const QUOTE_REQUIRED_TARGETS = [
@@ -77,7 +91,16 @@ const CONFIRMATION_OPTIONAL_TARGETS = [
   "additionalNotes",
 ] as const;
 
-const CARD_OPTIONAL_TARGETS = ["email", "paymentMethod", "cardLast4", "cardBrand", "status"] as const;
+function isAdminRole(role?: string | null): boolean {
+  const normalized = (role ?? "").toLowerCase();
+  return (
+    normalized === "admin" ||
+    normalized === "owner" ||
+    normalized.endsWith(":admin") ||
+    normalized.endsWith(":owner") ||
+    normalized.includes("admin")
+  );
+}
 
 function formatDate(timestamp?: number | null): string {
   if (!timestamp) {
@@ -180,13 +203,32 @@ function MappingSection({
 }
 
 export default function IntegrationsPage() {
-  const status = useQuery(api.integrations.getTallyIntegrationStatus, {});
-  const health = useQuery(api.integrations.listTallyWebhookHealth, { limit: 20 });
+  const { activeOrg, organizations, isLoading: isOrgLoading } = useActiveOrganization();
+  const selectedOrg = useMemo(() => {
+    if (activeOrg) {
+      return activeOrg;
+    }
+    if (organizations.length === 0) {
+      return null;
+    }
+    return organizations.find((organization) => isAdminRole(organization.role)) ?? organizations[0] ?? null;
+  }, [activeOrg, organizations]);
+  console.log("org", selectedOrg);
+  const selectedOrgId = selectedOrg?._id;
+  const isAdmin = isAdminRole(selectedOrg?.role);
+  const status = useQuery(
+    api.integrations.getTallyIntegrationStatus,
+    selectedOrgId && isAdmin ? { organizationId: selectedOrgId } : "skip",
+  );
+  const health = useQuery(
+    api.integrations.listTallyWebhookHealth,
+    selectedOrgId && isAdmin ? { organizationId: selectedOrgId, limit: 20 } : "skip",
+  );
 
   const upsertCredentials = useAction(api.integrations.upsertTallyCredentials);
   const validateConnection = useAction(api.integrations.validateTallyConnection);
   const syncForms = useAction(api.integrations.syncTallyFormsAndQuestions);
-  const saveMappingsAndForms = useMutation(api.integrations.saveTallyMappingsAndForms);
+  const saveMappingsAndForms = useAction(api.integrations.saveTallyMappingsAndForms);
   const ensureWebhooks = useAction(api.integrations.ensureTallyWebhooks);
   const bootstrapFromEnv = useAction(api.integrations.bootstrapTallyIntegrationFromEnv);
 
@@ -194,15 +236,14 @@ export default function IntegrationsPage() {
   const [webhookSecret, setWebhookSecret] = useState("");
   const [requestFormId, setRequestFormId] = useState("");
   const [confirmationFormId, setConfirmationFormId] = useState("");
-  const [cardFormId, setCardFormId] = useState("");
   const [mappings, setMappings] = useState<IntegrationMappings>({
     quoteRequest: {},
     bookingConfirmation: {},
-    cardCapture: {},
   });
   const [formsCatalog, setFormsCatalog] = useState<TallyForm[]>([]);
-  const [webhookList, setWebhookList] = useState<any[]>([]);
-  const [webhookOps, setWebhookOps] = useState<any[]>([]);
+  const [webhookList, setWebhookList] = useState<TallyWebhookRecord[]>([]);
+  const [webhookOps, setWebhookOps] = useState<WebhookOpResult[]>([]);
+  const localDirtyRef = useRef(false);
 
   const [isSavingCredentials, setIsSavingCredentials] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -215,21 +256,31 @@ export default function IntegrationsPage() {
 
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [copiedWebhookKey, setCopiedWebhookKey] = useState<string | null>(null);
+  const [revealedWebhookKeys, setRevealedWebhookKeys] = useState<Set<string>>(new Set());
+
+  const statusUpdatedAt = status?.updatedAt ?? null;
+  const prevUpdatedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!status) {
       return;
     }
 
+    if (localDirtyRef.current && statusUpdatedAt === prevUpdatedAtRef.current) {
+      return;
+    }
+
+    prevUpdatedAtRef.current = statusUpdatedAt;
+    localDirtyRef.current = false;
+
     setRequestFormId(status.formIds?.request ?? "");
     setConfirmationFormId(status.formIds?.confirmation ?? "");
-    setCardFormId(status.formIds?.card ?? "");
     setMappings({
       quoteRequest: status.fieldMappings?.quoteRequest ?? {},
       bookingConfirmation: status.fieldMappings?.bookingConfirmation ?? {},
-      cardCapture: status.fieldMappings?.cardCapture ?? {},
     });
-  }, [status]);
+  }, [status, statusUpdatedAt]);
 
   const requestQuestions = useMemo(
     () => formsCatalog.find((form) => form.id === requestFormId)?.questions ?? [],
@@ -241,16 +292,72 @@ export default function IntegrationsPage() {
     [formsCatalog, confirmationFormId],
   );
 
-  const cardQuestions = useMemo(
-    () => formsCatalog.find((form) => form.id === cardFormId)?.questions ?? [],
-    [formsCatalog, cardFormId],
+  const managedWebhookUrls = useMemo(
+    () => [
+      {
+        key: "request",
+        label: "Request webhook",
+        url: status?.webhookUrls?.request ?? "",
+      },
+      {
+        key: "confirmation",
+        label: "Confirmation webhook",
+        url: status?.webhookUrls?.confirmation ?? "",
+      },
+    ],
+    [status?.webhookUrls],
   );
 
+  async function copyWebhookUrl(key: string, url: string) {
+    setMessage(null);
+    setError(null);
+    if (!url) {
+      setError("Webhook URL is not available yet.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedWebhookKey(key);
+      setMessage("Webhook URL copied.");
+      setTimeout(() => setCopiedWebhookKey((current) => (current === key ? null : current)), 1500);
+    } catch {
+      setError("Failed to copy webhook URL.");
+    }
+  }
+
+  function maskUrl(url: string): string {
+    if (!url) return "Not available yet.";
+    try {
+      const parsed = new URL(url);
+      const segments = parsed.pathname.split("/");
+      const lastSegment = segments[segments.length - 1] ?? "";
+      if (lastSegment.length > 6) {
+        segments[segments.length - 1] = lastSegment.slice(0, 6) + "••••••";
+      }
+      return parsed.origin + segments.join("/");
+    } catch {
+      return url.slice(0, 30) + "••••••";
+    }
+  }
+
+  function toggleRevealWebhook(key: string) {
+    setRevealedWebhookKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
   function setFlowMapping(
-    flow: "quoteRequest" | "bookingConfirmation" | "cardCapture",
+    flow: "quoteRequest" | "bookingConfirmation",
     target: string,
     next: MappingRef | undefined,
   ) {
+    localDirtyRef.current = true;
     setMappings((prev) => ({
       ...prev,
       [flow]: {
@@ -272,6 +379,11 @@ export default function IntegrationsPage() {
   }
 
   async function runWebhookOperation(operation: "list" | "ensure" | "delete") {
+    if (!selectedOrgId) {
+      setError("Select an organization before managing webhooks.");
+      return;
+    }
+
     setMessage(null);
     setError(null);
 
@@ -284,7 +396,11 @@ export default function IntegrationsPage() {
 
     setLoading(true);
     try {
-      const result = await ensureWebhooks({ operation, target: "all" });
+      const result = await ensureWebhooks({
+        organizationId: selectedOrgId,
+        operation,
+        target: "all",
+      });
       if (operation === "list") {
         setWebhookList(result.webhooks ?? []);
       } else {
@@ -303,6 +419,61 @@ export default function IntegrationsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (isOrgLoading) {
+    return (
+      <div className="surface-card p-8 text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading integrations...</p>
+      </div>
+    );
+  }
+
+  if (!selectedOrg) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Integrations"
+          subtitle="Connect Tally, map fields dynamically, and manage webhook delivery health."
+        >
+          <Link href="/dashboard/settings">
+            <Button variant="outline" size="sm">
+              Back to Settings
+            </Button>
+          </Link>
+        </PageHeader>
+        <div className="surface-card rounded-3xl p-8 text-center">
+          <p className="text-sm font-medium text-foreground">No organizations found</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Your account is signed in but not assigned to an organization.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Integrations"
+          subtitle="Connect Tally, map fields dynamically, and manage webhook delivery health."
+        >
+          <Link href="/dashboard/settings">
+            <Button variant="outline" size="sm">
+              Back to Settings
+            </Button>
+          </Link>
+        </PageHeader>
+        <div className="surface-card rounded-3xl p-8 text-center">
+          <p className="text-sm font-medium text-foreground">Access denied</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            You need an admin or owner role to manage integrations for {selectedOrg.name}.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   if (!status) {
@@ -374,6 +545,9 @@ export default function IntegrationsPage() {
             <Badge variant="outline">
               Webhook secret: {status.hasWebhookSecret ? "configured" : "missing"}
             </Badge>
+            <Badge variant="outline">
+              Route token: {status.hasWebhookRouteToken ? "configured" : "missing"}
+            </Badge>
           </div>
         </div>
 
@@ -412,7 +586,11 @@ export default function IntegrationsPage() {
               setError(null);
               setIsSavingCredentials(true);
               try {
-                await upsertCredentials({ apiKey, webhookSecret });
+                if (!selectedOrgId) {
+                  setError("Select an organization before saving credentials.");
+                  return;
+                }
+                await upsertCredentials({ organizationId: selectedOrgId, apiKey, webhookSecret });
                 setApiKey("");
                 setWebhookSecret("");
                 setMessage("Credentials saved.");
@@ -420,6 +598,8 @@ export default function IntegrationsPage() {
                 console.error(saveError);
                 setError(saveError instanceof Error ? saveError.message : "Failed to save credentials.");
               } finally {
+                setApiKey("");
+                setWebhookSecret("");
                 setIsSavingCredentials(false);
               }
             }}
@@ -435,7 +615,11 @@ export default function IntegrationsPage() {
               setError(null);
               setIsValidating(true);
               try {
-                const result = await validateConnection({});
+                if (!selectedOrgId) {
+                  setError("Select an organization before validating.");
+                  return;
+                }
+                const result = await validateConnection({ organizationId: selectedOrgId });
                 if (result.ok) {
                   setMessage("Tally connection validated.");
                 } else {
@@ -462,7 +646,11 @@ export default function IntegrationsPage() {
               setError(null);
               setIsBootstrapping(true);
               try {
-                const result = await bootstrapFromEnv({});
+                if (!selectedOrgId) {
+                  setError("Select an organization before bootstrapping.");
+                  return;
+                }
+                const result = await bootstrapFromEnv({ organizationId: selectedOrgId });
                 if (result.seeded) {
                   setMessage("Seeded Tally integration from environment.");
                 } else {
@@ -497,7 +685,11 @@ export default function IntegrationsPage() {
               setError(null);
               setIsSyncing(true);
               try {
-                const result = await syncForms({});
+                if (!selectedOrgId) {
+                  setError("Select an organization before syncing forms.");
+                  return;
+                }
+                const result = await syncForms({ organizationId: selectedOrgId });
                 setFormsCatalog(result.forms ?? []);
 
                 setMappings((prev) => ({
@@ -508,10 +700,6 @@ export default function IntegrationsPage() {
                   bookingConfirmation: {
                     ...result.suggestions?.bookingConfirmation,
                     ...prev.bookingConfirmation,
-                  },
-                  cardCapture: {
-                    ...result.suggestions?.cardCapture,
-                    ...prev.cardCapture,
                   },
                 }));
 
@@ -534,7 +722,7 @@ export default function IntegrationsPage() {
             <select
               className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm text-foreground"
               value={requestFormId}
-              onChange={(event) => setRequestFormId(event.target.value)}
+              onChange={(event) => { localDirtyRef.current = true; setRequestFormId(event.target.value); }}
             >
               <option value="">Select request form</option>
               {formsCatalog.map((form) => (
@@ -550,7 +738,7 @@ export default function IntegrationsPage() {
             <select
               className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm text-foreground"
               value={confirmationFormId}
-              onChange={(event) => setConfirmationFormId(event.target.value)}
+              onChange={(event) => { localDirtyRef.current = true; setConfirmationFormId(event.target.value); }}
             >
               <option value="">Select confirmation form</option>
               {formsCatalog.map((form) => (
@@ -561,21 +749,6 @@ export default function IntegrationsPage() {
             </select>
           </label>
 
-          <label className="space-y-1 text-sm text-muted-foreground">
-            <span>Card Form (optional)</span>
-            <select
-              className="w-full rounded-lg border border-border/70 bg-card px-3 py-2 text-sm text-foreground"
-              value={cardFormId}
-              onChange={(event) => setCardFormId(event.target.value)}
-            >
-              <option value="">No card form</option>
-              {formsCatalog.map((form) => (
-                <option key={form.id} value={form.id}>
-                  {form.name} ({form.id})
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
       </section>
 
@@ -594,14 +767,17 @@ export default function IntegrationsPage() {
               setError(null);
               setIsSavingMappings(true);
               try {
+                if (!selectedOrgId) {
+                  setError("Select an organization before saving mappings.");
+                  return;
+                }
                 await saveMappingsAndForms({
+                  organizationId: selectedOrgId,
                   requestFormId,
                   confirmationFormId,
-                  cardFormId: cardFormId || undefined,
                   fieldMappings: {
                     quoteRequest: toPayloadFlow(mappings.quoteRequest),
                     bookingConfirmation: toPayloadFlow(mappings.bookingConfirmation),
-                    cardCapture: toPayloadFlow(mappings.cardCapture),
                   },
                 });
                 setMessage("Forms and mappings saved.");
@@ -654,14 +830,6 @@ export default function IntegrationsPage() {
             onChange={(target, next) => setFlowMapping("bookingConfirmation", target, next)}
           />
 
-          <MappingSection
-            title="Card Capture: Optional"
-            subtitle="Configure and validate card form payload fields (no payment mutation in v1)."
-            targets={CARD_OPTIONAL_TARGETS}
-            mappings={mappings.cardCapture}
-            questions={cardQuestions}
-            onChange={(target, next) => setFlowMapping("cardCapture", target, next)}
-          />
         </div>
       </section>
 
@@ -686,6 +854,53 @@ export default function IntegrationsPage() {
           </div>
         </div>
 
+        <div className="mt-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+          <h3 className="text-sm font-semibold text-foreground">Managed endpoints</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Copy these URLs into Tally webhooks for this organization.
+          </p>
+          <div className="mt-3 space-y-2">
+            {managedWebhookUrls.map((entry) => (
+              <div
+                key={entry.key}
+                className="flex flex-col gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 md:flex-row md:items-center md:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-foreground">{entry.label}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {entry.url
+                      ? revealedWebhookKeys.has(entry.key)
+                        ? entry.url
+                        : maskUrl(entry.url)
+                      : "Not available yet."}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Webhook ID: {status.webhookIds?.[entry.key as "request" | "confirmation"] ?? "not registered"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!entry.url}
+                    onClick={() => toggleRevealWebhook(entry.key)}
+                  >
+                    {revealedWebhookKeys.has(entry.key) ? "Hide" : "Reveal"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!entry.url}
+                    onClick={() => copyWebhookUrl(entry.key, entry.url)}
+                  >
+                    {copiedWebhookKey === entry.key ? "Copied" : "Copy URL"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
             <h3 className="text-sm font-semibold text-foreground">Remote webhooks</h3>
@@ -693,8 +908,8 @@ export default function IntegrationsPage() {
               {webhookList.length === 0 ? (
                 <p>No webhook list loaded.</p>
               ) : (
-                webhookList.map((webhook) => (
-                  <div key={`${webhook.id ?? webhook.url}`} className="rounded-lg border border-border/70 bg-card px-3 py-2">
+                webhookList.map((webhook, index) => (
+                  <div key={`${webhook.id ?? ""}-${webhook.formId ?? ""}-${index}`} className="rounded-lg border border-border/70 bg-card px-3 py-2">
                     <p className="font-medium text-foreground">{webhook.id ?? "(no id)"}</p>
                     <p>form: {webhook.formId ?? "n/a"}</p>
                     <p>event: {webhook.eventType ?? "n/a"}</p>
