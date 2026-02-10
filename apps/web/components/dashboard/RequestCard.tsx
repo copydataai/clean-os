@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Id } from "@clean-os/convex/data-model";
 import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
+import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 
 type RequestCardProps = {
   request: {
@@ -43,11 +44,8 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
-  const organizations = useQuery(api.queries.getUserOrganizations);
-  const orgHandle =
-    organizations?.find((org) => org?._id === request.organizationId)?.slug ??
-    organizations?.find((org) => org?._id === request.organizationId)?.clerkId ??
-    null;
+  const { activeOrg } = useActiveOrganization();
+  const orgHandle = activeOrg?.slug ?? activeOrg?.clerkId ?? null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
   const tags = [

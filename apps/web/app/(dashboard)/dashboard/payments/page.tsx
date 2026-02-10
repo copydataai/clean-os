@@ -5,6 +5,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
 import PageHeader from "@/components/dashboard/PageHeader";
+import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,11 +46,12 @@ function deriveKeyMode(key?: string | null) {
 }
 
 export default function PaymentsPage() {
-  const organizations = useQuery(api.queries.getUserOrganizations);
+  const { organizations, activeOrg: selectedOrg, switchOrganization, isLoading } =
+    useActiveOrganization();
   const environmentStatus = useQuery(api.payments.getPaymentsEnvironmentStatus);
   const upsertStripeConfig = useAction(api.payments.upsertOrganizationStripeConfig);
   const disableStripeConfig = useMutation(api.payments.disableOrganizationStripeConfig);
-  const [selectedOrgId, setSelectedOrgId] = useState<Id<"organizations"> | null>(null);
+  const selectedOrgId = (selectedOrg?._id as Id<"organizations"> | null | undefined) ?? null;
   const [secretKey, setSecretKey] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [publishableKey, setPublishableKey] = useState("");
@@ -59,19 +61,6 @@ export default function PaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
 
-  useEffect(() => {
-    if (!selectedOrgId && organizations?.length) {
-      const firstOrgId = organizations[0]?._id as Id<"organizations"> | undefined;
-      if (firstOrgId) {
-        setSelectedOrgId(firstOrgId);
-      }
-    }
-  }, [organizations, selectedOrgId]);
-
-  const selectedOrg = useMemo(
-    () => organizations?.find((org) => org._id === selectedOrgId) ?? null,
-    [organizations, selectedOrgId]
-  );
   const canManage = Boolean(selectedOrg && isAdminRole(selectedOrg.role));
 
   const configStatus = useQuery(
@@ -97,7 +86,7 @@ export default function PaymentsPage() {
     setCopiedWebhook(false);
   }, [selectedOrgId]);
 
-  if (!organizations) {
+  if (isLoading) {
     return (
       <div className="surface-card p-8 text-center">
         <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -229,10 +218,11 @@ export default function PaymentsPage() {
           </label>
           <Select
             value={selectedOrgId ?? ""}
-            onValueChange={(value) => {
-              if (value) {
-                setSelectedOrgId(value as Id<"organizations">);
-              }
+            onValueChange={async (value) => {
+              if (!value) return;
+              const organization = organizations.find((item) => item._id === value);
+              if (!organization) return;
+              await switchOrganization(organization);
             }}
           >
             <SelectTrigger id="org-select" className="mt-2 w-full justify-between rounded-xl border-border/70 bg-background/70">

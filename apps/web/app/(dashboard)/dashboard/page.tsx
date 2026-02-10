@@ -13,13 +13,12 @@ function formatCurrency(cents: number): string {
 
 export default function DashboardPage() {
   const currentUser = useQuery(api.queries.getCurrentUser);
-  const organizations = useQuery(api.queries.getUserOrganizations);
   const stats = useQuery(api.dashboard.getStats);
   const recentBookings = useQuery(api.dashboard.getRecentBookings, { limit: 5 });
   const todaysSchedule = useQuery(api.dashboard.getTodaysSchedule);
   const recentRequests = useQuery(api.bookingRequests.listRecent, { limit: 3 });
 
-  if (!currentUser || !organizations || !stats || !recentBookings || !todaysSchedule || !recentRequests) {
+  if (!currentUser || !stats || !recentBookings || !todaysSchedule || !recentRequests) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">

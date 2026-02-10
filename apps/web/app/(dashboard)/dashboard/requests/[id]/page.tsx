@@ -13,6 +13,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
+import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 
 function formatDate(timestamp?: number) {
   if (!timestamp) {
@@ -35,7 +36,7 @@ export default function RequestDetailPage() {
     api.bookingRequests.getById,
     requestId ? { id: requestId } : "skip"
   );
-  const organizations = useQuery(api.queries.getUserOrganizations);
+  const { activeOrg } = useActiveOrganization();
   const booking = useQuery(
     api.bookings.getBooking,
     request?.bookingId ? { id: request.bookingId } : "skip"
@@ -69,10 +70,7 @@ export default function RequestDetailPage() {
     ];
   }, [request]);
 
-  const orgHandle =
-    organizations?.find((org) => org?._id === request?.organizationId)?.slug ??
-    organizations?.find((org) => org?._id === request?.organizationId)?.clerkId ??
-    null;
+  const orgHandle = activeOrg?.slug ?? activeOrg?.clerkId ?? null;
 
   if (request === null) {
     return (

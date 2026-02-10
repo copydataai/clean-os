@@ -20,6 +20,9 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import ActiveOrganizationProvider from "@/components/org/ActiveOrganizationProvider";
+import { useActiveOrganization } from "@/components/org/useActiveOrganization";
+import OrganizationSwitcher from "@/components/dashboard/OrganizationSwitcher";
 
 type NavItem = {
   label: string;
@@ -39,16 +42,11 @@ const navItems: NavItem[] = [
   { label: "Settings", href: "/dashboard/settings" },
 ];
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const currentUser = useQuery(api.queries.getCurrentUser);
-  const organizations = useQuery(api.queries.getUserOrganizations);
+  const { activeOrg, hasNoOrganizations, isLoading } = useActiveOrganization();
 
-  const primaryOrg = organizations?.[0];
   const userInitial =
     currentUser?.firstName?.[0] ?? currentUser?.email?.[0] ?? "C";
 
@@ -79,6 +77,13 @@ export default function DashboardLayout({
         </SidebarHeader>
 
         <SidebarContent className="py-3">
+          <SidebarGroup>
+            <SidebarGroupLabel>Organization</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <OrganizationSwitcher />
+            </SidebarGroupContent>
+          </SidebarGroup>
+
           <SidebarGroup>
             <SidebarGroupLabel>Workspace</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -142,7 +147,7 @@ export default function DashboardLayout({
               <SidebarTrigger />
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {primaryOrg?.name ?? "Cleaning Operations"}
+                  {activeOrg?.name ?? (isLoading ? "Loading organization" : "No organization")}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Requests, scheduling, teams, and customers
@@ -162,9 +167,36 @@ export default function DashboardLayout({
         </header>
 
         <div className="min-h-[calc(100vh-72px)] px-4 py-6 sm:px-6 sm:py-8">
-          <div className="page-width">{children}</div>
+          <div className="page-width">
+            {hasNoOrganizations ? (
+              <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 p-8 text-center">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Organization access required
+                </p>
+                <h2 className="mt-3 text-2xl font-semibold text-foreground">No organizations found</h2>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  Your account is signed in, but it is not assigned to an organization yet.
+                  Ask your admin to send an invite or create an organization in Clerk.
+                </p>
+              </div>
+            ) : (
+              children
+            )}
+          </div>
         </div>
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <ActiveOrganizationProvider>
+      <DashboardLayoutContent>{children}</DashboardLayoutContent>
+    </ActiveOrganizationProvider>
   );
 }

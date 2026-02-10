@@ -25,6 +25,7 @@ import RescheduleBookingDialog from "@/components/bookings/RescheduleBookingDial
 import OverrideStatusDialog from "@/components/bookings/OverrideStatusDialog";
 import { FUNNEL_STAGES, OPERATIONS_STATUSES, type LifecycleRow } from "@/components/bookings/types";
 import { cn } from "@/lib/utils";
+import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 
 const FUNNEL_UI_ENABLED = process.env.NEXT_PUBLIC_BOOKING_FUNNEL_UI === "true";
 type RowTypeFilter = "all" | "booking" | "pre_booking";
@@ -258,8 +259,8 @@ function BookingChecklistReadiness({
 }
 
 export default function BookingsPage() {
-  const organizations = useQuery(api.queries.getUserOrganizations);
-  const isAdmin = Boolean(organizations?.some((org) => isAdminRole(org?.role)));
+  const { activeOrg } = useActiveOrganization();
+  const isAdmin = Boolean(activeOrg && isAdminRole(activeOrg.role));
 
   const [rowType, setRowType] = useState<RowTypeFilter>("all");
   const [operationalStatus, setOperationalStatus] = useState<OperationalStatusFilter>("all");
