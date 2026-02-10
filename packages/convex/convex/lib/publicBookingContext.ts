@@ -40,12 +40,27 @@ type PublicContextSuccess = {
   stripeConfigured: boolean;
 };
 
+export type CanonicalBookingRouteFailure = {
+  errorCode: Exclude<PublicBookingErrorCode, "ORG_NOT_CONFIGURED_PUBLIC">;
+  requestId: Id<"bookingRequests">;
+  requestStatus: string | null;
+  organizationId: Id<"organizations"> | null;
+  canonicalSlug: null;
+};
+
+export type CanonicalBookingRouteSuccess = {
+  errorCode: null;
+  requestId: Id<"bookingRequests">;
+  requestStatus: string;
+  organizationId: Id<"organizations">;
+  canonicalSlug: string;
+};
+
 function isStripeConfigured(config: any) {
   return (
     Boolean(config) &&
     config.status === "configured" &&
-    Boolean(config.secretKeyCiphertext) &&
-    Boolean(config.webhookSecretCiphertext)
+    Boolean(config.publishableKey)
   );
 }
 
@@ -131,6 +146,40 @@ export async function resolvePublicBookingContext(
   ctx: any,
   requestId: Id<"bookingRequests">
 ): Promise<PublicContextFailure | PublicContextSuccess> {
+  const canonicalRoute = await resolveCanonicalBookingRoute(ctx, requestId);
+  if (canonicalRoute.errorCode) {
+    return {
+      ...canonicalRoute,
+      stripeConfigured: false,
+    };
+  }
+
+  const stripeConfig = await ctx.db
+    .query("organizationStripeConfigs")
+    .withIndex("by_organization", (q: any) =>
+      q.eq("organizationId", canonicalRoute.organizationId)
+    )
+    .order("desc")
+    .first();
+  const stripeConfigured = isStripeConfigured(stripeConfig);
+  if (!stripeConfigured) {
+    return {
+      ...canonicalRoute,
+      errorCode: "ORG_NOT_CONFIGURED_PUBLIC",
+      stripeConfigured: false,
+    };
+  }
+
+  return {
+    ...canonicalRoute,
+    stripeConfigured: true,
+  };
+}
+
+export async function resolveCanonicalBookingRoute(
+  ctx: any,
+  requestId: Id<"bookingRequests">
+): Promise<CanonicalBookingRouteFailure | CanonicalBookingRouteSuccess> {
   const authority = await resolveRequestOrganizationAuthority(ctx, requestId);
   if (authority.errorCode) {
     return {
@@ -139,7 +188,6 @@ export async function resolvePublicBookingContext(
       requestStatus: null,
       organizationId: null,
       canonicalSlug: null,
-      stripeConfigured: false,
     };
   }
 
@@ -155,27 +203,6 @@ export async function resolvePublicBookingContext(
       requestStatus: authority.request.status ?? null,
       organizationId: authority.organizationId,
       canonicalSlug: null,
-      stripeConfigured: false,
-    };
-  }
-
-  const stripeConfig = await ctx.db
-    .query("organizationStripeConfigs")
-    .withIndex("by_organization", (q: any) =>
-      q.eq("organizationId", authority.organizationId)
-    )
-    .order("desc")
-    .first();
-  const stripeConfigured = isStripeConfigured(stripeConfig);
-
-  if (!stripeConfigured) {
-    return {
-      errorCode: "ORG_NOT_CONFIGURED_PUBLIC",
-      requestId,
-      requestStatus: authority.request.status,
-      organizationId: authority.organizationId,
-      canonicalSlug,
-      stripeConfigured: false,
     };
   }
 
@@ -185,7 +212,5 @@ export async function resolvePublicBookingContext(
     requestStatus: authority.request.status,
     organizationId: authority.organizationId,
     canonicalSlug,
-    stripeConfigured: true,
   };
 }
-
