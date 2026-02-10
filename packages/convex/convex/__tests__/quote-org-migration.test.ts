@@ -280,14 +280,14 @@ describe.sequential("quote org migration", () => {
     const visibleQuoteRequests = await asOrgMember.query(api.quoteRequests.listRecent, {
       limit: 20,
     });
-    expect(visibleQuoteRequests.map((row) => row._id)).toContain(fixture.resolvedQuoteRequestId);
-    expect(visibleQuoteRequests.map((row) => row._id)).not.toContain(
+    expect(visibleQuoteRequests.map((row: any) => row._id)).toContain(fixture.resolvedQuoteRequestId);
+    expect(visibleQuoteRequests.map((row: any) => row._id)).not.toContain(
       fixture.orphanQuoteRequestId
     );
 
     const board = await asOrgMember.query(api.quotes.listQuoteBoard, { limit: 20 });
-    expect(board.map((row) => row._id)).toContain(fixture.resolvedQuoteRequestId);
-    expect(board.map((row) => row._id)).not.toContain(fixture.orphanQuoteRequestId);
+    expect(board.map((row: any) => row._id)).toContain(fixture.resolvedQuoteRequestId);
+    expect(board.map((row: any) => row._id)).not.toContain(fixture.orphanQuoteRequestId);
 
     const report = await asOrgMember.query(api.quoteOrgMigration.getQuoteOrganizationBackfillReport, {
       limit: 20,
