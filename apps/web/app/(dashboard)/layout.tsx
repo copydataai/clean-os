@@ -21,7 +21,13 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-const navItems = [
+type NavItem = {
+  label: string;
+  href: string;
+  disabled?: boolean;
+};
+
+const navItems: NavItem[] = [
   { label: "Overview", href: "/dashboard" },
   { label: "Quotes", href: "/dashboard/quotes" },
   { label: "Requests", href: "/dashboard/requests" },
@@ -30,7 +36,7 @@ const navItems = [
   { label: "Cleaners", href: "/dashboard/cleaners" },
   { label: "Customers", href: "/dashboard/customers" },
   { label: "Payments", href: "/dashboard/payments" },
-  { label: "Settings", href: "/dashboard/settings", disabled: true },
+  { label: "Settings", href: "/dashboard/settings" },
 ];
 
 export default function DashboardLayout({

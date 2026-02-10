@@ -144,7 +144,7 @@ export default function QuotePricingPage() {
         subtitle="Manage sqft/frequency pricing used for automatic draft quote suggestions."
       >
         <div className="flex items-center gap-2">
-          <Link href="/dashboard/quotes/profile">
+          <Link href="/dashboard/settings/profile">
             <Button variant="outline" size="sm">
               Profile
             </Button>

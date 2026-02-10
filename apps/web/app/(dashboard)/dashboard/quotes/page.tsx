@@ -98,7 +98,7 @@ export default function QuotesPage() {
               Pricing rules
             </Button>
           </Link>
-          <Link href="/dashboard/quotes/profile">
+          <Link href="/dashboard/settings/profile">
             <Button variant="outline" size="sm">
               Profile
             </Button>
