@@ -62,16 +62,11 @@ async function resolveOrganizationByPublicHandle(ctx: any, handle: string) {
     .query("organizations")
     .withIndex("by_slug", (q: any) => q.eq("slug", handle))
     .unique();
-  const byClerkId = await ctx.db
-    .query("organizations")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", handle))
-    .unique();
-
-  if (bySlug && byClerkId && bySlug._id !== byClerkId._id) {
-    throw new Error("ORG_HANDLE_AMBIGUOUS");
+  if (bySlug) {
+    return bySlug;
   }
 
-  return bySlug ?? byClerkId ?? null;
+  return null;
 }
 
 export const getOrganizationStripeConfigByOrganizationId = internalQuery({

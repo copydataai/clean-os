@@ -11,6 +11,7 @@
 import type * as __tests___helpers_orgTestUtils from "../__tests__/helpers/orgTestUtils.js";
 import type * as bookingDb from "../bookingDb.js";
 import type * as bookingLifecycle from "../bookingLifecycle.js";
+import type * as bookingRequestOrgMigration from "../bookingRequestOrgMigration.js";
 import type * as bookingRequests from "../bookingRequests.js";
 import type * as bookingStateMachine from "../bookingStateMachine.js";
 import type * as bookings from "../bookings.js";
@@ -37,6 +38,7 @@ import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js
 import type * as integrations from "../integrations.js";
 import type * as integrationsNode from "../integrationsNode.js";
 import type * as lib_orgContext from "../lib/orgContext.js";
+import type * as lib_publicBookingContext from "../lib/publicBookingContext.js";
 import type * as lib_tallyMappings from "../lib/tallyMappings.js";
 import type * as lib_tallyRuntime from "../lib/tallyRuntime.js";
 import type * as payments from "../payments.js";
@@ -66,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   "__tests__/helpers/orgTestUtils": typeof __tests___helpers_orgTestUtils;
   bookingDb: typeof bookingDb;
   bookingLifecycle: typeof bookingLifecycle;
+  bookingRequestOrgMigration: typeof bookingRequestOrgMigration;
   bookingRequests: typeof bookingRequests;
   bookingStateMachine: typeof bookingStateMachine;
   bookings: typeof bookings;
@@ -92,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   integrations: typeof integrations;
   integrationsNode: typeof integrationsNode;
   "lib/orgContext": typeof lib_orgContext;
+  "lib/publicBookingContext": typeof lib_publicBookingContext;
   "lib/tallyMappings": typeof lib_tallyMappings;
   "lib/tallyRuntime": typeof lib_tallyRuntime;
   payments: typeof payments;

@@ -7,6 +7,7 @@ import {
   requireActiveOrganization,
   requireOrganizationAdmin,
 } from "./lib/orgContext";
+import { resolveRequestOrganizationAuthority } from "./lib/publicBookingContext";
 
 const BOOKING_STATUS_VALIDATOR = v.union(
   v.literal("pending_card"),
@@ -91,12 +92,35 @@ export const createBookingFromRequest = mutation({
     organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
-    const { organization } = await requireActiveOrganization(ctx);
-    const request = await ctx.db.get(args.requestId);
-    if (!request) {
+    const authority = await resolveRequestOrganizationAuthority(ctx, args.requestId);
+    if (authority.errorCode === "REQUEST_NOT_FOUND") {
       throw new Error("Booking request not found");
     }
-    assertRecordInActiveOrg(request.organizationId, organization._id);
+    if (authority.errorCode === "ORG_DATA_CONFLICT") {
+      throw new Error("ORG_DATA_CONFLICT");
+    }
+    if (authority.errorCode || !authority.organizationId || !authority.request) {
+      throw new Error("ORG_CONTEXT_REQUIRED");
+    }
+    const request = authority.request;
+    const resolvedOrganizationId = authority.organizationId;
+
+    if (args.organizationId && args.organizationId !== resolvedOrganizationId) {
+      throw new Error("ORG_MISMATCH");
+    }
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      const { organization } = await requireActiveOrganization(ctx);
+      assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
+    }
+
+    if (!request.organizationId) {
+      await ctx.db.patch(request._id, {
+        organizationId: resolvedOrganizationId,
+        updatedAt: Date.now(),
+      });
+    }
 
     if (request.bookingId) {
       if (request.customerId) {
@@ -113,12 +137,6 @@ export const createBookingFromRequest = mutation({
     if (!request.email) {
       throw new Error("Booking request is missing email");
     }
-
-    const resolvedOrganizationId = request.organizationId ?? args.organizationId ?? organization._id;
-    if (request.organizationId && args.organizationId && request.organizationId !== args.organizationId) {
-      throw new Error("ORG_MISMATCH");
-    }
-    assertRecordInActiveOrg(resolvedOrganizationId, organization._id);
 
     const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
       organizationId: resolvedOrganizationId,

@@ -3,6 +3,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
+import { resolvePublicBookingContext } from "./lib/publicBookingContext";
 
 const FALLBACK_LOOKBACK_DAYS = 7;
 const FALLBACK_SAMPLE_SIZE = 10;
@@ -440,23 +441,22 @@ export const resolvePublicBookingRoute = query({
     requestId: v.id("bookingRequests"),
   },
   handler: async (ctx, args) => {
-    const request = await ctx.db.get(args.requestId);
-    if (!request?.organizationId) {
-      return null;
-    }
-
-    const organization = await ctx.db.get(request.organizationId);
-    if (!organization) {
-      return null;
-    }
-
-    const handle = organization.slug ?? organization.clerkId;
-    if (!handle) {
+    const context = await resolvePublicBookingContext(ctx, args.requestId);
+    if (context.errorCode || !context.canonicalSlug) {
       return null;
     }
 
     return {
-      handle,
+      handle: context.canonicalSlug,
     };
+  },
+});
+
+export const getPublicBookingContext = query({
+  args: {
+    requestId: v.id("bookingRequests"),
+  },
+  handler: async (ctx, args) => {
+    return await resolvePublicBookingContext(ctx, args.requestId);
   },
 });
