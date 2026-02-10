@@ -2,7 +2,7 @@
 
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import type { Id } from "@clean-os/convex/data-model";
 
@@ -23,8 +23,20 @@ function BookPageContent() {
     expYear?: number;
   } | null>(null);
 
-  const existingBookingId = searchParams.get("booking_id") as Id<"bookings"> | null;
-  const requestId = searchParams.get("request_id") as Id<"bookingRequests"> | null;
+  const rawBookingId = searchParams.get("booking_id");
+  const rawRequestId = searchParams.get("request_id");
+  const debugEnabled = process.env.NODE_ENV !== "production" || searchParams.get("debug") === "1";
+  const traceIdRef = useRef(
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `book-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
+  const existingBookingId = rawBookingId && /^[a-z0-9]+$/.test(rawBookingId)
+    ? (rawBookingId as Id<"bookings">)
+    : null;
+  const requestId = rawRequestId && /^[a-z0-9]+$/.test(rawRequestId)
+    ? (rawRequestId as Id<"bookingRequests">)
+    : null;
   const publicBookingContext = useQuery(
     api.bookingRequests.getPublicBookingContext,
     requestId ? { requestId } : "skip"
@@ -37,9 +49,9 @@ function BookPageContent() {
     api.payments.getPublicStripeRecoveryConfig,
     !requestId && orgSlug ? { handle: orgSlug } : "skip"
   );
-  const existingBooking = useQuery(
-    api.bookings.getBooking,
-    existingBookingId ? { id: existingBookingId } : "skip"
+  const bookingSummary = useQuery(
+    api.bookings.getPublicBookingSummary,
+    bookingId ? { id: bookingId } : "skip"
   );
 
   const createBooking = useMutation(api.bookings.createBookingFromTally);
@@ -50,8 +62,38 @@ function BookPageContent() {
 
   const checkoutStartedRef = useRef(false);
   const cardCheckStartedRef = useRef(false);
+  const bookingCreationStartedRef = useRef(false);
+
+  const logDebug = useCallback(
+    (event: string, data?: Record<string, unknown>, level: "log" | "warn" | "error" = "log") => {
+      if (!debugEnabled) {
+        return;
+      }
+      console[level](`[BookFlow:${traceIdRef.current}] ${event}`, {
+        orgSlug,
+        requestId: requestId ?? null,
+        ...data,
+      });
+    },
+    [debugEnabled, orgSlug, requestId]
+  );
+
+  useEffect(() => {
+    logDebug("init", {
+      rawBookingId,
+      rawRequestId,
+      hasBookingId: Boolean(existingBookingId),
+      hasRequestId: Boolean(requestId),
+      query: searchParams.toString(),
+    });
+  }, [logDebug, rawBookingId, rawRequestId, existingBookingId, requestId, searchParams]);
+
+  useEffect(() => {
+    logDebug("status_changed", { status });
+  }, [logDebug, status]);
 
   function setPublicRequestError(errorCode?: string | null) {
+    logDebug("public_request_error", { errorCode }, "warn");
     if (errorCode === "REQUEST_NOT_FOUND") {
       setError("Booking request not found. Please contact support for a new link.");
       setStatus("error");
@@ -79,38 +121,77 @@ function BookPageContent() {
     }
   }
 
-  const startCheckout = async (resolvedBookingId: Id<"bookings">) => {
+  const startCheckout = useCallback(async (resolvedBookingId: Id<"bookings">) => {
     if (checkoutStartedRef.current) {
       return;
     }
     checkoutStartedRef.current = true;
     try {
       const baseUrl = window.location.origin;
+      const requestParam = requestId ? `&request_id=${encodeURIComponent(requestId)}` : "";
+      logDebug("checkout_start", {
+        bookingId: resolvedBookingId,
+        successPath: `/book/success?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}${requestParam}`,
+        cancelPath: `/book/cancel?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}${requestParam}`,
+      });
       const { checkoutUrl } = await createCheckoutSession({
         bookingId: resolvedBookingId,
-        successUrl: `${baseUrl}/book/success?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}`,
-        cancelUrl: `${baseUrl}/book/cancel?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}`,
+        successUrl: `${baseUrl}/book/success?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}${requestParam}`,
+        cancelUrl: `${baseUrl}/book/cancel?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}${requestParam}`,
       });
 
+      logDebug("checkout_session_created", { bookingId: resolvedBookingId, checkoutUrl });
       setStatus("redirecting");
       window.location.href = checkoutUrl;
     } catch (err: any) {
-      console.error("Checkout error:", err);
+      checkoutStartedRef.current = false;
+      logDebug(
+        "checkout_error",
+        { bookingId: resolvedBookingId, message: err?.message, stack: err?.stack },
+        "error"
+      );
       setError(err.message ?? "Something went wrong. Please try again.");
       setStatus("error");
     }
-  };
+  }, [createCheckoutSession, logDebug, orgSlug, requestId]);
 
   useEffect(() => {
-    if (bookingId) {
+    if (bookingId || bookingCreationStartedRef.current) {
       return;
     }
     async function initBooking() {
       try {
+        if (rawBookingId && !existingBookingId) {
+          logDebug("init_booking_invalid_booking_id", { rawBookingId }, "warn");
+          setError("Invalid booking link. Please request a new link from support.");
+          setStatus("error");
+          return;
+        }
+
+        if (rawRequestId && !requestId) {
+          logDebug("init_booking_invalid_request_id", { rawRequestId }, "warn");
+          setError("Invalid request link. Please request a new link from support.");
+          setStatus("error");
+          return;
+        }
+
+        if (existingBookingId && !requestId) {
+          logDebug(
+            "init_booking_missing_request_for_existing_booking",
+            { existingBookingId },
+            "warn"
+          );
+          setError("This booking link is missing request information. Please request a new link.");
+          setStatus("error");
+          return;
+        }
+
         let resolvedBookingId: Id<"bookings">;
 
         if (requestId) {
+          logDebug("init_booking_request_flow_start", { requestId });
           if (publicBookingContext === undefined) {
+            logDebug("init_booking_waiting_for_public_context");
             return;
           }
 
@@ -125,6 +206,7 @@ function BookPageContent() {
             return;
           }
           if (canonicalHandle !== orgSlug) {
+            logDebug("init_booking_redirect_to_canonical_org", { canonicalHandle });
             const nextParams = new URLSearchParams(searchParams.toString());
             window.location.replace(`/book/${canonicalHandle}?${nextParams.toString()}`);
             return;
@@ -136,43 +218,35 @@ function BookPageContent() {
             return;
           }
           if (organization === undefined) {
+            logDebug("init_booking_waiting_for_org");
             return;
           }
           if (organization === null) {
+            logDebug("init_booking_org_not_found", { orgSlug }, "warn");
             setError("Organization not found. Please contact support.");
             setStatus("error");
             return;
           }
         }
 
-        // Check if booking_id was provided (from Tally webhook)
-        if (existingBookingId) {
-          // Wait for the booking query to load
-          if (existingBooking === undefined) {
-            return; // Still loading
-          }
-          if (existingBooking === null) {
-            setError("Booking not found. Please try again.");
-            setStatus("error");
-            return;
-          }
-          const expectedOrganizationId = requestId
-            ? publicBookingContext?.organizationId
-            : organization?._id;
-          if (
-            expectedOrganizationId &&
-            existingBooking.organizationId &&
-            existingBooking.organizationId !== expectedOrganizationId
-          ) {
-            setError("Booking does not belong to this organization.");
-            setStatus("error");
-            return;
-          }
-          resolvedBookingId = existingBookingId;
-        } else if (requestId) {
+        if (requestId) {
+          bookingCreationStartedRef.current = true;
+          logDebug("init_booking_create_from_request", { requestId });
           resolvedBookingId = await createBookingFromRequest({
             requestId,
           });
+          logDebug("init_booking_create_from_request_success", { requestId, resolvedBookingId });
+
+          if (existingBookingId && existingBookingId !== resolvedBookingId) {
+            logDebug(
+              "init_booking_request_mismatch",
+              { existingBookingId, resolvedBookingId, requestId },
+              "warn"
+            );
+            setError("Booking link mismatch. Please use the latest booking link.");
+            setStatus("error");
+            return;
+          }
         } else {
           // Create new booking from query params (direct Tally redirect)
           const email = searchParams.get("email");
@@ -184,27 +258,55 @@ function BookPageContent() {
           const tallyResponseId = searchParams.get("responseId");
 
           if (!email) {
+            logDebug("init_booking_missing_email_for_tally_flow", {}, "warn");
             setError("Missing email parameter. Please complete the booking form first.");
             setStatus("error");
             return;
           }
 
+          if (!organization) {
+            logDebug("init_booking_missing_organization_for_tally_flow", { orgSlug }, "warn");
+            setError("Organization not found. Please contact support.");
+            setStatus("error");
+            return;
+          }
+
+          let parsedAmount: number | undefined;
+          if (amount) {
+            const cents = Math.round(parseFloat(amount) * 100);
+            if (!Number.isFinite(cents) || cents <= 0) {
+              logDebug("init_booking_invalid_amount", { amount, cents }, "warn");
+              setError("Invalid amount. Please contact support.");
+              setStatus("error");
+              return;
+            }
+            parsedAmount = cents;
+          }
+
           // Create booking in database
+          bookingCreationStartedRef.current = true;
+          logDebug("init_booking_create_from_tally", { orgId: organization._id, email });
           resolvedBookingId = await createBooking({
-            organizationId: organization!._id,
+            organizationId: organization._id,
             email,
             customerName: name ?? undefined,
             serviceType: serviceType ?? undefined,
             serviceDate: serviceDate ?? undefined,
-            amount: amount ? parseInt(amount) * 100 : undefined,
+            amount: parsedAmount,
             notes: notes ?? undefined,
             tallyResponseId: tallyResponseId ?? undefined,
           });
+          logDebug("init_booking_create_from_tally_success", { resolvedBookingId });
         }
 
+        logDebug("init_booking_complete", { resolvedBookingId });
         setBookingId(resolvedBookingId);
       } catch (err: any) {
-        console.error("Booking error:", err);
+        logDebug(
+          "init_booking_error",
+          { message: err?.message, stack: err?.stack, requestId, existingBookingId },
+          "error"
+        );
         setError(err.message ?? "Something went wrong. Please try again.");
         setStatus("error");
       }
@@ -217,19 +319,53 @@ function BookPageContent() {
     organization,
     searchParams,
     publicBookingContext,
+    rawBookingId,
+    rawRequestId,
     existingBookingId,
-    existingBooking,
     requestId,
     createBooking,
     createBookingFromRequest,
+    logDebug,
   ]);
 
   useEffect(() => {
     if (!bookingId || cardCheckStartedRef.current) {
       return;
     }
+
+    if (bookingSummary === undefined) {
+      logDebug("card_check_waiting_for_booking_summary", { bookingId });
+      return;
+    }
+
+    if (bookingSummary === null) {
+      logDebug("card_check_booking_not_found", { bookingId }, "warn");
+      setError("Booking not found. Please request a new link.");
+      setStatus("error");
+      return;
+    }
+
+    if (requestId && bookingSummary.bookingRequestId !== requestId) {
+      logDebug(
+        "card_check_booking_request_mismatch",
+        { bookingId, requestId, bookingRequestId: bookingSummary.bookingRequestId },
+        "warn"
+      );
+      setError("Booking request mismatch. Please request a new link.");
+      setStatus("error");
+      return;
+    }
+
+    if (!["pending_card", "card_saved"].includes(bookingSummary.status)) {
+      logDebug("card_check_status_ineligible", { bookingId, status: bookingSummary.status }, "warn");
+      setError("This booking is no longer awaiting card setup.");
+      setStatus("error");
+      return;
+    }
+
     if (requestId) {
       if (publicBookingContext === undefined) {
+        logDebug("card_check_waiting_for_public_context");
         return;
       }
       if (publicBookingContext.errorCode) {
@@ -237,14 +373,17 @@ function BookPageContent() {
         return;
       }
       if (!publicBookingContext.stripeConfigured) {
+        logDebug("card_check_stripe_not_configured_public", { requestId }, "warn");
         setPublicRequestError("ORG_NOT_CONFIGURED_PUBLIC");
         return;
       }
     } else {
       if (publicStripeConfig === undefined) {
+        logDebug("card_check_waiting_for_public_stripe_config");
         return;
       }
       if (!publicStripeConfig) {
+        logDebug("card_check_missing_public_stripe_config", { orgSlug }, "warn");
         setError(
           "Payments are not configured for this organization yet. Please contact support."
         );
@@ -257,7 +396,15 @@ function BookPageContent() {
 
     async function checkCardOnFile() {
       try {
+        logDebug("card_check_start", { bookingId });
         const cardStatus = await getCardOnFileStatus({ bookingId: bookingId! });
+        logDebug("card_check_result", {
+          bookingId,
+          hasCard: cardStatus.hasCard,
+          stripeCustomerIdPresent: Boolean(cardStatus.stripeCustomerId),
+          cardBrand: cardStatus.cardSummary?.brand ?? null,
+          cardLast4: cardStatus.cardSummary?.last4 ?? null,
+        });
         if (cardStatus.hasCard) {
           setStripeCustomerId(cardStatus.stripeCustomerId ?? null);
           setCardSummary(cardStatus.cardSummary ?? null);
@@ -266,14 +413,27 @@ function BookPageContent() {
         }
         await startCheckout(bookingId!);
       } catch (err: any) {
-        console.error("Card check error:", err);
+        logDebug(
+          "card_check_error",
+          { bookingId, message: err?.message, stack: err?.stack },
+          "error"
+        );
         setError(err.message ?? "Something went wrong. Please try again.");
         setStatus("error");
       }
     }
 
     checkCardOnFile();
-  }, [bookingId, getCardOnFileStatus, publicStripeConfig, publicBookingContext, requestId]);
+  }, [
+    bookingId,
+    bookingSummary,
+    getCardOnFileStatus,
+    startCheckout,
+    publicStripeConfig,
+    publicBookingContext,
+    requestId,
+    logDebug,
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
@@ -296,7 +456,7 @@ function BookPageContent() {
             </span>
           </div>
           <div className="rounded-full border border-border bg-card px-4 py-1 text-xs text-muted-foreground">
-            Secure by Stripe
+            Secured by Stripe
           </div>
         </div>
 
@@ -343,10 +503,17 @@ function BookPageContent() {
                   }
                   try {
                     setStatus("redirecting");
+                    logDebug("card_on_file_confirm_start", { bookingId, stripeCustomerId });
                     await markCardOnFile({ bookingId, stripeCustomerId });
-                    window.location.href = `/book/success?booking_id=${bookingId}&card_on_file=1&org=${encodeURIComponent(orgSlug ?? "")}`;
+                    const requestParam = requestId ? `&request_id=${encodeURIComponent(requestId)}` : "";
+                    logDebug("card_on_file_confirm_success", { bookingId, requestId });
+                    window.location.href = `/book/success?booking_id=${bookingId}&card_on_file=1&org=${encodeURIComponent(orgSlug ?? "")}${requestParam}`;
                   } catch (err: any) {
-                    console.error("Card confirmation error:", err);
+                    logDebug(
+                      "card_on_file_confirm_error",
+                      { bookingId, message: err?.message, stack: err?.stack },
+                      "error"
+                    );
                     setError(err.message ?? "Something went wrong. Please try again.");
                     setStatus("error");
                   }
@@ -392,6 +559,9 @@ function BookPageContent() {
             </div>
             <h1 className="text-2xl font-medium text-foreground">Something went wrong</h1>
             <p className="mt-2 text-red-600">{error}</p>
+            {debugEnabled && (
+              <p className="mt-2 text-xs text-muted-foreground">Debug reference: {traceIdRef.current}</p>
+            )}
             <a
               href="/"
               className="mt-6 inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
