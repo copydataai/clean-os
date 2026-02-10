@@ -11,7 +11,6 @@ export type TallyFlowMappings = Record<string, TallyFieldRef | undefined>;
 export type TallyMappings = {
   quoteRequest?: TallyFlowMappings;
   bookingConfirmation?: TallyFlowMappings;
-  cardCapture?: TallyFlowMappings;
 };
 
 export const QUOTE_REQUEST_TARGETS = [
@@ -74,14 +73,6 @@ export const BOOKING_CONFIRMATION_REQUIRED_TARGETS = [
   "email",
 ] as const;
 
-export const CARD_CAPTURE_TARGETS = [
-  "email",
-  "paymentMethod",
-  "cardLast4",
-  "cardBrand",
-  "status",
-] as const;
-
 export const tallyFieldRefValidator = v.object({
   questionId: v.optional(v.string()),
   key: v.optional(v.string()),
@@ -93,7 +84,6 @@ export const tallyFlowMappingsValidator = v.record(v.string(), tallyFieldRefVali
 export const tallyMappingsValidator = v.object({
   quoteRequest: v.optional(tallyFlowMappingsValidator),
   bookingConfirmation: v.optional(tallyFlowMappingsValidator),
-  cardCapture: v.optional(tallyFlowMappingsValidator),
 });
 
 export function hasMappedRef(ref: TallyFieldRef | undefined | null): boolean {

@@ -17,7 +17,6 @@
 - `TALLY_WEBHOOK_SECRET` - Webhook signing secret used to verify Tally requests.
 - `TALLY_REQUEST_FORM_ID` - Form ID for the initial request form.
 - `TALLY_CONFIRM_FORM_ID` - Form ID for the confirmation form.
-- `TALLY_CARD_FORM_ID` - Optional form ID for the card-capture form.
 
 ## App URLs
 - `NEXT_PUBLIC_APP_URL` - Base URL used to build redirects and payment links.
