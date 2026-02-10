@@ -243,6 +243,14 @@ export const createCheckoutSession = action({
       payment_method_types: ["card"],
       success_url: args.successUrl,
       cancel_url: args.cancelUrl,
+      setup_intent_data: {
+        metadata: {
+          bookingId: args.bookingId,
+          email: booking.email,
+          organizationId: resolvedOrganizationId,
+          orgSlug,
+        },
+      },
       metadata: {
         bookingId: args.bookingId,
         email: booking.email,
@@ -449,7 +457,13 @@ export const chargeBooking = internalAction({
 
       if (paymentIntent.status === "requires_action") {
         // 3DS authentication required - generate payment link
-        const paymentLink = await createPaymentLinkForIntent(stripe, paymentIntent.id, orgSlug);
+        const paymentLink = await createPaymentLinkForIntent(
+          ctx,
+          stripe,
+          paymentIntent.id,
+          booking.organizationId,
+          orgSlug
+        );
         
         await ctx.runMutation(internal.bookingDb.updatePaymentIntentStatus, {
           organizationId: booking.organizationId,
@@ -464,6 +478,14 @@ export const chargeBooking = internalAction({
           source: "stripeActions.chargeBooking",
           reason: "payment_intent_requires_action",
         });
+
+        if (!paymentLink) {
+          return {
+            success: false,
+            paymentIntentId: paymentIntent.id,
+            error: "AUTHENTICATION_REQUIRED_MANUAL_RETRY",
+          };
+        }
 
         return {
           success: false,
@@ -485,7 +507,13 @@ export const chargeBooking = internalAction({
         const paymentIntentId = err.raw?.payment_intent?.id;
         
         if (paymentIntentId && err.code === "authentication_required") {
-          const paymentLink = await createPaymentLinkForIntent(stripe, paymentIntentId, orgSlug);
+          const paymentLink = await createPaymentLinkForIntent(
+            ctx,
+            stripe,
+            paymentIntentId,
+            booking.organizationId,
+            orgSlug
+          );
           
           await ctx.runMutation(internal.bookingDb.createPaymentIntent, {
             organizationId: booking.organizationId,
@@ -511,6 +539,14 @@ export const chargeBooking = internalAction({
             source: "stripeActions.chargeBooking",
             reason: "authentication_required",
           });
+
+          if (!paymentLink) {
+            return {
+              success: false,
+              paymentIntentId: paymentIntentId,
+              error: "AUTHENTICATION_REQUIRED_MANUAL_RETRY",
+            };
+          }
 
           return {
             success: false,
@@ -543,12 +579,24 @@ export const chargeBooking = internalAction({
 });
 
 async function createPaymentLinkForIntent(
+  ctx: any,
   stripe: Stripe,
   paymentIntentId: string,
+  organizationId: Id<"organizations">,
   orgSlug?: string
-): Promise<string> {
+): Promise<string | undefined> {
   // Retrieve the payment intent to get the client secret
   const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const organizationConfig = await ctx.runQuery(
+    internal.payments.getOrganizationStripeConfigByOrganizationId,
+    {
+      organizationId,
+    }
+  );
+
+  if (!organizationConfig?.publishableKey) {
+    return undefined;
+  }
   
   // For 3DS, we need to create a hosted payment page
   // Using Stripe's hosted invoice page as a workaround
@@ -609,15 +657,54 @@ export const handleCheckoutCompleted = internalAction({
 
     const setupIntent = session.setup_intent as Stripe.SetupIntent;
     
-    if (!setupIntent || !setupIntent.payment_method) {
+    if (!setupIntent || !setupIntent.payment_method || !session.customer) {
       console.error("No payment method from setup intent");
       return;
     }
 
-    // Save the payment method
-    const paymentMethod = await stripe.paymentMethods.retrieve(
-      setupIntent.payment_method as string
-    );
+    await ctx.runAction(internal.stripeActions.applyCardSetupResult, {
+      organizationId: args.organizationId,
+      bookingId,
+      setupIntentId: setupIntent.id,
+      stripeCustomerId: session.customer as string,
+      stripePaymentMethodId: setupIntent.payment_method as string,
+    });
+
+    const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+      id: bookingId,
+    });
+
+    if (!booking) {
+      console.error("Booking not found:", bookingId);
+      return;
+    }
+
+    console.log(`Checkout completed for booking ${bookingId}, card saved`);
+  },
+});
+
+export const applyCardSetupResult = internalAction({
+  args: {
+    organizationId: v.id("organizations"),
+    bookingId: v.id("bookings"),
+    setupIntentId: v.string(),
+    stripeCustomerId: v.string(),
+    stripePaymentMethodId: v.string(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
+      id: args.bookingId,
+    });
+
+    if (!booking) {
+      throw new Error("BOOKING_NOT_FOUND");
+    }
+    if (booking.organizationId !== args.organizationId) {
+      throw new Error("ORG_MISMATCH");
+    }
+
+    const { stripe } = await getStripeClientForOrganization(ctx, args.organizationId);
+    const paymentMethod = await stripe.paymentMethods.retrieve(args.stripePaymentMethodId);
 
     const cardDetails = paymentMethod.card
       ? {
@@ -629,47 +716,34 @@ export const handleCheckoutCompleted = internalAction({
         }
       : undefined;
 
-    // Get booking to find email/clerkId
-    const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
-      id: bookingId,
-    });
-
-    if (!booking) {
-      console.error("Booking not found:", bookingId);
-      return;
-    }
-    if (booking.organizationId !== args.organizationId) {
-      console.error("Organization mismatch for checkout completion", {
-        bookingId,
-        expected: args.organizationId,
-        actual: booking.organizationId,
-      });
-      return;
-    }
-
     await ctx.runMutation(internal.cardDb.savePaymentMethodToDb, {
       organizationId: booking.organizationId,
       clerkId: booking.email,
       stripePaymentMethodId: paymentMethod.id,
-      stripeCustomerId: session.customer as string,
+      stripeCustomerId: args.stripeCustomerId,
       type: paymentMethod.type,
       source: "stripe",
       card: cardDetails,
     });
 
-    // Update booking status
+    await ctx.runMutation(internal.cardDb.updateSetupIntentStatus, {
+      setupIntentId: args.setupIntentId,
+      status: "succeeded",
+      failureCode: undefined,
+      failureMessage: undefined,
+      lastStripeStatus: "succeeded",
+    });
+
     await ctx.runMutation(internal.bookingDb.updateBookingStatus, {
-      id: bookingId,
+      id: args.bookingId,
       status: "card_saved",
-      source: "stripeActions.handleCheckoutCompleted",
-      reason: "checkout_session_completed",
+      source: "stripeActions.applyCardSetupResult",
+      reason: "setup_intent_succeeded",
     });
 
     await ctx.runMutation(internal.bookingStateMachine.recomputeScheduledState, {
-      bookingId,
-      source: "stripeActions.handleCheckoutCompleted",
+      bookingId: args.bookingId,
+      source: "stripeActions.applyCardSetupResult",
     });
-
-    console.log(`Checkout completed for booking ${bookingId}, card saved`);
   },
 });

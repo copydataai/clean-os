@@ -20,6 +20,35 @@ export const handleStripeWebhook = internalAction({
     let stripe: Stripe;
     let webhookSecret: string;
     let organizationId: any;
+
+    const logAttempt = async (args: {
+      organizationId?: any;
+      stripeEventId?: string;
+      eventType?: string;
+      httpStatus: number;
+      failureStage:
+        | "route_validation"
+        | "config_lookup"
+        | "signature_verification"
+        | "event_recording"
+        | "event_processing"
+        | "success"
+        | "duplicate";
+      failureCode?: string;
+      failureMessage?: string;
+    }) => {
+      await ctx.runMutation(internal.payments.logWebhookAttempt, {
+        orgSlug,
+        organizationId: args.organizationId,
+        stripeEventId: args.stripeEventId,
+        eventType: args.eventType,
+        httpStatus: args.httpStatus,
+        failureStage: args.failureStage,
+        failureCode: args.failureCode,
+        failureMessage: args.failureMessage,
+      });
+    };
+
     try {
       const config = await ctx.runAction(internal.paymentsNode.getDecryptedStripeConfigForOrgSlug, {
         orgSlug,
@@ -29,6 +58,12 @@ export const handleStripeWebhook = internalAction({
       organizationId = config.organizationId;
     } catch (err) {
       console.error("[Stripe Webhook] Missing or invalid organization config", { orgSlug, err });
+      await logAttempt({
+        httpStatus: 400,
+        failureStage: "config_lookup",
+        failureCode: "ORG_NOT_CONFIGURED",
+        failureMessage: err instanceof Error ? err.message : "ORG_NOT_CONFIGURED",
+      });
       return { error: "ORG_NOT_CONFIGURED", status: 400 };
     }
 
@@ -41,15 +76,44 @@ export const handleStripeWebhook = internalAction({
       );
     } catch (err) {
       console.error("Stripe webhook verification failed:", err);
+      await logAttempt({
+        organizationId,
+        httpStatus: 400,
+        failureStage: "signature_verification",
+        failureCode: "INVALID_SIGNATURE",
+        failureMessage: err instanceof Error ? err.message : "Invalid signature",
+      });
       return { error: "Invalid signature", status: 400 };
     }
 
-    const recorded = await ctx.runMutation(internal.payments.recordWebhookEventReceived, {
-      organizationId,
-      eventId: evt.id,
-      eventType: evt.type,
-    });
+    let recorded: { duplicate: boolean; id: any };
+    try {
+      recorded = await ctx.runMutation(internal.payments.recordWebhookEventReceived, {
+        organizationId,
+        eventId: evt.id,
+        eventType: evt.type,
+      });
+    } catch (err) {
+      await logAttempt({
+        organizationId,
+        stripeEventId: evt.id,
+        eventType: evt.type,
+        httpStatus: 500,
+        failureStage: "event_recording",
+        failureCode: "RECORD_EVENT_FAILED",
+        failureMessage: err instanceof Error ? err.message : "Failed to record event",
+      });
+      return { error: "Error processing webhook", status: 500 };
+    }
+
     if (recorded.duplicate) {
+      await logAttempt({
+        organizationId,
+        stripeEventId: evt.id,
+        eventType: evt.type,
+        httpStatus: 200,
+        failureStage: "duplicate",
+      });
       return { success: true, status: 200 };
     }
 
@@ -115,11 +179,21 @@ export const handleStripeWebhook = internalAction({
             failureMessage: undefined,
             lastStripeStatus: setupIntent.status,
           });
-          if (setupIntent.metadata?.clerkId && setupIntent.payment_method) {
-            await ctx.runAction(internal.cardWebhooks.saveCardFromSetupIntent, {
+          if (
+            setupIntent.metadata?.bookingId &&
+            setupIntent.payment_method &&
+            setupIntent.customer
+          ) {
+            await ctx.runAction(internal.stripeActions.applyCardSetupResult, {
               organizationId,
               setupIntentId: setupIntent.id,
-              clerkId: setupIntent.metadata.clerkId,
+              bookingId: setupIntent.metadata.bookingId as any,
+              stripeCustomerId: setupIntent.customer as string,
+              stripePaymentMethodId: setupIntent.payment_method as string,
+            });
+          } else {
+            console.log("[Stripe Webhook] setup_intent.succeeded missing booking metadata", {
+              setupIntentId: setupIntent.id,
             });
           }
           break;
@@ -295,12 +369,28 @@ export const handleStripeWebhook = internalAction({
         organizationId,
         eventId: evt.id,
       });
+      await logAttempt({
+        organizationId,
+        stripeEventId: evt.id,
+        eventType: evt.type,
+        httpStatus: 200,
+        failureStage: "success",
+      });
     } catch (err) {
       console.error(`Error processing Stripe event ${evt.type}:`, err);
       await ctx.runMutation(internal.payments.markWebhookEventFailed, {
         organizationId,
         eventId: evt.id,
         errorMessage: err instanceof Error ? err.message : "unknown_error",
+      });
+      await logAttempt({
+        organizationId,
+        stripeEventId: evt.id,
+        eventType: evt.type,
+        httpStatus: 500,
+        failureStage: "event_processing",
+        failureCode: "PROCESSING_ERROR",
+        failureMessage: err instanceof Error ? err.message : "unknown_error",
       });
       return { error: "Error processing webhook", status: 500 };
     }
