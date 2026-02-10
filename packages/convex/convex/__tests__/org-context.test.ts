@@ -80,9 +80,47 @@ describe.sequential("org context helper", () => {
     expect(resolved.user._id).toBe(fixture.userId);
   });
 
-  it("falls back to deterministic first membership when no org claim is set", async () => {
+  it("throws when no org claim is set and user has multiple memberships", async () => {
     const t = convexTest(schema, modules);
     const fixture = await seedUserWithOrganizations(t);
+
+    const authed = t.withIdentity({
+      subject: fixture.userClerkId,
+    });
+
+    await expect(
+      authed.run(async (ctx) => {
+        return await requireActiveOrganization(ctx);
+      })
+    ).rejects.toThrow("ORG_CONTEXT_AMBIGUOUS");
+  });
+
+  it("falls back to single membership when no org claim is set", async () => {
+    const t = convexTest(schema, modules);
+
+    const fixture = await t.run(async (ctx) => {
+      const userClerkId = `user_${Math.random().toString(36).slice(2, 10)}`;
+      const userId = await ctx.db.insert("users", {
+        clerkId: userClerkId,
+        email: `${userClerkId}@example.com`,
+      });
+
+      const orgClerkId = `org_solo_${Math.random().toString(36).slice(2, 8)}`;
+      const orgId = await ctx.db.insert("organizations", {
+        clerkId: orgClerkId,
+        name: "Solo Org",
+        slug: "solo-org",
+      });
+
+      await ctx.db.insert("organizationMemberships", {
+        clerkId: `membership_${Math.random().toString(36).slice(2, 8)}`,
+        userId,
+        organizationId: orgId,
+        role: "owner",
+      });
+
+      return { userClerkId, orgId };
+    });
 
     const authed = t.withIdentity({
       subject: fixture.userClerkId,
@@ -92,7 +130,7 @@ describe.sequential("org context helper", () => {
       return await requireActiveOrganization(ctx);
     });
 
-    expect(resolved.organization._id).toBe(fixture.alphaOrgId);
+    expect(resolved.organization._id).toBe(fixture.orgId);
   });
 
   it("rejects when identity points to org without user membership", async () => {

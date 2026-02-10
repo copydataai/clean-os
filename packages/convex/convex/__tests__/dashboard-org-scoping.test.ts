@@ -177,6 +177,12 @@ describe.sequential("dashboard org scoping", () => {
     const requestsA = await asOrgA.query(api.bookingRequests.listRecent, { limit: 10 });
     expect(requestsA).toHaveLength(1);
     expect(requestsA[0]?._id).toBe(fixture.requestAId);
+    expect(requestsA[0]?.canonicalBookingHandle).toBe("org-a");
+
+    const requestDetailA = await asOrgA.query(api.bookingRequests.getById, {
+      id: fixture.requestAId,
+    });
+    expect(requestDetailA?.canonicalBookingHandle).toBe("org-a");
 
     const boardA = await asOrgA.query(api.quotes.listQuoteBoard, { limit: 10 });
     expect(boardA).toHaveLength(1);
@@ -198,6 +204,12 @@ describe.sequential("dashboard org scoping", () => {
     const requestsB = await asOrgB.query(api.bookingRequests.listRecent, { limit: 10 });
     expect(requestsB).toHaveLength(1);
     expect(requestsB[0]?._id).toBe(fixture.requestBId);
+    expect(requestsB[0]?.canonicalBookingHandle).toBe("org-b");
+
+    const requestDetailB = await asOrgB.query(api.bookingRequests.getById, {
+      id: fixture.requestBId,
+    });
+    expect(requestDetailB?.canonicalBookingHandle).toBe("org-b");
 
     const boardB = await asOrgB.query(api.quotes.listQuoteBoard, { limit: 10 });
     expect(boardB).toHaveLength(1);

@@ -84,6 +84,14 @@ describe.sequential("public booking context", () => {
     expect(context.organizationId).toBe(organizationId);
     expect(context.requestStatus).toBe("requested");
     expect(context.stripeConfigured).toBe(true);
+
+    const route = await t.query(api.bookingRequests.resolvePublicBookingRoute, {
+      requestId,
+    });
+    expect(route).toEqual({
+      handle: "alpha-org",
+      organizationId,
+    });
   });
 
   it("returns ORG_NOT_CONFIGURED_PUBLIC when stripe is not configured", async () => {
@@ -111,6 +119,14 @@ describe.sequential("public booking context", () => {
     expect(context.canonicalSlug).toBe("beta-org");
     expect(context.organizationId).toBe(organizationId);
     expect(context.stripeConfigured).toBe(false);
+
+    const route = await t.query(api.bookingRequests.resolvePublicBookingRoute, {
+      requestId,
+    });
+    expect(route).toEqual({
+      handle: "beta-org",
+      organizationId,
+    });
   });
 
   it("returns ORG_DATA_CONFLICT when request and quote organizations disagree", async () => {
@@ -150,6 +166,11 @@ describe.sequential("public booking context", () => {
     expect(context.errorCode).toBe("ORG_DATA_CONFLICT");
     expect(context.organizationId).toBeNull();
     expect(context.canonicalSlug).toBeNull();
+
+    const route = await t.query(api.bookingRequests.resolvePublicBookingRoute, {
+      requestId,
+    });
+    expect(route).toBeNull();
   });
 
   it("creates booking using request authority and backfills missing request org from quote", async () => {
@@ -194,6 +215,14 @@ describe.sequential("public booking context", () => {
 
     expect(after.request?.organizationId).toBe(orgA);
     expect(after.booking?.organizationId).toBe(orgA);
+
+    const route = await t.query(api.bookingRequests.resolvePublicBookingRoute, {
+      requestId,
+    });
+    expect(route).toEqual({
+      handle: "org-a",
+      organizationId: orgA,
+    });
 
     await expect(
       t.mutation(api.bookings.createBookingFromRequest, {
