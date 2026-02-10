@@ -423,6 +423,102 @@ const organizationStripeConfigs = defineTable({
   .index("by_org_slug", ["orgSlug"])
   .index("by_status", ["status"]);
 
+const organizationIntegrations = defineTable({
+  organizationId: v.id("organizations"),
+  provider: v.union(v.literal("tally")),
+  status: v.union(
+    v.literal("configured"),
+    v.literal("incomplete"),
+    v.literal("disabled")
+  ),
+  apiKeyCiphertext: v.optional(v.string()),
+  apiKeyIv: v.optional(v.string()),
+  apiKeyAuthTag: v.optional(v.string()),
+  webhookSecretCiphertext: v.optional(v.string()),
+  webhookSecretIv: v.optional(v.string()),
+  webhookSecretAuthTag: v.optional(v.string()),
+  requestFormId: v.optional(v.string()),
+  confirmationFormId: v.optional(v.string()),
+  cardFormId: v.optional(v.string()),
+  formIds: v.optional(
+    v.object({
+      request: v.optional(v.string()),
+      confirmation: v.optional(v.string()),
+      card: v.optional(v.string()),
+    })
+  ),
+  webhookIds: v.optional(
+    v.object({
+      request: v.optional(v.string()),
+      confirmation: v.optional(v.string()),
+      card: v.optional(v.string()),
+    })
+  ),
+  fieldMappings: v.optional(
+    v.object({
+      quoteRequest: v.optional(
+        v.record(
+          v.string(),
+          v.object({
+            questionId: v.optional(v.string()),
+            key: v.optional(v.string()),
+            label: v.optional(v.string()),
+          })
+        )
+      ),
+      bookingConfirmation: v.optional(
+        v.record(
+          v.string(),
+          v.object({
+            questionId: v.optional(v.string()),
+            key: v.optional(v.string()),
+            label: v.optional(v.string()),
+          })
+        )
+      ),
+      cardCapture: v.optional(
+        v.record(
+          v.string(),
+          v.object({
+            questionId: v.optional(v.string()),
+            key: v.optional(v.string()),
+            label: v.optional(v.string()),
+          })
+        )
+      ),
+    })
+  ),
+  lastSyncAt: v.optional(v.number()),
+  lastValidationAt: v.optional(v.number()),
+  updatedByUserId: v.id("users"),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_org_provider", ["organizationId", "provider"])
+  .index("by_provider_request_form", ["provider", "requestFormId"])
+  .index("by_provider_confirmation_form", ["provider", "confirmationFormId"])
+  .index("by_provider_card_form", ["provider", "cardFormId"]);
+
+const integrationWebhookAttempts = defineTable({
+  provider: v.union(v.literal("tally")),
+  organizationId: v.optional(v.id("organizations")),
+  endpoint: v.union(
+    v.literal("request"),
+    v.literal("confirmation"),
+    v.literal("card")
+  ),
+  routeOrgHandle: v.optional(v.string()),
+  formId: v.optional(v.string()),
+  eventType: v.optional(v.string()),
+  webhookId: v.optional(v.string()),
+  httpStatus: v.number(),
+  stage: v.string(),
+  message: v.optional(v.string()),
+  receivedAt: v.number(),
+})
+  .index("by_org_provider_received", ["organizationId", "provider", "receivedAt"])
+  .index("by_provider_received", ["provider", "receivedAt"]);
+
 const paymentWebhookEvents = defineTable({
   organizationId: v.id("organizations"),
   eventId: v.string(),
@@ -949,6 +1045,8 @@ export default defineSchema({
   sequences,
   paymentIntents,
   organizationStripeConfigs,
+  organizationIntegrations,
+  integrationWebhookAttempts,
   paymentWebhookEvents,
   paymentWebhookAttempts,
   emailSends,

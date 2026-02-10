@@ -9,7 +9,11 @@
 - `STRIPE_SECRET_KEY` - Legacy/global fallback Stripe key for pre-isolation flows only.
 - `STRIPE_WEBHOOK_SECRET` - Legacy/global webhook secret for pre-isolation flows only.
 
+## Integrations
+- `INTEGRATION_SECRETS_MASTER_KEY` - Base64-encoded 32-byte key for encrypting per-organization integration secrets (falls back to `PAYMENT_SECRETS_MASTER_KEY`).
+
 ## Tally
+- `TALLY_API_KEY` - Optional bootstrap API key used by `bootstrapTallyIntegrationFromEnv`.
 - `TALLY_WEBHOOK_SECRET` - Webhook signing secret used to verify Tally requests.
 - `TALLY_REQUEST_FORM_ID` - Form ID for the initial request form.
 - `TALLY_CONFIRM_FORM_ID` - Form ID for the confirmation form.
