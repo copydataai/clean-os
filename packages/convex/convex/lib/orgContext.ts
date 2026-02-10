@@ -1,4 +1,5 @@
 import type { Doc, Id } from "../_generated/dataModel";
+import { api } from "../_generated/api";
 
 type Identity = {
   subject: string;
@@ -10,6 +11,26 @@ type MembershipWithOrganization = Doc<"organizationMemberships"> & {
 };
 
 const isTestEnvironment = process.env.NODE_ENV === "test";
+type AuthenticatedUser = Doc<"users"> | {
+  _id: Id<"users">;
+  clerkId: string;
+  email: string;
+};
+type AuthenticatedUserResult = {
+  identity: Identity;
+  user: AuthenticatedUser;
+};
+type ActiveOrganizationResult = {
+  identity: Identity;
+  user: AuthenticatedUser;
+  organization: Doc<"organizations">;
+  membership: MembershipWithOrganization;
+  memberships: MembershipWithOrganization[];
+};
+
+function hasDatabaseAccess(ctx: any): boolean {
+  return Boolean(ctx?.db && typeof ctx.db.query === "function");
+}
 
 function normalizeOrgClaim(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -38,7 +59,7 @@ export async function requireIdentity(ctx: any): Promise<Identity> {
   return identity as Identity;
 }
 
-export async function requireAuthenticatedUser(ctx: any) {
+export async function requireAuthenticatedUser(ctx: any): Promise<AuthenticatedUserResult> {
   const identity = (await ctx.auth.getUserIdentity()) as Identity | null;
   if (!identity) {
     if (!isTestEnvironment) {
@@ -58,6 +79,26 @@ export async function requireAuthenticatedUser(ctx: any) {
       user: {
         _id: "test-user" as Id<"users">,
         clerkId: "test-user",
+        email: "test-user@example.com",
+      },
+    };
+  }
+
+  if (!hasDatabaseAccess(ctx)) {
+    const user = (await ctx.runQuery(api.queries.getCurrentUser, {})) as AuthenticatedUser | null;
+    if (user) {
+      return { identity, user };
+    }
+
+    if (!isTestEnvironment) {
+      throw new Error("AUTH_USER_NOT_FOUND");
+    }
+
+    return {
+      identity,
+      user: {
+        _id: "test-user" as Id<"users">,
+        clerkId: identity.subject,
         email: "test-user@example.com",
       },
     };
@@ -89,6 +130,41 @@ export async function getUserMemberships(
   ctx: any,
   userId: Id<"users">
 ): Promise<MembershipWithOrganization[]> {
+  if (!hasDatabaseAccess(ctx)) {
+    const organizations = (await ctx.runQuery(api.queries.getUserOrganizations, {})) as Array<
+      Doc<"organizations"> & { role?: string | null }
+    >;
+
+    const syntheticMemberships: MembershipWithOrganization[] = organizations.map((organization) => {
+      const organizationDoc: Doc<"organizations"> = {
+        _id: organization._id,
+        _creationTime: organization._creationTime,
+        clerkId: organization.clerkId,
+        name: organization.name,
+        slug: organization.slug,
+        imageUrl: organization.imageUrl,
+      };
+
+      return {
+      _creationTime: 0,
+      _id: `action-membership-${String(organization._id)}` as Id<"organizationMemberships">,
+      clerkId: `action-membership-${String(organization._id)}`,
+      userId,
+      organizationId: organization._id,
+      role: organization.role ?? "member",
+      organization: organizationDoc,
+      };
+    });
+
+    return syntheticMemberships.sort((left, right) => {
+      const nameComparison = left.organization.name.localeCompare(right.organization.name);
+      if (nameComparison !== 0) {
+        return nameComparison;
+      }
+      return String(left.organization._id).localeCompare(String(right.organization._id));
+    });
+  }
+
   const memberships = await ctx.db
     .query("organizationMemberships")
     .withIndex("by_user", (q: any) => q.eq("userId", userId))
@@ -127,6 +203,11 @@ export async function resolveActiveOrganizationFromIdentity(
     return null;
   }
 
+  if (!hasDatabaseAccess(ctx)) {
+    const activeOrganization = await ctx.runQuery(api.queries.getActiveOrganization, {});
+    return (activeOrganization as Doc<"organizations"> | null) ?? null;
+  }
+
   const orgClerkId =
     normalizeOrgClaim((identity as Record<string, unknown>).orgId) ??
     normalizeOrgClaim((identity as Record<string, unknown>).org_id);
@@ -141,11 +222,11 @@ export async function resolveActiveOrganizationFromIdentity(
     .unique();
 }
 
-export async function requireActiveOrganization(ctx: any) {
+export async function requireActiveOrganization(ctx: any): Promise<ActiveOrganizationResult> {
   const { identity, user } = await requireAuthenticatedUser(ctx);
 
   let memberships = await getUserMemberships(ctx, user._id);
-  if (memberships.length === 0 && isTestEnvironment) {
+  if (memberships.length === 0 && isTestEnvironment && hasDatabaseAccess(ctx)) {
     const firstOrganization = await ctx.db.query("organizations").first();
     if (firstOrganization) {
       memberships = [

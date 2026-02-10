@@ -8,6 +8,7 @@ const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
   "../_generated/server.ts": () => import("../_generated/server"),
   "../integrations.ts": () => import("../integrations"),
+  "../integrationsNode.ts": () => import("../integrationsNode"),
   "../queries.ts": () => import("../queries"),
 };
 
@@ -80,5 +81,34 @@ describe.sequential("integrations org context", () => {
 
     expect(scopedStatus.orgHandle).toBe("org-b");
     expect(scopedStatus.status).toBe("incomplete");
+  });
+
+  it("validates tally connection in action context without active org claim", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await seedMultiOrgAdminFixture(t);
+    const authedWithoutOrgClaim = t.withIdentity({
+      subject: fixture.userClerkId,
+    });
+
+    const originalFetch = global.fetch;
+    global.fetch = (async () =>
+      new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof global.fetch;
+
+    try {
+      const result = await authedWithoutOrgClaim.action(
+        api.integrations.validateTallyConnection,
+        {
+          organizationId: fixture.orgBId,
+          apiKey: "test_key",
+        },
+      );
+
+      expect(result.ok).toBe(true);
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
