@@ -70,7 +70,7 @@ export default function RequestDetailPage() {
     ];
   }, [request]);
 
-  const orgHandle = activeOrg?.slug ?? activeOrg?.clerkId ?? null;
+  const orgHandle = activeOrg?.slug ?? null;
 
   if (request === null) {
     return (

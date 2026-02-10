@@ -25,9 +25,17 @@ function BookPageContent() {
 
   const existingBookingId = searchParams.get("booking_id") as Id<"bookings"> | null;
   const requestId = searchParams.get("request_id") as Id<"bookingRequests"> | null;
+  const publicBookingContext = useQuery(
+    api.bookingRequests.getPublicBookingContext,
+    requestId ? { requestId } : "skip"
+  );
   const organization = useQuery(
     api.payments.getOrganizationByPublicHandle,
-    orgSlug ? { handle: orgSlug } : "skip"
+    !requestId && orgSlug ? { handle: orgSlug } : "skip"
+  );
+  const publicStripeConfig = useQuery(
+    api.payments.getPublicStripeRecoveryConfig,
+    !requestId && orgSlug ? { handle: orgSlug } : "skip"
   );
   const existingBooking = useQuery(
     api.bookings.getBooking,
@@ -43,6 +51,34 @@ function BookPageContent() {
   const checkoutStartedRef = useRef(false);
   const cardCheckStartedRef = useRef(false);
 
+  function setPublicRequestError(errorCode?: string | null) {
+    if (errorCode === "REQUEST_NOT_FOUND") {
+      setError("Booking request not found. Please contact support for a new link.");
+      setStatus("error");
+      return;
+    }
+    if (errorCode === "ORG_DATA_CONFLICT") {
+      setError(
+        "Booking request configuration conflict detected. Please contact support."
+      );
+      setStatus("error");
+      return;
+    }
+    if (errorCode === "ORG_NOT_CONFIGURED_PUBLIC") {
+      setError(
+        "Payments are not configured for this organization yet. Please contact support."
+      );
+      setStatus("error");
+      return;
+    }
+    if (errorCode === "ORG_CONTEXT_REQUIRED") {
+      setError(
+        "This booking request is missing organization context. Please contact support."
+      );
+      setStatus("error");
+    }
+  }
+
   const startCheckout = async (resolvedBookingId: Id<"bookings">) => {
     if (checkoutStartedRef.current) {
       return;
@@ -52,7 +88,6 @@ function BookPageContent() {
       const baseUrl = window.location.origin;
       const { checkoutUrl } = await createCheckoutSession({
         bookingId: resolvedBookingId,
-        organizationId: organization?._id ?? undefined,
         successUrl: `${baseUrl}/book/success?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}`,
         cancelUrl: `${baseUrl}/book/cancel?booking_id=${resolvedBookingId}&org=${encodeURIComponent(orgSlug ?? "")}`,
       });
@@ -73,18 +108,41 @@ function BookPageContent() {
     async function initBooking() {
       try {
         let resolvedBookingId: Id<"bookings">;
-        if (!orgSlug) {
-          setError("Missing organization in booking link.");
-          setStatus("error");
-          return;
-        }
-        if (organization === undefined) {
-          return;
-        }
-        if (organization === null) {
-          setError("Organization not found. Please contact support.");
-          setStatus("error");
-          return;
+
+        if (requestId) {
+          if (publicBookingContext === undefined) {
+            return;
+          }
+
+          if (publicBookingContext.errorCode) {
+            setPublicRequestError(publicBookingContext.errorCode);
+            return;
+          }
+
+          const canonicalHandle = publicBookingContext.canonicalSlug;
+          if (!canonicalHandle) {
+            setPublicRequestError("ORG_CONTEXT_REQUIRED");
+            return;
+          }
+          if (canonicalHandle !== orgSlug) {
+            const nextParams = new URLSearchParams(searchParams.toString());
+            window.location.replace(`/book/${canonicalHandle}?${nextParams.toString()}`);
+            return;
+          }
+        } else {
+          if (!orgSlug) {
+            setError("Missing organization in booking link.");
+            setStatus("error");
+            return;
+          }
+          if (organization === undefined) {
+            return;
+          }
+          if (organization === null) {
+            setError("Organization not found. Please contact support.");
+            setStatus("error");
+            return;
+          }
         }
 
         // Check if booking_id was provided (from Tally webhook)
@@ -98,7 +156,14 @@ function BookPageContent() {
             setStatus("error");
             return;
           }
-          if (existingBooking.organizationId && existingBooking.organizationId !== organization._id) {
+          const expectedOrganizationId = requestId
+            ? publicBookingContext?.organizationId
+            : organization?._id;
+          if (
+            expectedOrganizationId &&
+            existingBooking.organizationId &&
+            existingBooking.organizationId !== expectedOrganizationId
+          ) {
             setError("Booking does not belong to this organization.");
             setStatus("error");
             return;
@@ -107,7 +172,6 @@ function BookPageContent() {
         } else if (requestId) {
           resolvedBookingId = await createBookingFromRequest({
             requestId,
-            organizationId: organization._id,
           });
         } else {
           // Create new booking from query params (direct Tally redirect)
@@ -127,7 +191,7 @@ function BookPageContent() {
 
           // Create booking in database
           resolvedBookingId = await createBooking({
-            organizationId: organization._id,
+            organizationId: organization!._id,
             email,
             customerName: name ?? undefined,
             serviceType: serviceType ?? undefined,
@@ -152,6 +216,7 @@ function BookPageContent() {
     orgSlug,
     organization,
     searchParams,
+    publicBookingContext,
     existingBookingId,
     existingBooking,
     requestId,
@@ -163,6 +228,31 @@ function BookPageContent() {
     if (!bookingId || cardCheckStartedRef.current) {
       return;
     }
+    if (requestId) {
+      if (publicBookingContext === undefined) {
+        return;
+      }
+      if (publicBookingContext.errorCode) {
+        setPublicRequestError(publicBookingContext.errorCode);
+        return;
+      }
+      if (!publicBookingContext.stripeConfigured) {
+        setPublicRequestError("ORG_NOT_CONFIGURED_PUBLIC");
+        return;
+      }
+    } else {
+      if (publicStripeConfig === undefined) {
+        return;
+      }
+      if (!publicStripeConfig) {
+        setError(
+          "Payments are not configured for this organization yet. Please contact support."
+        );
+        setStatus("error");
+        return;
+      }
+    }
+
     cardCheckStartedRef.current = true;
 
     async function checkCardOnFile() {
@@ -183,7 +273,7 @@ function BookPageContent() {
     }
 
     checkCardOnFile();
-  }, [bookingId, getCardOnFileStatus]);
+  }, [bookingId, getCardOnFileStatus, publicStripeConfig, publicBookingContext, requestId]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">

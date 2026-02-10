@@ -45,7 +45,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
   const { activeOrg } = useActiveOrganization();
-  const orgHandle = activeOrg?.slug ?? activeOrg?.clerkId ?? null;
+  const orgHandle = activeOrg?.slug ?? null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
   const tags = [

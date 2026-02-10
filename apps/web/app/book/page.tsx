@@ -9,17 +9,17 @@ import type { Id } from "@clean-os/convex/data-model";
 function BookCompatibilityContent() {
   const searchParams = useSearchParams();
   const requestId = searchParams.get("request_id") as Id<"bookingRequests"> | null;
-  const route = useQuery(
-    api.bookingRequests.resolvePublicBookingRoute,
+  const context = useQuery(
+    api.bookingRequests.getPublicBookingContext,
     requestId ? { requestId } : "skip"
   );
 
   useEffect(() => {
-    if (!requestId || !route?.handle) {
+    if (!requestId || !context || context.errorCode || !context.canonicalSlug) {
       return;
     }
-    window.location.replace(`/book/${route.handle}?request_id=${requestId}`);
-  }, [requestId, route?.handle]);
+    window.location.replace(`/book/${context.canonicalSlug}?request_id=${requestId}`);
+  }, [requestId, context]);
 
   if (!requestId) {
     return (
@@ -41,7 +41,7 @@ function BookCompatibilityContent() {
     );
   }
 
-  if (route === undefined) {
+  if (context === undefined) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-8">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -49,7 +49,7 @@ function BookCompatibilityContent() {
     );
   }
 
-  if (!route?.handle) {
+  if (!context || context.errorCode || !context.canonicalSlug) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-8">
         <div className="w-full max-w-xl rounded-2xl border border-border bg-card p-8 text-center">
