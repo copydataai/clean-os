@@ -3,6 +3,7 @@ import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import Stripe from "stripe";
 import { Id } from "./_generated/dataModel";
+import { bookingFlowLog, bookingFlowWarn } from "./lib/bookingFlowDebug";
 
 function createStripeClient(secretKey: string): Stripe {
   return new Stripe(secretKey, {
@@ -173,17 +174,35 @@ export const createCheckoutSession = action({
     cancelUrl: v.string(),
   },
   handler: async (ctx, args): Promise<{ checkoutUrl: string }> => {
+    bookingFlowLog("createCheckoutSession.start", {
+      bookingId: args.bookingId,
+      organizationIdOverride: args.organizationId ?? null,
+      successUrl: args.successUrl,
+      cancelUrl: args.cancelUrl,
+    });
+
     const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
       id: args.bookingId,
     });
 
     if (!booking) {
+      bookingFlowWarn("createCheckoutSession.booking_not_found", {
+        bookingId: args.bookingId,
+      });
       throw new Error("Booking not found");
     }
     if (!booking.organizationId && !args.organizationId) {
+      bookingFlowWarn("createCheckoutSession.org_not_found", {
+        bookingId: args.bookingId,
+      });
       throw new Error("ORG_NOT_FOUND");
     }
     if (booking.organizationId && args.organizationId && booking.organizationId !== args.organizationId) {
+      bookingFlowWarn("createCheckoutSession.org_mismatch", {
+        bookingId: args.bookingId,
+        bookingOrganizationId: booking.organizationId,
+        requestedOrganizationId: args.organizationId,
+      });
       throw new Error("ORG_MISMATCH");
     }
 
@@ -266,6 +285,13 @@ export const createCheckoutSession = action({
       stripeCustomerId: customerId,
     });
 
+    bookingFlowLog("createCheckoutSession.success", {
+      bookingId: args.bookingId,
+      organizationId: resolvedOrganizationId,
+      stripeCustomerId: customerId ?? null,
+      checkoutSessionId: session.id,
+    });
+
     return { checkoutUrl: session.url! };
   },
 });
@@ -282,11 +308,21 @@ export const getCardOnFileStatus = action({
     stripeCustomerId?: string;
     cardSummary?: CardSummary;
   }> => {
+    bookingFlowLog("getCardOnFileStatus.start", {
+      bookingId: args.bookingId,
+    });
+
     const booking = await ctx.runQuery(internal.bookingDb.getBookingById, {
       id: args.bookingId,
     });
 
     if (!booking?.email || !booking.organizationId) {
+      bookingFlowLog("getCardOnFileStatus.no_booking_context", {
+        bookingId: args.bookingId,
+        hasBooking: Boolean(booking),
+        hasEmail: Boolean(booking?.email),
+        hasOrganizationId: Boolean(booking?.organizationId),
+      });
       return { hasCard: false };
     }
 
@@ -299,6 +335,10 @@ export const getCardOnFileStatus = action({
       booking.organizationId
     );
     if (!resolved.stripeCustomerId) {
+      bookingFlowLog("getCardOnFileStatus.no_customer", {
+        bookingId: args.bookingId,
+        organizationId: booking.organizationId,
+      });
       return { hasCard: false };
     }
 
@@ -309,6 +349,10 @@ export const getCardOnFileStatus = action({
     });
 
     if (paymentMethods.data.length === 0) {
+      bookingFlowLog("getCardOnFileStatus.no_card_payment_methods", {
+        bookingId: args.bookingId,
+        stripeCustomerId: resolved.stripeCustomerId,
+      });
       return { hasCard: false };
     }
 
@@ -321,6 +365,13 @@ export const getCardOnFileStatus = action({
           expYear: card.exp_year,
         }
       : undefined;
+
+    bookingFlowLog("getCardOnFileStatus.has_card", {
+      bookingId: args.bookingId,
+      stripeCustomerId: resolved.stripeCustomerId,
+      brand: cardSummary?.brand ?? null,
+      last4: cardSummary?.last4 ?? null,
+    });
 
     return {
       hasCard: true,

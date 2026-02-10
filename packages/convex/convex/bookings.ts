@@ -7,6 +7,7 @@ import {
   requireActiveOrganization,
   requireOrganizationAdmin,
 } from "./lib/orgContext";
+import { bookingFlowLog, bookingFlowWarn } from "./lib/bookingFlowDebug";
 import { resolveRequestOrganizationAuthority } from "./lib/publicBookingContext";
 
 const BOOKING_STATUS_VALIDATOR = v.union(
@@ -33,6 +34,13 @@ export const createBookingFromTally = mutation({
     bookingRequestId: v.optional(v.id("bookingRequests")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
+    bookingFlowLog("createBookingFromTally.start", {
+      organizationId: args.organizationId ?? null,
+      email: args.email,
+      bookingRequestId: args.bookingRequestId ?? null,
+      tallyResponseId: args.tallyResponseId ?? null,
+    });
+
     const customerId = await ctx.runMutation(internal.customers.ensureLifecycleCustomer, {
       organizationId: args.organizationId,
       email: args.email,
@@ -82,6 +90,13 @@ export const createBookingFromTally = mutation({
       customerId,
     });
 
+    bookingFlowLog("createBookingFromTally.success", {
+      bookingId,
+      organizationId: args.organizationId ?? null,
+      customerId,
+      bookingRequestId: args.bookingRequestId ?? null,
+    });
+
     return bookingId;
   },
 });
@@ -92,20 +107,40 @@ export const createBookingFromRequest = mutation({
     organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
+    bookingFlowLog("createBookingFromRequest.start", {
+      requestId: args.requestId,
+      organizationIdOverride: args.organizationId ?? null,
+    });
+
     const authority = await resolveRequestOrganizationAuthority(ctx, args.requestId);
     if (authority.errorCode === "REQUEST_NOT_FOUND") {
+      bookingFlowWarn("createBookingFromRequest.request_not_found", {
+        requestId: args.requestId,
+      });
       throw new Error("Booking request not found");
     }
     if (authority.errorCode === "ORG_DATA_CONFLICT") {
+      bookingFlowWarn("createBookingFromRequest.org_data_conflict", {
+        requestId: args.requestId,
+      });
       throw new Error("ORG_DATA_CONFLICT");
     }
     if (authority.errorCode || !authority.organizationId || !authority.request) {
+      bookingFlowWarn("createBookingFromRequest.org_context_required", {
+        requestId: args.requestId,
+        errorCode: authority.errorCode ?? null,
+      });
       throw new Error("ORG_CONTEXT_REQUIRED");
     }
     const request = authority.request;
     const resolvedOrganizationId = authority.organizationId;
 
     if (args.organizationId && args.organizationId !== resolvedOrganizationId) {
+      bookingFlowWarn("createBookingFromRequest.org_mismatch", {
+        requestId: args.requestId,
+        resolvedOrganizationId,
+        requestedOrganizationId: args.organizationId,
+      });
       throw new Error("ORG_MISMATCH");
     }
 
@@ -131,10 +166,18 @@ export const createBookingFromRequest = mutation({
           quoteRequestId: request.quoteRequestId,
         });
       }
+      bookingFlowLog("createBookingFromRequest.reused_existing_booking", {
+        requestId: args.requestId,
+        bookingId: request.bookingId,
+        organizationId: resolvedOrganizationId,
+      });
       return request.bookingId;
     }
 
     if (!request.email) {
+      bookingFlowWarn("createBookingFromRequest.missing_email", {
+        requestId: args.requestId,
+      });
       throw new Error("Booking request is missing email");
     }
 
@@ -184,6 +227,13 @@ export const createBookingFromRequest = mutation({
       customerId,
     });
 
+    bookingFlowLog("createBookingFromRequest.success", {
+      requestId: args.requestId,
+      bookingId,
+      organizationId: resolvedOrganizationId,
+      customerId,
+    });
+
     return bookingId;
   },
 });
@@ -194,9 +244,33 @@ export const markCardOnFile = mutation({
     stripeCustomerId: v.string(),
   },
   handler: async (ctx, args): Promise<Id<"bookings">> => {
+    bookingFlowLog("markCardOnFile.start", {
+      bookingId: args.bookingId,
+      stripeCustomerId: args.stripeCustomerId,
+    });
+
     const booking = await ctx.db.get(args.bookingId);
     if (!booking) {
+      bookingFlowWarn("markCardOnFile.booking_not_found", {
+        bookingId: args.bookingId,
+      });
       throw new Error("Booking not found");
+    }
+
+    const stripeCustomerRecords = await ctx.db
+      .query("stripeCustomers")
+      .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", booking.email))
+      .collect();
+    const ownsCustomer = stripeCustomerRecords.some(
+      (record) => record.stripeCustomerId === args.stripeCustomerId
+    );
+    if (!ownsCustomer) {
+      bookingFlowWarn("markCardOnFile.customer_mismatch", {
+        bookingId: args.bookingId,
+        bookingEmail: booking.email,
+        stripeCustomerId: args.stripeCustomerId,
+      });
+      throw new Error("Stripe customer does not match this booking");
     }
 
     await ctx.db.patch(args.bookingId, {
@@ -215,6 +289,12 @@ export const markCardOnFile = mutation({
       source: "bookings.markCardOnFile",
     });
 
+    bookingFlowLog("markCardOnFile.success", {
+      bookingId: args.bookingId,
+      stripeCustomerId: args.stripeCustomerId,
+      statusAfter: "card_saved",
+    });
+
     return args.bookingId;
   },
 });
@@ -229,6 +309,22 @@ export const getBooking = query({
     }
     assertRecordInActiveOrg(booking.organizationId, organization._id);
     return booking;
+  },
+});
+
+export const getPublicBookingSummary = query({
+  args: { id: v.id("bookings") },
+  handler: async (ctx, args) => {
+    const booking = await ctx.db.get(args.id);
+    if (!booking) {
+      return null;
+    }
+    return {
+      _id: booking._id,
+      organizationId: booking.organizationId,
+      bookingRequestId: booking.bookingRequestId,
+      status: booking.status,
+    };
   },
 });
 
