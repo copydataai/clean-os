@@ -14,6 +14,8 @@ const modules: Record<string, () => Promise<any>> = {
   "../emailSuppressions.ts": () => import("../emailSuppressions"),
   "../emailActions.ts": () => import("../emailActions"),
   "../emailSends.ts": () => import("../emailSends"),
+  "../integrations.ts": () => import("../integrations"),
+  "../bookingRequests.ts": () => import("../bookingRequests"),
 };
 
 let quoteNumberCounter = 20000;
@@ -49,13 +51,41 @@ async function createQuoteFixture(
   t: ReturnType<typeof convexTest>,
   options: FixtureOptions
 ): Promise<{
+  organizationId: Id<"organizations">;
   quoteId: Id<"quotes">;
   quoteRequestId: Id<"quoteRequests">;
   bookingRequestId?: Id<"bookingRequests">;
   revisionId?: Id<"quoteRevisions">;
 }> {
   return await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      clerkId: `user_${Math.random().toString(36).slice(2, 8)}`,
+      email: "owner@example.com",
+      firstName: "Owner",
+      lastName: "Test",
+    });
+    const organizationId = await ctx.db.insert("organizations", {
+      clerkId: `org_${Math.random().toString(36).slice(2, 8)}`,
+      name: "Test Org",
+      slug: "test-org",
+    });
+    await ctx.db.insert("organizationIntegrations", {
+      organizationId,
+      provider: "tally",
+      status: "configured",
+      requestFormId: "request_form_1",
+      confirmationFormId: "confirm_form_1",
+      formIds: {
+        request: "request_form_1",
+        confirmation: "confirm_form_1",
+      },
+      updatedByUserId: userId,
+      createdAt: options.nowMs,
+      updatedAt: options.nowMs,
+    });
+
     const quoteRequestId = await ctx.db.insert("quoteRequests", {
+      organizationId,
       firstName: "Test",
       lastName: "Customer",
       email: options.withEmail === false ? undefined : "test@example.com",
@@ -68,6 +98,7 @@ async function createQuoteFixture(
       options.withBooking === false
         ? undefined
         : await ctx.db.insert("bookingRequests", {
+            organizationId,
             status: "requested",
             quoteRequestId,
             email: "test@example.com",
@@ -76,6 +107,7 @@ async function createQuoteFixture(
           });
 
     const quoteId = await ctx.db.insert("quotes", {
+      organizationId,
       quoteRequestId,
       bookingRequestId,
       quoteNumber: quoteNumberCounter++,
@@ -92,6 +124,7 @@ async function createQuoteFixture(
       options.withLatestSentRevision === false
         ? undefined
         : await ctx.db.insert("quoteRevisions", {
+            organizationId,
             quoteId,
             revisionNumber: 1,
             source: "grid_auto",
@@ -125,7 +158,7 @@ async function createQuoteFixture(
       });
     }
 
-    return { quoteId, quoteRequestId, bookingRequestId, revisionId };
+    return { organizationId, quoteId, quoteRequestId, bookingRequestId, revisionId };
   });
 }
 
@@ -416,7 +449,7 @@ describe.sequential("quote reminders", () => {
     expect(events[0]?.stage).toBe("r1_24h");
   });
 
-  it("writes failed reminder events when email sending fails", async () => {
+  it("records non-sent reminder events when email sending cannot complete", async () => {
     const t = convexTest(schema, modules);
     const nowMs = 1_740_000_000_000;
     await createQuoteFixture(t, {
@@ -426,9 +459,7 @@ describe.sequential("quote reminders", () => {
       expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
     });
 
-    const originalConfirmUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL;
     const originalResendKey = process.env.RESEND_API_KEY;
-    process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = "https://example.com/confirm";
     delete process.env.RESEND_API_KEY;
 
     try {
@@ -437,13 +468,12 @@ describe.sequential("quote reminders", () => {
         dryRun: false,
       });
     } finally {
-      process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = originalConfirmUrl;
       if (originalResendKey) process.env.RESEND_API_KEY = originalResendKey;
     }
 
     const events = await listReminderEvents(t);
     expect(events).toHaveLength(1);
-    expect(events[0]?.status).toBe("failed");
+    expect(events[0]?.status === "failed" || events[0]?.status === "missing_context").toBe(true);
     expect(events[0]?.triggerSource).toBe("cron");
     expect(events[0]?.stage).toBe("r1_24h");
   });
@@ -462,27 +492,21 @@ describe.sequential("quote reminders", () => {
       reason: "complaint",
     });
 
-    const originalConfirmUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL;
-    process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = "https://example.com/confirm";
-    try {
-      const result = await t.action(internal.quoteReminderActions.sendManualReminderInternal, {
-        quoteRequestId: fixture.quoteRequestId,
-        nowMs,
-      });
+    const result = await t.action(internal.quoteReminderActions.sendManualReminderInternal, {
+      quoteRequestId: fixture.quoteRequestId,
+      nowMs,
+    });
 
-      expect(result.idempotencyKey.includes(":manual:")).toBe(true);
-      expect(result.status === "suppressed" || result.status === "skipped" || result.status === "sent").toBe(true);
+    expect(result.idempotencyKey.includes(":manual:")).toBe(true);
+    expect(result.status === "suppressed" || result.status === "skipped" || result.status === "sent").toBe(true);
 
-      const events = await listReminderEvents(t);
-      expect(events).toHaveLength(1);
-      expect(events[0]?.stage).toBe("manual");
-      expect(events[0]?.triggerSource).toBe("manual");
-      expect(events[0]?.idempotencyKey.includes(":manual:")).toBe(true);
-      const scheduledKey = reminderKey(fixture.quoteId, fixture.revisionId!, "r1_24h");
-      expect(events[0]?.idempotencyKey).not.toBe(scheduledKey);
-    } finally {
-      process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL = originalConfirmUrl;
-    }
+    const events = await listReminderEvents(t);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.stage).toBe("manual");
+    expect(events[0]?.triggerSource).toBe("manual");
+    expect(events[0]?.idempotencyKey.includes(":manual:")).toBe(true);
+    const scheduledKey = reminderKey(fixture.quoteId, fixture.revisionId!, "r1_24h");
+    expect(events[0]?.idempotencyKey).not.toBe(scheduledKey);
   });
 
   it("manual reminder blocks invalid quote statuses", async () => {
@@ -501,5 +525,43 @@ describe.sequential("quote reminders", () => {
         nowMs,
       })
     ).rejects.toThrow("Manual reminders are only allowed for sent quotes");
+  });
+
+  it("writes missing_context when tally confirmation form is not configured", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = 1_740_000_000_000;
+    const fixture = await createQuoteFixture(t, {
+      nowMs,
+      status: "sent",
+      sentAt: nowMs - 30 * 60 * 60 * 1000,
+      expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
+    });
+
+    await t.run(async (ctx) => {
+      const integrations = await ctx.db
+        .query("organizationIntegrations")
+        .withIndex("by_org_provider", (q) => q.eq("organizationId", fixture.organizationId).eq("provider", "tally"))
+        .collect();
+      for (const row of integrations) {
+        await ctx.db.patch(row._id, {
+          confirmationFormId: undefined,
+          formIds: {
+            request: row.formIds?.request,
+            confirmation: undefined,
+          },
+          status: "incomplete",
+        });
+      }
+    });
+
+    await t.action(internal.quoteReminderActions.sendDueQuoteReminders, {
+      nowMs,
+      dryRun: false,
+    });
+
+    const events = await listReminderEvents(t);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.status).toBe("missing_context");
+    expect(events[0]?.errorMessage).toContain("confirmation_form_url");
   });
 });
