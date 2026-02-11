@@ -8,7 +8,7 @@ import {
 } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireOrganizationAdmin } from "./lib/orgContext";
+import { requireActiveOrganization, requireOrganizationAdmin } from "./lib/orgContext";
 import {
   BOOKING_CONFIRMATION_REQUIRED_TARGETS,
   QUOTE_REQUEST_REQUIRED_TARGETS,
@@ -23,6 +23,16 @@ const TALLY_PROVIDER = "tally" as const;
 const internalApi: any = internal;
 
 type TallyIntegrationDoc = Doc<"organizationIntegrations">;
+type TallyMissingFormKey = "request_form" | "confirmation_form";
+type TallyFormLinks = {
+  provider: "tally";
+  requestFormId: string | null;
+  confirmationFormId: string | null;
+  requestFormUrl: string | null;
+  confirmationFormUrl: string | null;
+  isConfigured: boolean;
+  missing: TallyMissingFormKey[];
+};
 
 type TallyForm = {
   id: string;
@@ -96,6 +106,41 @@ function trimOrUndefined(value?: string | null): string | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function deriveTallyFormUrl(formId?: string | null): string | null {
+  const normalized = trimOrUndefined(formId);
+  if (!normalized) {
+    return null;
+  }
+  return `https://tally.so/r/${encodeURIComponent(normalized)}`;
+}
+
+function toTallyFormLinks(integration: TallyIntegrationDoc | null): TallyFormLinks {
+  const requestFormId =
+    trimOrUndefined(integration?.requestFormId) ??
+    trimOrUndefined(integration?.formIds?.request) ??
+    null;
+  const confirmationFormId =
+    trimOrUndefined(integration?.confirmationFormId) ??
+    trimOrUndefined(integration?.formIds?.confirmation) ??
+    null;
+  const missing: TallyMissingFormKey[] = [];
+  if (!requestFormId) {
+    missing.push("request_form");
+  }
+  if (!confirmationFormId) {
+    missing.push("confirmation_form");
+  }
+  return {
+    provider: "tally",
+    requestFormId,
+    confirmationFormId,
+    requestFormUrl: deriveTallyFormUrl(requestFormId),
+    confirmationFormUrl: deriveTallyFormUrl(confirmationFormId),
+    isConfigured: missing.length === 0,
+    missing,
+  };
 }
 
 function toTallyItems(payload: any): any[] {
@@ -480,6 +525,16 @@ export const getTallyIntegrationByWebhookRouteToken = internalQuery({
   },
 });
 
+export const getTallyFormLinksByOrganizationIdInternal = internalQuery({
+  args: {
+    organizationId: v.id("organizations"),
+  },
+  handler: async (ctx, args): Promise<TallyFormLinks> => {
+    const integration = await getIntegrationByOrganization(ctx, args.organizationId);
+    return toTallyFormLinks(integration);
+  },
+});
+
 export const logIntegrationWebhookAttempt = internalMutation({
   args: {
     provider: v.union(v.literal("tally")),
@@ -806,6 +861,33 @@ export const getTallyIntegrationStatus = query({
       lastValidationAt: integration.lastValidationAt ?? null,
       updatedAt: integration.updatedAt,
     };
+  },
+});
+
+export const getTallyFormLinksForActiveOrganization = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args): Promise<TallyFormLinks> => {
+    const { organization } = args.organizationId
+      ? await requireOrganizationAdmin(ctx, args.organizationId)
+      : await requireActiveOrganization(ctx);
+    const integration = await getIntegrationByOrganization(ctx, organization._id);
+    return toTallyFormLinks(integration);
+  },
+});
+
+export const getTallyFormLinksByOrgHandlePublic = query({
+  args: {
+    handle: v.string(),
+  },
+  handler: async (ctx, args): Promise<TallyFormLinks> => {
+    const organization = await getOrganizationByPublicHandle(ctx, args.handle);
+    if (!organization) {
+      return toTallyFormLinks(null);
+    }
+    const integration = await getIntegrationByOrganization(ctx, organization._id);
+    return toTallyFormLinks(integration);
   },
 });
 
