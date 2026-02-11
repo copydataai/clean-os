@@ -155,6 +155,63 @@ export const listRecent = query({
   },
 });
 
+export const searchForRequestLinking = query({
+  args: {
+    query: v.optional(v.string()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const rawLimit = args.limit ?? 20;
+    const limit = Math.max(1, Math.min(rawLimit, 50));
+    const query = args.query?.trim().toLowerCase() ?? "";
+    const candidates = await ctx.db
+      .query("quoteRequests")
+      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+      .order("desc")
+      .take(200);
+
+    const filtered = query
+      ? candidates.filter((quote) => {
+          const fullName = `${quote.firstName ?? ""} ${quote.lastName ?? ""}`.trim().toLowerCase();
+          const haystack = [
+            fullName,
+            quote.email ?? "",
+            quote.service ?? "",
+            quote.serviceType ?? "",
+            quote.address ?? "",
+            quote.city ?? "",
+            quote.state ?? "",
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(query);
+        })
+      : candidates;
+
+    return filtered.slice(0, limit).map((quote) => {
+      const fullName = `${quote.firstName ?? ""} ${quote.lastName ?? ""}`.trim();
+      return {
+        _id: quote._id,
+        firstName: quote.firstName ?? null,
+        lastName: quote.lastName ?? null,
+        fullName: fullName.length > 0 ? fullName : null,
+        email: quote.email ?? null,
+        service: quote.service ?? null,
+        serviceType: quote.serviceType ?? null,
+        frequency: quote.frequency ?? null,
+        squareFootage: quote.squareFootage ?? null,
+        address: quote.address ?? null,
+        city: quote.city ?? null,
+        state: quote.state ?? null,
+        requestStatus: quote.requestStatus,
+        bookingRequestId: quote.bookingRequestId ?? null,
+        createdAt: quote.createdAt,
+      };
+    });
+  },
+});
+
 export const updateRequestStatus = mutation({
   args: {
     quoteRequestId: v.id("quoteRequests"),

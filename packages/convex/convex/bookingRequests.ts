@@ -273,6 +273,197 @@ export const confirmRequest = internalMutation({
   },
 });
 
+export const createFromDashboard = mutation({
+  args: {
+    mode: v.union(v.literal("new"), v.literal("existing")),
+    existingQuoteRequestId: v.optional(v.id("quoteRequests")),
+    contact: v.object({
+      firstName: v.string(),
+      lastName: v.string(),
+      email: v.string(),
+      phone: v.string(),
+    }),
+    quote: v.object({
+      service: v.string(),
+      serviceType: v.string(),
+      frequency: v.optional(v.string()),
+      squareFootage: v.number(),
+      address: v.string(),
+      addressLine2: v.optional(v.string()),
+      postalCode: v.string(),
+      city: v.string(),
+      state: v.string(),
+      additionalNotes: v.optional(v.string()),
+    }),
+    request: v.object({
+      accessMethod: v.optional(v.array(v.string())),
+      accessInstructions: v.optional(v.string()),
+      parkingInstructions: v.optional(v.string()),
+      floorTypes: v.optional(v.array(v.string())),
+      finishedBasement: v.optional(v.string()),
+      delicateSurfaces: v.optional(v.string()),
+      attentionAreas: v.optional(v.string()),
+      pets: v.optional(v.array(v.string())),
+      homeDuringCleanings: v.optional(v.string()),
+      scheduleAdjustmentWindows: v.optional(v.array(v.string())),
+      timingShiftOk: v.optional(v.string()),
+      additionalNotes: v.optional(v.string()),
+    }),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    bookingRequestId: Id<"bookingRequests">;
+    quoteRequestId: Id<"quoteRequests">;
+    reusedQuote: boolean;
+  }> => {
+    const { organization } = await requireActiveOrganization(ctx);
+    const firstName = args.contact.firstName.trim();
+    const lastName = args.contact.lastName.trim();
+    const contactDetails = `${firstName} ${lastName}`.trim();
+    const quoteEmail = args.contact.email.trim();
+    const quotePhone = args.contact.phone.trim();
+
+    console.info("[Dashboard Request] createFromDashboard.start", {
+      organizationId: organization._id,
+      mode: args.mode,
+      existingQuoteRequestId: args.existingQuoteRequestId ?? null,
+    });
+
+    try {
+      if (args.mode === "existing") {
+        if (!args.existingQuoteRequestId) {
+          throw new Error("EXISTING_QUOTE_REQUEST_ID_REQUIRED");
+        }
+
+        const existingQuote = await ctx.db.get(args.existingQuoteRequestId);
+        if (!existingQuote) {
+          throw new Error("QUOTE_REQUEST_NOT_FOUND");
+        }
+        assertRecordInActiveOrg(existingQuote.organizationId, organization._id);
+
+        if (existingQuote.bookingRequestId) {
+          throw new Error("QUOTE_ALREADY_LINKED_TO_REQUEST");
+        }
+
+        const bookingRequestId: Id<"bookingRequests"> = await ctx.runMutation(
+          internal.bookingRequests.createRequest,
+          {
+            organizationId: organization._id,
+            quoteRequestId: existingQuote._id,
+            email: quoteEmail,
+            contactDetails: contactDetails || undefined,
+            phoneNumber: quotePhone || undefined,
+            accessMethod: args.request.accessMethod,
+            accessInstructions: args.request.accessInstructions,
+            parkingInstructions: args.request.parkingInstructions,
+            floorTypes: args.request.floorTypes,
+            finishedBasement: args.request.finishedBasement,
+            delicateSurfaces: args.request.delicateSurfaces,
+            attentionAreas: args.request.attentionAreas,
+            pets: args.request.pets,
+            homeDuringCleanings: args.request.homeDuringCleanings,
+            scheduleAdjustmentWindows: args.request.scheduleAdjustmentWindows,
+            timingShiftOk: args.request.timingShiftOk,
+            additionalNotes: args.request.additionalNotes,
+          }
+        );
+
+        await ctx.runMutation(internal.quoteRequests.linkBookingRequestId, {
+          quoteRequestId: existingQuote._id,
+          bookingRequestId,
+        });
+
+        console.info("[Dashboard Request] createFromDashboard.success", {
+          organizationId: organization._id,
+          mode: args.mode,
+          bookingRequestId,
+          quoteRequestId: existingQuote._id,
+          reusedQuote: true,
+        });
+
+        return {
+          bookingRequestId,
+          quoteRequestId: existingQuote._id,
+          reusedQuote: true,
+        };
+      }
+
+      const bookingRequestId: Id<"bookingRequests"> = await ctx.runMutation(
+        internal.bookingRequests.createRequest,
+        {
+          organizationId: organization._id,
+          email: quoteEmail,
+          contactDetails: contactDetails || undefined,
+          phoneNumber: quotePhone || undefined,
+          accessMethod: args.request.accessMethod,
+          accessInstructions: args.request.accessInstructions,
+          parkingInstructions: args.request.parkingInstructions,
+          floorTypes: args.request.floorTypes,
+          finishedBasement: args.request.finishedBasement,
+          delicateSurfaces: args.request.delicateSurfaces,
+          attentionAreas: args.request.attentionAreas,
+          pets: args.request.pets,
+          homeDuringCleanings: args.request.homeDuringCleanings,
+          scheduleAdjustmentWindows: args.request.scheduleAdjustmentWindows,
+          timingShiftOk: args.request.timingShiftOk,
+          additionalNotes: args.request.additionalNotes,
+        }
+      );
+
+      const quoteRequestId: Id<"quoteRequests"> = await ctx.runMutation(
+        internal.quoteRequests.createQuoteRequest,
+        {
+          organizationId: organization._id,
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+          email: quoteEmail || undefined,
+          phone: quotePhone || undefined,
+          service: args.quote.service,
+          serviceType: args.quote.serviceType,
+          frequency: args.quote.frequency,
+          squareFootage: args.quote.squareFootage,
+          address: args.quote.address,
+          addressLine2: args.quote.addressLine2,
+          postalCode: args.quote.postalCode,
+          city: args.quote.city,
+          state: args.quote.state,
+          additionalNotes: args.quote.additionalNotes,
+          bookingRequestId,
+        }
+      );
+
+      await ctx.runMutation(internal.bookingRequests.linkQuoteRequestToRequest, {
+        requestId: bookingRequestId,
+        quoteRequestId,
+      });
+
+      console.info("[Dashboard Request] createFromDashboard.success", {
+        organizationId: organization._id,
+        mode: args.mode,
+        bookingRequestId,
+        quoteRequestId,
+        reusedQuote: false,
+      });
+
+      return {
+        bookingRequestId,
+        quoteRequestId,
+        reusedQuote: false,
+      };
+    } catch (error) {
+      console.warn("[Dashboard Request] createFromDashboard.error", {
+        organizationId: organization._id,
+        mode: args.mode,
+        existingQuoteRequestId: args.existingQuoteRequestId ?? null,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  },
+});
+
 export const getRequestById = internalQuery({
   args: { id: v.id("bookingRequests") },
   handler: async (ctx, args) => {
