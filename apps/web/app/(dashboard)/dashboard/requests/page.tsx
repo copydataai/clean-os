@@ -8,6 +8,7 @@ import RequestCard from "@/components/dashboard/RequestCard";
 import QuickFilters from "@/components/dashboard/QuickFilters";
 import EmptyState from "@/components/dashboard/EmptyState";
 import { Button } from "@/components/ui/button";
+import RequestCreateSheet from "@/components/dashboard/RequestCreateSheet";
 
 type StatusFilter = "all" | "requested" | "confirmed";
 
@@ -45,6 +46,7 @@ export default function RequestsPage() {
         title="Booking Requests"
         subtitle="Review incoming cleaning requests and prepare bookings."
       >
+        <RequestCreateSheet />
         <Button variant="outline" size="sm">
           Export
         </Button>

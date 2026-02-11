@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
@@ -30,7 +30,10 @@ function renderList(items?: string[] | null) {
 
 export default function RequestDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const requestId = params?.id as Id<"bookingRequests"> | undefined;
+  const wasCreated = searchParams.get("created") === "1";
+  const quoteMode = searchParams.get("quote_mode");
   const request = useQuery(
     api.bookingRequests.getById,
     requestId ? { id: requestId } : "skip"
@@ -90,6 +93,13 @@ export default function RequestDetailPage() {
 
   return (
     <div className="space-y-6">
+      {wasCreated ? (
+        <div className="surface-card border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-800">
+          {quoteMode === "reused"
+            ? "Request created and linked to an existing quote request."
+            : "Request created and a new quote request was generated."}
+        </div>
+      ) : null}
       <PageHeader
         title={request.contactDetails ?? "Booking Request"}
         subtitle={`Submitted ${formatDate(request.createdAt)}`}
