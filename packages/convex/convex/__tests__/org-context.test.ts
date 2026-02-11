@@ -80,7 +80,7 @@ describe.sequential("org context helper", () => {
     expect(resolved.user._id).toBe(fixture.userId);
   });
 
-  it("throws when no org claim is set and user has multiple memberships", async () => {
+  it("falls back deterministically when no org claim is set and user has multiple memberships", async () => {
     const t = convexTest(schema, modules);
     const fixture = await seedUserWithOrganizations(t);
 
@@ -88,11 +88,12 @@ describe.sequential("org context helper", () => {
       subject: fixture.userClerkId,
     });
 
-    await expect(
-      authed.run(async (ctx) => {
-        return await requireActiveOrganization(ctx);
-      })
-    ).rejects.toThrow("ORG_CONTEXT_AMBIGUOUS");
+    const resolved = await authed.run(async (ctx) => {
+      return await requireActiveOrganization(ctx);
+    });
+
+    expect(resolved.organization._id).toBe(fixture.alphaOrgId);
+    expect(resolved.membership.organizationId).toBe(fixture.alphaOrgId);
   });
 
   it("falls back to single membership when no org claim is set", async () => {

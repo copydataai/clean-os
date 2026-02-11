@@ -68,9 +68,12 @@ describe.sequential("integrations org context", () => {
       subject: fixture.userClerkId,
     });
 
-    await expect(
-      authedWithoutOrgClaim.query(api.integrations.getTallyIntegrationStatus, {}),
-    ).rejects.toThrow("ORG_CONTEXT_AMBIGUOUS");
+    const fallbackStatus = await authedWithoutOrgClaim.query(
+      api.integrations.getTallyIntegrationStatus,
+      {},
+    );
+    expect(fallbackStatus.orgHandle).toBe("org-a");
+    expect(fallbackStatus.status).toBe("incomplete");
 
     const scopedStatus = await authedWithoutOrgClaim.query(
       api.integrations.getTallyIntegrationStatus,

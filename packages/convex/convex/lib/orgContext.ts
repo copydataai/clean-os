@@ -248,12 +248,8 @@ export async function requireActiveOrganization(ctx: any): Promise<ActiveOrganiz
 
   const activeFromIdentity = await resolveActiveOrganizationFromIdentity(ctx, identity);
   if (!activeFromIdentity) {
-    if (memberships.length > 1) {
-      throw new Error(
-        "ORG_CONTEXT_AMBIGUOUS: user belongs to multiple organizations but no orgId claim was provided"
-      );
-    }
-    const fallback = memberships[0];
+    const fallback =
+      memberships.find((membership) => isAdminRole(membership.role)) ?? memberships[0];
     return {
       identity,
       user,
