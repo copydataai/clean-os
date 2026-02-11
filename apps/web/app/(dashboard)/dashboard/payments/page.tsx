@@ -49,6 +49,25 @@ function deriveKeyMode(key?: string | null) {
   return null;
 }
 
+function toConvexSiteBaseUrl(input?: string | null) {
+  const raw = (input ?? "").trim();
+  if (!raw) return "";
+
+  const trimmed = raw.replace(/\/+$/, "");
+  try {
+    const url = new URL(trimmed);
+    if (url.hostname.endsWith(".convex.cloud")) {
+      url.hostname = url.hostname.replace(/\.convex\.cloud$/, ".convex.site");
+    }
+    url.pathname = url.pathname.replace(/\/+$/, "");
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return trimmed;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Micro-components                                                  */
 /* ------------------------------------------------------------------ */
@@ -199,7 +218,8 @@ export default function PaymentsPage() {
 
   const webhookUrl = useMemo(() => {
     if (!configStatus?.orgSlug) return "";
-    const base = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
+    const base = toConvexSiteBaseUrl(process.env.NEXT_PUBLIC_CONVEX_URL);
+    if (!base) return "";
     return `${base}/stripe-webhook?org=${encodeURIComponent(configStatus.orgSlug)}`;
   }, [configStatus?.orgSlug]);
 
