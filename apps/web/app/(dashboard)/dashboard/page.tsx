@@ -13,12 +13,30 @@ function formatCurrency(cents: number): string {
 
 export default function DashboardPage() {
   const currentUser = useQuery(api.queries.getCurrentUser);
-  const stats = useQuery(api.dashboard.getStats);
-  const recentBookings = useQuery(api.dashboard.getRecentBookings, { limit: 5 });
-  const todaysSchedule = useQuery(api.dashboard.getTodaysSchedule);
-  const recentRequests = useQuery(api.bookingRequests.listRecent, { limit: 3 });
+  const shouldFetchDashboardData = currentUser !== undefined && currentUser !== null;
+  const stats = useQuery(api.dashboard.getStats, shouldFetchDashboardData ? {} : "skip");
+  const recentBookings = useQuery(
+    api.dashboard.getRecentBookings,
+    shouldFetchDashboardData ? { limit: 5 } : "skip"
+  );
+  const todaysSchedule = useQuery(
+    api.dashboard.getTodaysSchedule,
+    shouldFetchDashboardData ? {} : "skip"
+  );
+  const recentRequests = useQuery(
+    api.bookingRequests.listRecent,
+    shouldFetchDashboardData ? { limit: 3 } : "skip"
+  );
 
-  if (!currentUser || !stats || !recentBookings || !todaysSchedule || !recentRequests) {
+  const isDashboardLoading =
+    currentUser === undefined ||
+    (shouldFetchDashboardData &&
+      (stats === undefined ||
+        recentBookings === undefined ||
+        todaysSchedule === undefined ||
+        recentRequests === undefined));
+
+  if (isDashboardLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
@@ -26,6 +44,23 @@ export default function DashboardPage() {
           <p className="mt-4 text-sm text-muted-foreground">Loading...</p>
         </div>
       </div>
+    );
+  }
+
+  if (currentUser === null) {
+    return (
+      <Authenticated>
+        <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 p-8 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Account setup required
+          </p>
+          <h2 className="mt-3 text-2xl font-semibold text-foreground">We could not load your profile</h2>
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            Your session is active, but your application user record is missing. Ask an admin to finish
+            account provisioning, then refresh this page.
+          </p>
+        </div>
+      </Authenticated>
     );
   }
 
