@@ -33,12 +33,13 @@ type RequestCardProps = {
 };
 
 function formatDate(timestamp: number) {
-  return new Date(timestamp).toLocaleString();
+  return new Date(timestamp).toLocaleDateString();
 }
 
-function renderTag(label: string) {
-  return <Badge className="bg-muted text-muted-foreground">{label}</Badge>;
-}
+const statusIndicatorColors: Record<string, string> = {
+  requested: "bg-amber-500",
+  confirmed: "bg-blue-500",
+};
 
 export default function RequestCard({ request, confirmationFormUrl, className }: RequestCardProps) {
   const [cardEmailState, setCardEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -49,13 +50,16 @@ export default function RequestCard({ request, confirmationFormUrl, className }:
   const canonicalBookingHandle = request.canonicalBookingHandle ?? null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
+
   const tags = [
     ...(request.accessMethod ?? []).map((value) => `Access: ${value}`),
     ...(request.floorTypes ?? []).map((value) => `Floors: ${value}`),
     ...(request.pets ?? []).map((value) => `Pets: ${value}`),
-  ].slice(0, 4);
+  ].slice(0, 3);
 
-  async function sendCardRequest() {
+  async function sendCardRequest(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!canonicalBookingHandle) {
       setCardEmailState("error");
       setTimeout(() => setCardEmailState("idle"), 2000);
@@ -74,7 +78,9 @@ export default function RequestCard({ request, confirmationFormUrl, className }:
     }
   }
 
-  async function copyConfirmLink() {
+  async function copyConfirmLink(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     if (!canonicalBookingHandle) {
       setConfirmCopyState("error");
       setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -110,77 +116,80 @@ export default function RequestCard({ request, confirmationFormUrl, className }:
     }
   }
 
+  const indicatorColor = statusIndicatorColors[request.status] ?? "bg-gray-400";
+
   return (
-    <div className={cn("surface-card p-5", className)}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-lg font-medium text-foreground">{name}</p>
-          <p className="text-sm text-muted-foreground">{email}</p>
-          <p className="mt-1 text-xs text-muted-foreground">{formatDate(request.createdAt)}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge status={request.status} />
-          {request.bookingId ? (
-            <StatusBadge status={request.bookingStatus ?? "booking_created"} label="booking linked" />
-          ) : null}
-          {request.linkSentAt ? (
-            <Badge className="bg-emerald-100 text-emerald-700">link sent</Badge>
-          ) : null}
-          {request.confirmLinkSentAt ? (
-            <Badge className="bg-sky-100 text-sky-700">confirm link sent</Badge>
-          ) : null}
-        </div>
+    <Link
+      href={`/dashboard/requests/${request._id}`}
+      className={cn(
+        "group flex items-center gap-4 rounded-xl border border-border/50 bg-card px-4 py-3 transition-all hover:border-border hover:bg-muted/30",
+        className,
+      )}
+    >
+      {/* Status indicator dot */}
+      <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", indicatorColor)} />
+
+      {/* Name & email */}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{name}</p>
+        <p className="truncate text-xs text-muted-foreground">{email}</p>
       </div>
 
-      {tags.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {tags.map((tag) => (
-            <span key={tag}>{renderTag(tag)}</span>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs text-muted-foreground">Request ID: {request._id}</p>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="outline" onClick={sendCardRequest} disabled={!canonicalBookingHandle || cardEmailState === "sending"}>
-            {cardEmailState === "sending"
-              ? "Sending..."
-              : cardEmailState === "sent"
-              ? "Email sent"
-              : cardEmailState === "error"
-              ? "Send failed"
-              : "Send card request email"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={copyConfirmLink}
-            disabled={!canonicalBookingHandle || !confirmationFormUrl}
-          >
-            {confirmCopyState === "copied"
-              ? "Copied"
-              : confirmCopyState === "error"
-              ? "Unavailable"
-              : "Copy confirm link"}
-          </Button>
-          <Link
-            href={`/dashboard/requests/${request._id}`}
-            className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-          >
-            View
-          </Link>
-        </div>
-        {!canonicalBookingHandle ? (
-          <p className="text-xs text-amber-700">
-            Link unavailable: missing canonical org slug.
-          </p>
-        ) : !confirmationFormUrl ? (
-          <p className="text-xs text-amber-700">
-            Confirm link unavailable: complete Tally setup in Integrations.
-          </p>
-        ) : null}
+      {/* Tags */}
+      <div className="hidden items-center gap-1.5 lg:flex">
+        {tags.map((tag) => (
+          <Badge key={tag} variant="outline" className="text-[10px] font-normal text-muted-foreground">
+            {tag}
+          </Badge>
+        ))}
       </div>
-    </div>
+
+      {/* Date + tracking */}
+      <div className="hidden text-right sm:block">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Submitted</p>
+        <p className="font-mono text-xs font-medium text-foreground">{formatDate(request.createdAt)}</p>
+      </div>
+
+      {/* Badges */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        <StatusBadge status={request.status} />
+        {request.bookingId && (
+          <Badge variant="outline" className="text-[10px]">Booking</Badge>
+        )}
+        {request.linkSentAt && (
+          <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 text-[10px]">sent</Badge>
+        )}
+        {request.confirmLinkSentAt && (
+          <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400 text-[10px]">confirmed</Badge>
+        )}
+      </div>
+
+      {/* Quick actions */}
+      <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={sendCardRequest}
+          disabled={!canonicalBookingHandle || cardEmailState === "sending"}
+          className="text-[10px]"
+        >
+          {cardEmailState === "sending" ? "..." : cardEmailState === "sent" ? "Sent" : cardEmailState === "error" ? "Err" : "Card"}
+        </Button>
+        <Button
+          size="xs"
+          variant="ghost"
+          onClick={copyConfirmLink}
+          disabled={!canonicalBookingHandle || !confirmationFormUrl}
+          className="text-[10px]"
+        >
+          {confirmCopyState === "copied" ? "OK" : confirmCopyState === "error" ? "Err" : "Link"}
+        </Button>
+      </div>
+
+      {/* Arrow */}
+      <svg className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
   );
 }
