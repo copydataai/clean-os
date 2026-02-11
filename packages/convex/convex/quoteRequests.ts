@@ -137,9 +137,7 @@ export const getById = query({
     if (!quoteRequest) {
       return null;
     }
-    if (quoteRequest.organizationId !== organization._id) {
-      return null;
-    }
+    assertRecordInActiveOrg(quoteRequest.organizationId, organization._id);
     return quoteRequest;
   },
 });

@@ -307,9 +307,7 @@ export const getBooking = query({
     if (!booking) {
       return null;
     }
-    if (booking.organizationId !== organization._id) {
-      return null;
-    }
+    assertRecordInActiveOrg(booking.organizationId, organization._id);
     return booking;
   },
 });
