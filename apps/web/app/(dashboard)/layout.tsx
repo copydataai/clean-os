@@ -5,6 +5,18 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import { useState, useEffect } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Home09Icon,
+  Invoice02Icon,
+  InboxIcon,
+  Calendar03Icon,
+  CalendarCheckIn01Icon,
+  UserGroupIcon,
+  ContactIcon,
+  CreditCardIcon,
+  Settings02Icon,
+} from "@hugeicons/core-free-icons";
 import {
   Sidebar,
   SidebarContent,
@@ -26,19 +38,20 @@ import OrganizationSwitcher from "@/components/dashboard/OrganizationSwitcher";
 type NavItem = {
   label: string;
   href: string;
+  icon: typeof Home09Icon;
   disabled?: boolean;
 };
 
 const navItems: NavItem[] = [
-  { label: "Overview", href: "/dashboard" },
-  { label: "Quotes", href: "/dashboard/quotes" },
-  { label: "Requests", href: "/dashboard/requests" },
-  { label: "Bookings", href: "/dashboard/bookings" },
-  { label: "Schedule", href: "/dashboard/schedule" },
-  { label: "Cleaners", href: "/dashboard/cleaners" },
-  { label: "Customers", href: "/dashboard/customers" },
-  { label: "Payments", href: "/dashboard/payments" },
-  { label: "Settings", href: "/dashboard/settings" },
+  { label: "Overview", href: "/dashboard", icon: Home09Icon },
+  { label: "Quotes", href: "/dashboard/quotes", icon: Invoice02Icon },
+  { label: "Requests", href: "/dashboard/requests", icon: InboxIcon },
+  { label: "Bookings", href: "/dashboard/bookings", icon: CalendarCheckIn01Icon },
+  { label: "Schedule", href: "/dashboard/schedule", icon: Calendar03Icon },
+  { label: "Cleaners", href: "/dashboard/cleaners", icon: UserGroupIcon },
+  { label: "Customers", href: "/dashboard/customers", icon: ContactIcon },
+  { label: "Payments", href: "/dashboard/payments", icon: CreditCardIcon },
+  { label: "Settings", href: "/dashboard/settings", icon: Settings02Icon },
 ];
 
 // Custom error hook for dashboard-specific error handling
@@ -143,7 +156,6 @@ function DashboardError({
 const DESIGN_TOKENS = {
   logo: { size: 'h-9 w-9' },
   userAvatar: { size: 'h-7 w-7' },
-  navIcon: { size: 'h-5 w-5' },
   loadingSpinner: { size: 'h-8 w-8' },
 } as const;
 
@@ -176,17 +188,17 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       <Sidebar
         collapsible="icon"
         variant="inset"
-        className="border-r border-sidebar-border/70"
+        className="border-r border-sidebar-border/70 transition-all duration-300 ease-in-out"
       >
-        <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-3">
+        <SidebarHeader className="border-b border-sidebar-border/80 px-2 py-3 transition-all duration-300 ease-in-out">
           <Link
             href="/dashboard"
-            className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-sidebar-accent/70"
+            className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-all duration-300 ease-in-out hover:bg-sidebar-accent/70"
           >
-            <div className={`flex ${DESIGN_TOKENS.logo.size} items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground`}>
+            <div className={`flex ${DESIGN_TOKENS.logo.size} items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground transition-all duration-300 ease-in-out`}>
               KC
             </div>
-            <div className="flex min-w-0 flex-col">
+            <div className="flex min-w-0 flex-col transition-all duration-300 ease-in-out">
               <span className="truncate text-sm font-semibold text-sidebar-foreground">
                 KathyClean OS
               </span>
@@ -194,7 +206,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
           </Link>
         </SidebarHeader>
 
-        <SidebarContent className="py-3">
+        <SidebarContent className="py-3 transition-all duration-300 ease-in-out">
           <SidebarGroup>
             <SidebarGroupLabel>Organization</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -219,18 +231,15 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                           isActive={isActive}
                           disabled
                           tooltip={item.label}
+                          className="transition-all duration-200 ease-in-out"
                         >
-                          <span className={`flex ${DESIGN_TOKENS.navIcon.size} items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground`}>
-                            {item.label.charAt(0)}
-                          </span>
+                          <HugeiconsIcon icon={item.icon} size={20} className="text-muted-foreground" />
                           <span>{item.label}</span>
                         </SidebarMenuButton>
                       ) : (
-                        <Link href={item.href} className="w-full">
-                          <SidebarMenuButton isActive={isActive} tooltip={item.label}>
-                            <span className={`flex ${DESIGN_TOKENS.navIcon.size} items-center justify-center rounded-md bg-sidebar-accent text-[10px] font-semibold text-sidebar-foreground/80`}>
-                              {item.label.charAt(0)}
-                            </span>
+                        <Link href={item.href} className="w-full transition-all duration-200 ease-in-out">
+                          <SidebarMenuButton isActive={isActive} tooltip={item.label} className="transition-all duration-200 ease-in-out">
+                            <HugeiconsIcon icon={item.icon} size={20} className={isActive ? "text-sidebar-foreground" : "text-sidebar-foreground/60"} />
                             <span>{item.label}</span>
                           </SidebarMenuButton>
                         </Link>
@@ -245,7 +254,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
       </Sidebar>
 
       <SidebarInset className="bg-transparent">
-        <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 px-4 py-3 backdrop-blur md:px-6">
+        <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 px-4 py-3 backdrop-blur md:px-6 transition-all duration-300 ease-in-out">
           <div className="page-width flex items-center justify-between">
             <div className="flex items-center gap-3">
               <SidebarTrigger />
