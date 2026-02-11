@@ -14,6 +14,17 @@ function formatCurrency(amountCents?: number | null): string {
   })}`;
 }
 
+function Row({ label, value, mono }: { label: string; value: string | number; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">{label}</span>
+      <span className={mono ? "font-mono text-xs text-foreground" : "text-sm font-medium text-foreground"}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export default function CustomerPaymentInfo({
   stripeCustomerId,
   totalSpent,
@@ -21,28 +32,13 @@ export default function CustomerPaymentInfo({
 }: CustomerPaymentInfoProps) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Total Spent</span>
-        <span className="text-sm font-medium text-foreground">
-          {formatCurrency(totalSpent)}
-        </span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Total Bookings</span>
-        <span className="text-sm font-medium text-foreground">
-          {totalBookings ?? 0}
-        </span>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">Stripe ID</span>
-        <span className="text-sm font-medium text-foreground">
-          {stripeCustomerId ? (
-            <span className="font-mono text-xs">{stripeCustomerId.slice(0, 16)}...</span>
-          ) : (
-            "—"
-          )}
-        </span>
-      </div>
+      <Row label="Total Spent" value={formatCurrency(totalSpent)} />
+      <Row label="Total Bookings" value={totalBookings ?? 0} />
+      <Row
+        label="Stripe ID"
+        value={stripeCustomerId ? `${stripeCustomerId.slice(0, 16)}...` : "---"}
+        mono
+      />
     </div>
   );
 }

@@ -5,13 +5,13 @@ import CustomerForm from "@/components/customers/CustomerForm";
 
 export default function NewCustomerPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader
         title="Add Customer"
         subtitle="Add a new customer to your database."
       />
 
-      <div className="surface-card p-6">
+      <div className="surface-card overflow-hidden rounded-2xl p-6">
         <CustomerForm mode="create" />
       </div>
     </div>

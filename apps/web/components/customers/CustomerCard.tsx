@@ -32,65 +32,62 @@ function formatCurrency(amountCents?: number | null): string {
   })}`;
 }
 
-function formatDate(timestamp?: number | null): string {
-  if (!timestamp) return "—";
-  return new Date(timestamp).toLocaleDateString();
-}
+const avatarColors: Record<string, string> = {
+  lead: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+  active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  inactive: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  churned: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+};
 
 export default function CustomerCard({ customer, className }: CustomerCardProps) {
   const initials = getInitials(customer.firstName, customer.lastName);
   const fullName = `${customer.firstName} ${customer.lastName}`;
+  const colorClass = avatarColors[customer.status] ?? "bg-muted text-muted-foreground";
   const hasCardOnFile = Boolean(customer.stripeCustomerId);
 
   return (
-    <div
+    <Link
+      href={`/dashboard/customers/${customer._id}`}
       className={cn(
-        "surface-card p-5",
-        className
+        "group flex items-center gap-4 rounded-xl border border-border/50 bg-card px-4 py-3 transition-all hover:border-border hover:bg-muted/30",
+        className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-medium text-white">
-            {initials}
-          </div>
-          <div>
-            <p className="text-lg font-medium text-foreground">{fullName}</p>
-            <p className="text-sm text-muted-foreground">{customer.email}</p>
-          </div>
+      {/* Avatar */}
+      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold", colorClass)}>
+        {initials}
+      </div>
+
+      {/* Name & email */}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{fullName}</p>
+        <p className="truncate text-xs text-muted-foreground">{customer.email}</p>
+      </div>
+
+      {/* Metrics strip */}
+      <div className="hidden items-center gap-4 sm:flex">
+        <div className="text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Bookings</p>
+          <p className="font-mono text-xs font-medium text-foreground">{customer.totalBookings ?? 0}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CustomerStatusBadge status={customer.status} />
-          <Badge
-            className={cn(
-              hasCardOnFile
-                ? "bg-green-100 text-green-700"
-                : "bg-zinc-100 text-zinc-700"
-            )}
-          >
-            {hasCardOnFile ? "Card on file" : "No card"}
-          </Badge>
+        <div className="text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Spent</p>
+          <p className="font-mono text-xs font-medium text-foreground">{formatCurrency(customer.totalSpent)}</p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
-        <span>Bookings: {customer.totalBookings ?? 0}</span>
-        <span>Spent: {formatCurrency(customer.totalSpent)}</span>
-        {customer.lastBookingDate ? (
-          <span>Last: {formatDate(customer.lastBookingDate)}</span>
-        ) : null}
-        {customer.phone ? <span>Phone: {customer.phone}</span> : null}
+      {/* Badges */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {hasCardOnFile && (
+          <Badge variant="outline" className="text-[10px]">Card</Badge>
+        )}
+        <CustomerStatusBadge status={customer.status} />
       </div>
 
-      <div className="mt-5 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">ID: {customer._id}</p>
-        <Link
-          href={`/dashboard/customers/${customer._id}`}
-          className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          View
-        </Link>
-      </div>
-    </div>
+      {/* Arrow */}
+      <svg className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
   );
 }

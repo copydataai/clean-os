@@ -40,13 +40,13 @@ export default function CustomerQuoteHistory({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {displayQuotes.map((quote) => (
         <div
           key={quote._id}
-          className="flex items-center justify-between rounded-lg border border-border bg-background p-3"
+          className="flex items-center justify-between rounded-lg border border-border/50 bg-card px-4 py-2.5"
         >
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
                 {quote.serviceType ?? "Cleaning"}{" "}
@@ -63,13 +63,13 @@ export default function CustomerQuoteHistory({
             </div>
             <p className="text-xs text-muted-foreground">
               {formatDate(quote.createdAt)}
-              {quote.squareFootage ? ` • ${quote.squareFootage} sq ft` : ""}
+              {quote.squareFootage ? ` · ${quote.squareFootage} sq ft` : ""}
             </p>
           </div>
         </div>
       ))}
       {limit && quoteRequests.length > limit && (
-        <p className="text-xs text-muted-foreground">
+        <p className="pt-1 text-xs text-muted-foreground">
           + {quoteRequests.length - limit} more quotes
         </p>
       )}
