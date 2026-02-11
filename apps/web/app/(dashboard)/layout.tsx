@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
+import { useState, useEffect } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -40,8 +41,117 @@ const navItems: NavItem[] = [
   { label: "Settings", href: "/dashboard/settings" },
 ];
 
+// Custom error hook for dashboard-specific error handling
+function useDashboardErrorHandler() {
+  const [error, setError] = useState<Error | null>(null);
+  const [errorInfo, setErrorInfo] = useState<string>("");
+
+  const resetError = () => {
+    setError(null);
+    setErrorInfo("");
+  };
+
+  const handleError = (error: Error, context?: string) => {
+    console.error(`Dashboard Error${context ? ` in ${context}` : ""}:`, error);
+    setError(error);
+    setErrorInfo(context || "Unknown context");
+  };
+
+  return { error, errorInfo, handleError, resetError };
+}
+
+// Dashboard-specific error component with contextual actions
+function DashboardError({ 
+  error, 
+  onRetry, 
+  context 
+}: { 
+  error: Error; 
+  onRetry: () => void;
+  context: string;
+}) {
+  const isNetworkError = error.message.includes("network") || error.message.includes("fetch");
+  const isAuthError = error.message.includes("unauthorized") || error.message.includes("authentication");
+
+  return (
+    <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 p-8 text-center">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
+        <svg className="h-6 w-6 text-destructive" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+      </div>
+      
+      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+        Dashboard Error
+      </p>
+      <h2 className="mt-3 text-2xl font-semibold text-foreground">
+        {isNetworkError ? "Connection issue" : isAuthError ? "Authentication required" : "Something went wrong"}
+      </h2>
+      
+      <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+        {isNetworkError 
+          ? "Unable to connect to the dashboard. Please check your internet connection and try again."
+          : isAuthError
+          ? "Your session has expired. Please sign in again to access the dashboard."
+          : error.message || "An unexpected error occurred while loading the dashboard."}
+      </p>
+
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+        <button
+          onClick={onRetry}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          {isNetworkError ? "Try again" : "Reload dashboard"}
+        </button>
+        
+        {isAuthError && (
+          <button
+            onClick={() => window.location.href = "/sign-in"}
+            className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+          >
+            Sign in
+          </button>
+        )}
+        
+        <button
+          onClick={() => window.location.href = "/support"}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-accent transition-colors"
+        >
+          Get help
+        </button>
+      </div>
+
+      {process.env.NODE_ENV === "development" && (
+        <details className="mt-6 text-left">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
+            Error details (development only)
+          </summary>
+          <div className="mt-2 rounded-md bg-muted p-3 text-xs font-mono text-foreground">
+            <div className="font-semibold">Context: {context}</div>
+            <div className="mt-1">{error.message}</div>
+            {error.stack && (
+              <div className="mt-2 whitespace-pre-wrap opacity-70">{error.stack}</div>
+            )}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+// Design tokens for consistent spacing and sizing
+const DESIGN_TOKENS = {
+  logo: { size: 'h-9 w-9' },
+  userAvatar: { size: 'h-7 w-7' },
+  navIcon: { size: 'h-5 w-5' },
+  loadingSpinner: { size: 'h-8 w-8' },
+} as const;
+
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { error, errorInfo, handleError, resetError } = useDashboardErrorHandler();
+  
+  // Safe query wrapper with error handling
   const currentUser = useQuery(api.queries.getCurrentUser);
   const {
     activeOrg,
@@ -50,6 +160,13 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
     isOrgContextReady,
     isResolvingOrgContext,
   } = useActiveOrganization();
+
+  // Handle query errors
+  useEffect(() => {
+    if (currentUser === null) {
+      handleError(new Error("Failed to load user data"), "User Query");
+    }
+  }, [currentUser, handleError]);
 
   const userInitial =
     currentUser?.firstName?.[0] ?? currentUser?.email?.[0] ?? "C";
@@ -66,7 +183,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             href="/dashboard"
             className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-sidebar-accent/70"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
+            <div className={`flex ${DESIGN_TOKENS.logo.size} items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground`}>
               KC
             </div>
             <div className="flex min-w-0 flex-col">
@@ -103,7 +220,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                           disabled
                           tooltip={item.label}
                         >
-                          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground">
+                          <span className={`flex ${DESIGN_TOKENS.navIcon.size} items-center justify-center rounded-md bg-muted text-[10px] font-semibold text-muted-foreground`}>
                             {item.label.charAt(0)}
                           </span>
                           <span>{item.label}</span>
@@ -111,7 +228,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                       ) : (
                         <Link href={item.href} className="w-full">
                           <SidebarMenuButton isActive={isActive} tooltip={item.label}>
-                            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-sidebar-accent text-[10px] font-semibold text-sidebar-foreground/80">
+                            <span className={`flex ${DESIGN_TOKENS.navIcon.size} items-center justify-center rounded-md bg-sidebar-accent text-[10px] font-semibold text-sidebar-foreground/80`}>
                               {item.label.charAt(0)}
                             </span>
                             <span>{item.label}</span>
@@ -143,7 +260,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 sm:flex">
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+              <div className={`flex ${DESIGN_TOKENS.userAvatar.size} items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground`}>
                 {userInitial.toUpperCase()}
               </div>
               <span className="max-w-[180px] truncate text-xs text-muted-foreground">
@@ -155,7 +272,15 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
 
         <div className="min-h-[calc(100vh-72px)] px-4 py-6 sm:px-6 sm:py-8">
           <div className="page-width">
-            {hasNoOrganizations ? (
+            {error ? (
+              <DashboardError 
+                error={error} 
+                onRetry={resetError}
+                context={errorInfo}
+              />
+            ) : (
+              <>
+                {hasNoOrganizations ? (
               <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 p-8 text-center">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   Organization access required
@@ -168,7 +293,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
               </div>
             ) : !isOrgContextReady ? (
               <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 p-8 text-center">
-                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <div className={`mx-auto ${DESIGN_TOKENS.loadingSpinner.size} animate-spin rounded-full border-2 border-primary border-t-transparent`} />
                 <h2 className="mt-4 text-2xl font-semibold text-foreground">
                   Preparing organization context
                 </h2>
@@ -178,8 +303,10 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                     : "Finalizing dashboard workspace access."}
                 </p>
               </div>
-            ) : (
-              children
+                ) : (
+                  children
+                )}
+              </>
             )}
           </div>
         </div>
