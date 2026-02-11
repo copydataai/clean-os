@@ -45,7 +45,13 @@ const navItems: NavItem[] = [
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const currentUser = useQuery(api.queries.getCurrentUser);
-  const { activeOrg, hasNoOrganizations, isLoading } = useActiveOrganization();
+  const {
+    activeOrg,
+    hasNoOrganizations,
+    isLoading,
+    isOrgContextReady,
+    isResolvingOrgContext,
+  } = useActiveOrganization();
 
   const userInitial =
     currentUser?.firstName?.[0] ?? currentUser?.email?.[0] ?? "C";
@@ -177,6 +183,18 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
                   Your account is signed in, but it is not assigned to an organization yet.
                   Ask your admin to send an invite or create an organization in Clerk.
+                </p>
+              </div>
+            ) : !isOrgContextReady ? (
+              <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-card/80 p-8 text-center">
+                <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <h2 className="mt-4 text-2xl font-semibold text-foreground">
+                  Preparing organization context
+                </h2>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {isResolvingOrgContext
+                    ? "Please wait while we sync your active organization."
+                    : "Finalizing dashboard workspace access."}
                 </p>
               </div>
             ) : (
