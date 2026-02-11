@@ -14,6 +14,7 @@ type StatusFilter = "all" | "requested" | "confirmed";
 
 export default function RequestsPage() {
   const requests = useQuery(api.bookingRequests.listRecent, { limit: 50 });
+  const tallyLinks = useQuery(api.integrations.getTallyFormLinksForActiveOrganization, {});
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [hasBooking, setHasBooking] = useState(false);
   const [hasCard, setHasCard] = useState(false);
@@ -51,6 +52,16 @@ export default function RequestsPage() {
           Export
         </Button>
       </PageHeader>
+
+      {tallyLinks && !tallyLinks.confirmationFormUrl ? (
+        <div className="surface-card border border-amber-200 bg-amber-50/60 p-4 text-sm text-amber-800">
+          Confirmation links are unavailable until Tally confirmation form setup is complete in{" "}
+          <a href="/dashboard/settings/integrations" className="font-medium underline">
+            Integrations
+          </a>
+          .
+        </div>
+      ) : null}
 
       <div className="surface-card p-4">
         <QuickFilters
@@ -111,7 +122,11 @@ export default function RequestsPage() {
       ) : (
         <div className="grid gap-4">
           {filteredRequests.map((request) => (
-            <RequestCard key={request._id} request={request} />
+            <RequestCard
+              key={request._id}
+              request={request}
+              confirmationFormUrl={tallyLinks?.confirmationFormUrl ?? null}
+            />
           ))}
         </div>
       )}

@@ -31,13 +31,13 @@ export function getBookingRequestLink(
 }
 
 export function getConfirmRequestLink(
+  confirmationFormUrl: string | null | undefined,
   requestId: Id<"bookingRequests">,
   canonicalHandle: string
 ): string {
-  const confirmUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL ?? "";
-  if (!confirmUrl || !canonicalHandle?.trim()) {
+  if (!confirmationFormUrl || !canonicalHandle?.trim()) {
     return "";
   }
-  const withRequestId = appendQueryParam(confirmUrl, "request_id", requestId);
+  const withRequestId = appendQueryParam(confirmationFormUrl, "request_id", requestId);
   return appendQueryParam(withRequestId, "org_slug", canonicalHandle);
 }

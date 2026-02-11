@@ -38,6 +38,7 @@ export default function RequestDetailPage() {
     api.bookingRequests.getById,
     requestId ? { id: requestId } : "skip"
   );
+  const tallyLinks = useQuery(api.integrations.getTallyFormLinksForActiveOrganization, {});
   const booking = useQuery(
     api.bookings.getBooking,
     request?.bookingId ? { id: request.bookingId } : "skip"
@@ -211,7 +212,7 @@ export default function RequestDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={emailState === "sending"}
+                disabled={emailState === "sending" || !tallyLinks?.confirmationFormUrl}
                 onClick={async () => {
                   setEmailState("sending");
                   try {
@@ -236,14 +237,18 @@ export default function RequestDetailPage() {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={!canonicalBookingHandle}
+                disabled={!canonicalBookingHandle || !tallyLinks?.confirmationFormUrl}
                 onClick={async () => {
                   if (!canonicalBookingHandle) {
                     setConfirmCopyState("error");
                     setTimeout(() => setConfirmCopyState("idle"), 2000);
                     return;
                   }
-                  const link = getConfirmRequestLink(request._id, canonicalBookingHandle);
+                  const link = getConfirmRequestLink(
+                    tallyLinks?.confirmationFormUrl ?? null,
+                    request._id,
+                    canonicalBookingHandle
+                  );
                   if (!link) {
                     setConfirmCopyState("error");
                     setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -276,7 +281,7 @@ export default function RequestDetailPage() {
                 {confirmCopyState === "copied"
                   ? "Copied"
                   : confirmCopyState === "error"
-                  ? "Missing confirm URL"
+                  ? "Unavailable"
                   : "Copy confirm link"}
               </Button>
               {request.bookingId ? (
@@ -313,6 +318,10 @@ export default function RequestDetailPage() {
               {!canonicalBookingHandle ? (
                 <p className="text-xs text-amber-700">
                   Link unavailable: missing canonical org slug.
+                </p>
+              ) : !tallyLinks?.confirmationFormUrl ? (
+                <p className="text-xs text-amber-700">
+                  Confirm actions unavailable: complete Tally setup in Integrations.
                 </p>
               ) : null}
             </div>

@@ -27,6 +27,10 @@ export default function DashboardPage() {
     api.bookingRequests.listRecent,
     shouldFetchDashboardData ? { limit: 3 } : "skip"
   );
+  const tallyLinks = useQuery(
+    api.integrations.getTallyFormLinksForActiveOrganization,
+    shouldFetchDashboardData ? {} : "skip"
+  );
 
   const isDashboardLoading =
     currentUser === undefined ||
@@ -113,7 +117,11 @@ export default function DashboardPage() {
                   <p className="text-sm text-muted-foreground">No recent requests</p>
                 ) : (
                   recentRequests?.map((request) => (
-                    <RequestCard key={request._id} request={request} />
+                    <RequestCard
+                      key={request._id}
+                      request={request}
+                      confirmationFormUrl={tallyLinks?.confirmationFormUrl ?? null}
+                    />
                   ))
                 )}
               </div>

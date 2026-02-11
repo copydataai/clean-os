@@ -28,6 +28,7 @@ type RequestCardProps = {
     linkSentAt?: number | null;
     confirmLinkSentAt?: number | null;
   };
+  confirmationFormUrl?: string | null;
   className?: string;
 };
 
@@ -39,7 +40,7 @@ function renderTag(label: string) {
   return <Badge className="bg-muted text-muted-foreground">{label}</Badge>;
 }
 
-export default function RequestCard({ request, className }: RequestCardProps) {
+export default function RequestCard({ request, confirmationFormUrl, className }: RequestCardProps) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
@@ -90,7 +91,7 @@ export default function RequestCard({ request, className }: RequestCardProps) {
       setTimeout(() => setConfirmCopyState("idle"), 2000);
       return;
     }
-    const link = getConfirmRequestLink(request._id, canonicalBookingHandle);
+    const link = getConfirmRequestLink(confirmationFormUrl, request._id, canonicalBookingHandle);
     if (!link) {
       setConfirmCopyState("error");
       setTimeout(() => setConfirmCopyState("idle"), 2000);
@@ -160,11 +161,16 @@ export default function RequestCard({ request, className }: RequestCardProps) {
               ? "Copy failed"
               : "Copy booking link"}
           </Button>
-          <Button size="sm" variant="outline" onClick={copyConfirmLink} disabled={!canonicalBookingHandle}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={copyConfirmLink}
+            disabled={!canonicalBookingHandle || !confirmationFormUrl}
+          >
             {confirmCopyState === "copied"
               ? "Copied"
               : confirmCopyState === "error"
-              ? "Missing confirm URL"
+              ? "Unavailable"
               : "Copy confirm link"}
           </Button>
           <Link
@@ -177,6 +183,10 @@ export default function RequestCard({ request, className }: RequestCardProps) {
         {!canonicalBookingHandle ? (
           <p className="text-xs text-amber-700">
             Link unavailable: missing canonical org slug.
+          </p>
+        ) : !confirmationFormUrl ? (
+          <p className="text-xs text-amber-700">
+            Confirm link unavailable: complete Tally setup in Integrations.
           </p>
         ) : null}
       </div>

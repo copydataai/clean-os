@@ -3,14 +3,21 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@clean-os/convex/api";
 
 function BookCancelPageContent() {
   const searchParams = useSearchParams();
   const bookingId = searchParams.get("booking_id");
   const setupIntentId = searchParams.get("setup_intent");
   const setupIntentClientSecret = searchParams.get("setup_intent_client_secret");
+  const orgHandle = searchParams.get("org");
   const possibleFailure = Boolean(setupIntentId || setupIntentClientSecret);
-  const tallyUrl = process.env.NEXT_PUBLIC_TALLY_REQUEST_URL ?? "/";
+  const tallyLinks = useQuery(
+    api.integrations.getTallyFormLinksByOrgHandlePublic,
+    orgHandle ? { handle: orgHandle } : "skip"
+  );
+  const tallyUrl = tallyLinks?.requestFormUrl ?? null;
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8">
@@ -50,12 +57,18 @@ function BookCancelPageContent() {
         )}
 
         <div className="mt-8 flex flex-col gap-3">
-          <a
-            href={tallyUrl}
-            className="inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
-          >
-            Resume booking
-          </a>
+          {tallyUrl ? (
+            <a
+              href={tallyUrl}
+              className="inline-block rounded-full bg-primary px-8 py-3 text-sm font-medium text-white hover:bg-primary/90"
+            >
+              Resume booking
+            </a>
+          ) : (
+            <div className="rounded-full border border-amber-300 bg-amber-50 px-8 py-3 text-sm font-medium text-amber-800">
+              Resume booking is unavailable until Tally request form setup is complete.
+            </div>
+          )}
           <Link
             href="/"
             className="inline-block rounded-full border border-border px-8 py-3 text-sm font-medium text-muted-foreground hover:bg-muted"

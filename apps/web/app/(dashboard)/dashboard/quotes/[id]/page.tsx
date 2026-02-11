@@ -66,6 +66,7 @@ export default function QuoteDetailPage() {
     api.quotes.getQuoteReminderTimeline,
     quoteRequestId ? { quoteRequestId } : "skip"
   );
+  const tallyLinks = useQuery(api.integrations.getTallyFormLinksForActiveOrganization, {});
 
   const [ensureState, setEnsureState] = useState<"idle" | "creating">("idle");
   const [submitState, setSubmitState] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -134,7 +135,7 @@ export default function QuoteDetailPage() {
     selectedRevision?._id ? { revisionId: selectedRevision._id } : "skip"
   );
   const bookingRequestId = detail?.quote?.bookingRequestId ?? detail?.quoteRequest?.bookingRequestId;
-  const confirmBaseUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL?.trim() ?? "";
+  const confirmBaseUrl = tallyLinks?.confirmationFormUrl?.trim() ?? "";
   const confirmUrl = useMemo(() => {
     if (!confirmBaseUrl || !bookingRequestId) return null;
     try {
@@ -428,6 +429,11 @@ export default function QuoteDetailPage() {
 
           <div className="surface-card p-6">
             <h2 className="text-lg font-semibold text-foreground">Quick Follow-up Actions</h2>
+            {!tallyLinks?.confirmationFormUrl ? (
+              <p className="mt-2 text-xs text-amber-700">
+                Confirm link actions are unavailable until Tally setup is complete in Integrations.
+              </p>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 size="sm"
