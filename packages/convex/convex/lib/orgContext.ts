@@ -1,10 +1,6 @@
 import type { Doc, Id } from "../_generated/dataModel";
+import type { UserIdentity } from "convex/server";
 import { api } from "../_generated/api";
-
-type Identity = {
-  subject: string;
-  [key: string]: unknown;
-};
 
 type MembershipWithOrganization = Doc<"organizationMemberships"> & {
   organization: Doc<"organizations">;
@@ -20,11 +16,11 @@ type AuthenticatedUser = Doc<"users"> | {
   imageUrl?: string;
 };
 type AuthenticatedUserResult = {
-  identity: Identity;
+  identity: UserIdentity;
   user: AuthenticatedUser;
 };
 type ActiveOrganizationResult = {
-  identity: Identity;
+  identity: UserIdentity;
   user: AuthenticatedUser;
   organization: Doc<"organizations">;
   membership: MembershipWithOrganization;
@@ -54,16 +50,16 @@ export function isAdminRole(role?: string | null): boolean {
   );
 }
 
-export async function requireIdentity(ctx: any): Promise<Identity> {
+export async function requireIdentity(ctx: any): Promise<UserIdentity> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
     throw new Error("AUTH_REQUIRED");
   }
-  return identity as Identity;
+  return identity as UserIdentity;
 }
 
 export async function requireAuthenticatedUser(ctx: any): Promise<AuthenticatedUserResult> {
-  const identity = (await ctx.auth.getUserIdentity()) as Identity | null;
+  const identity = (await ctx.auth.getUserIdentity()) as UserIdentity | null;
   if (!identity) {
     if (!isTestEnvironment) {
       throw new Error("AUTH_REQUIRED");
@@ -72,13 +68,13 @@ export async function requireAuthenticatedUser(ctx: any): Promise<AuthenticatedU
     const fallbackUser = await ctx.db.query("users").first();
     if (fallbackUser) {
       return {
-        identity: ({ subject: fallbackUser.clerkId } as Identity),
+        identity: ({ subject: fallbackUser.clerkId } as UserIdentity),
         user: fallbackUser,
       };
     }
 
     return {
-      identity: ({ subject: "test-user" } as Identity),
+      identity: ({ subject: "test-user" } as UserIdentity),
       user: {
         _id: "test-user" as Id<"users">,
         clerkId: "test-user",
@@ -199,9 +195,9 @@ export async function getUserMemberships(
 
 export async function resolveActiveOrganizationFromIdentity(
   ctx: any,
-  identityInput?: Identity | null
+  identityInput?: UserIdentity | null
 ): Promise<Doc<"organizations"> | null> {
-  const identity = identityInput ?? ((await ctx.auth.getUserIdentity()) as Identity | null);
+  const identity = identityInput ?? ((await ctx.auth.getUserIdentity()) as UserIdentity | null);
   if (!identity) {
     return null;
   }
@@ -212,8 +208,8 @@ export async function resolveActiveOrganizationFromIdentity(
   }
 
   const orgClerkId =
-    normalizeOrgClaim((identity as Record<string, unknown>).orgId) ??
-    normalizeOrgClaim((identity as Record<string, unknown>).org_id);
+    normalizeOrgClaim(identity.orgId) ??
+    normalizeOrgClaim(identity.org_id);
 
   if (!orgClerkId) {
     return null;
@@ -265,7 +261,6 @@ export async function requireActiveOrganization(ctx: any): Promise<ActiveOrganiz
   const membership = memberships.find(
     (item) => item.organizationId === activeFromIdentity._id
   );
-
   if (!membership) {
     throw new Error("ORG_UNAUTHORIZED");
   }
