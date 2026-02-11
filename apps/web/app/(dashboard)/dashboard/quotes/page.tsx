@@ -90,7 +90,7 @@ export default function QuotesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Quote Requests"
-        subtitle="Incoming quote requests from the PdOzde form."
+        subtitle="Incoming quote requests from your configured Tally request form."
       >
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/dashboard/quotes/pricing">
