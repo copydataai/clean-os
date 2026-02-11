@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from "react";
 
+/**
+ * Mobile breakpoint in pixels.
+ * Screens smaller than this width are considered mobile.
+ * 768px corresponds to the `md` breakpoint in Tailwind CSS.
+ */
 const MOBILE_BREAKPOINT = 768;
 
 export function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean | undefined>(undefined);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
@@ -13,13 +18,8 @@ export function useIsMobile() {
     const update = () => setIsMobile(mediaQuery.matches);
     update();
 
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", update);
-      return () => mediaQuery.removeEventListener("change", update);
-    }
-
-    mediaQuery.addListener(update);
-    return () => mediaQuery.removeListener(update);
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
   }, []);
 
   return isMobile;
