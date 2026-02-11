@@ -132,7 +132,6 @@ export const sendDueQuoteReminders = internalAction({
   }> => {
     const nowMs = args.nowMs ?? Date.now();
     const dryRun = args.dryRun ?? false;
-    const confirmBaseUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL?.trim() ?? "";
 
     const sentQuotes: Array<any> = await ctx.runQuery(
       internal.quotes.listSentQuotesForReminderSweep,
@@ -208,9 +207,15 @@ export const sendDueQuoteReminders = internalAction({
         continue;
       }
 
+      const formLinks = quote.organizationId
+        ? await ctx.runQuery(internal.integrations.getTallyFormLinksByOrganizationIdInternal, {
+            organizationId: quote.organizationId,
+          })
+        : null;
+      const confirmBaseUrl = formLinks?.confirmationFormUrl ?? "";
       const missingContext: string[] = [];
       if (!confirmBaseUrl) {
-        missingContext.push("confirm_base_url");
+        missingContext.push("confirmation_form_url");
       }
       if (!quote.bookingRequestId) {
         missingContext.push("booking_request_id");
@@ -245,7 +250,14 @@ export const sendDueQuoteReminders = internalAction({
         continue;
       }
 
-      const confirmUrl = buildConfirmUrl(confirmBaseUrl, quote.bookingRequestId);
+      const confirmUrlObj = new URL(buildConfirmUrl(confirmBaseUrl, quote.bookingRequestId));
+      const canonicalRoute = await ctx.runQuery(internal.bookingRequests.resolveCanonicalBookingRouteInternal, {
+        requestId: quote.bookingRequestId,
+      });
+      if (canonicalRoute?.handle) {
+        confirmUrlObj.searchParams.set("org_slug", canonicalRoute.handle);
+      }
+      const confirmUrl = confirmUrlObj.toString();
 
       try {
         const sendResult = await ctx.runAction(internal.emailRenderers.sendQuoteReminderEmail, {
@@ -359,13 +371,18 @@ export const sendManualReminderInternal = internalAction({
         ? data.revisions.find((entry: any) => entry._id === quote.latestSentRevisionId)
         : null) ?? data.currentRevision;
 
-    const confirmBaseUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL?.trim() ?? "";
     const bookingRequestId = quote.bookingRequestId ?? quoteRequest.bookingRequestId;
     const idempotencyKey = `quote-reminder:${quote._id}:${quote.latestSentRevisionId ?? "missing"}:manual:${manualHourBucket(nowMs)}`;
+    const formLinks = quote.organizationId
+      ? await ctx.runQuery(internal.integrations.getTallyFormLinksByOrganizationIdInternal, {
+          organizationId: quote.organizationId,
+        })
+      : null;
+    const confirmBaseUrl = formLinks?.confirmationFormUrl ?? "";
 
     const missingContext: string[] = [];
     if (!confirmBaseUrl) {
-      missingContext.push("confirm_base_url");
+      missingContext.push("confirmation_form_url");
     }
     if (!bookingRequestId) {
       missingContext.push("booking_request_id");
@@ -391,7 +408,14 @@ export const sendManualReminderInternal = internalAction({
       throw new Error(`Manual reminder blocked: missing ${missingContext.join(", ")}`);
     }
 
-    const confirmUrl = buildConfirmUrl(confirmBaseUrl, bookingRequestId);
+    const confirmUrlObj = new URL(buildConfirmUrl(confirmBaseUrl, bookingRequestId));
+    const canonicalRoute = await ctx.runQuery(internal.bookingRequests.resolveCanonicalBookingRouteInternal, {
+      requestId: bookingRequestId,
+    });
+    if (canonicalRoute?.handle) {
+      confirmUrlObj.searchParams.set("org_slug", canonicalRoute.handle);
+    }
+    const confirmUrl = confirmUrlObj.toString();
 
     try {
       const sendResult = await ctx.runAction(internal.emailRenderers.sendQuoteReminderEmail, {

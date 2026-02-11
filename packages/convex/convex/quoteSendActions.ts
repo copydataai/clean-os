@@ -77,16 +77,24 @@ async function sendRevisionInternal(
   const storageId = await ctx.storage.store(new Blob([pdfBytes], { type: "application/pdf" }));
   const downloadUrl = await ctx.storage.getUrl(storageId);
 
-  const confirmBaseUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL?.trim();
-  if (!confirmBaseUrl) {
-    throw new Error("Missing NEXT_PUBLIC_TALLY_CONFIRM_URL environment variable");
-  }
-  const confirmUrlObj = new URL(confirmBaseUrl);
   const bookingRequestId = quoteRequest.bookingRequestId ?? quote.bookingRequestId;
   if (!bookingRequestId) {
     throw new Error("Quote request is missing linked booking request id");
   }
+  const formLinks = await ctx.runQuery(internal.integrations.getTallyFormLinksByOrganizationIdInternal, {
+    organizationId: quote.organizationId,
+  });
+  if (!formLinks.confirmationFormUrl) {
+    throw new Error("TALLY_CONFIRMATION_FORM_NOT_CONFIGURED");
+  }
+  const confirmUrlObj = new URL(formLinks.confirmationFormUrl);
   confirmUrlObj.searchParams.set("request_id", bookingRequestId);
+  const canonicalRoute = await ctx.runQuery(internal.bookingRequests.resolveCanonicalBookingRouteInternal, {
+    requestId: bookingRequestId,
+  });
+  if (canonicalRoute?.handle) {
+    confirmUrlObj.searchParams.set("org_slug", canonicalRoute.handle);
+  }
   const confirmUrl = confirmUrlObj.toString();
 
   try {

@@ -30,16 +30,22 @@ export const sendConfirmationEmail = action({
       }
     }
 
-    const confirmBaseUrl = process.env.NEXT_PUBLIC_TALLY_CONFIRM_URL?.trim();
-    if (!confirmBaseUrl) {
-      throw new Error("Missing NEXT_PUBLIC_TALLY_CONFIRM_URL environment variable");
-    }
-    const confirmUrlObj = new URL(confirmBaseUrl);
-    confirmUrlObj.searchParams.set("request_id", requestId);
     const canonicalRoute = await ctx.runQuery(
       internal.bookingRequests.resolveCanonicalBookingRouteInternal,
       { requestId }
     );
+    const organizationId = canonicalRoute?.organizationId ?? request.organizationId;
+    if (!organizationId) {
+      throw new Error("TALLY_CONFIRMATION_FORM_NOT_CONFIGURED");
+    }
+    const formLinks = await ctx.runQuery(internal.integrations.getTallyFormLinksByOrganizationIdInternal, {
+      organizationId,
+    });
+    if (!formLinks.confirmationFormUrl) {
+      throw new Error("TALLY_CONFIRMATION_FORM_NOT_CONFIGURED");
+    }
+    const confirmUrlObj = new URL(formLinks.confirmationFormUrl);
+    confirmUrlObj.searchParams.set("request_id", requestId);
     if (canonicalRoute?.handle) {
       confirmUrlObj.searchParams.set("org_slug", canonicalRoute.handle);
       bookingFlowLog("confirmation_link_org_slug_resolved", {
