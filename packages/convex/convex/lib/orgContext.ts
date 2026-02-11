@@ -3,13 +3,14 @@ import type { UserIdentity } from "convex/server";
 import { ConvexError } from "convex/values";
 import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
+import {
+  compareMemberships,
+  normalizeOrgClaim,
+  type MembershipWithOrganization,
+} from "./orgContextShared";
 
 type DbCtx = QueryCtx | MutationCtx;
 type AnyCtx = DbCtx | ActionCtx;
-
-type MembershipWithOrganization = Doc<"organizationMemberships"> & {
-  organization: Doc<"organizations">;
-};
 
 const ADMIN_ROLES = new Set(["admin", "owner"]);
 const ADMIN_SUFFIXES = [":admin", ":owner"];
@@ -52,14 +53,6 @@ function throwOrgAuthError(code: OrgAuthErrorCode, details?: Record<string, unkn
 
 function hasDatabaseAccess(ctx: AnyCtx): ctx is DbCtx {
   return "db" in ctx && Boolean((ctx as DbCtx).db);
-}
-
-function normalizeOrgClaim(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }
 
 async function resolveActionOrgContext(ctx: ActionCtx): Promise<ActionOrgContextSnapshot> {
@@ -106,16 +99,6 @@ export async function requireAuthenticatedUser(ctx: AnyCtx): Promise<Authenticat
   }
 
   return { identity, user };
-}
-
-function compareMemberships(
-  left: MembershipWithOrganization,
-  right: MembershipWithOrganization
-): number {
-  return (
-    left.organization.name.localeCompare(right.organization.name) ||
-    String(left.organization._id).localeCompare(String(right.organization._id))
-  );
 }
 
 export async function getUserMemberships(

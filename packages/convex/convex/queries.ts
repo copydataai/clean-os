@@ -1,33 +1,15 @@
 import { internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
 import {
   getUserMemberships,
   requireActiveOrganization,
   requireAuthenticatedUser,
 } from "./lib/orgContext";
-
-type MembershipWithOrganization = Doc<"organizationMemberships"> & {
-  organization: Doc<"organizations">;
-};
-
-function normalizeOrgClaim(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function compareMemberships(
-  left: MembershipWithOrganization,
-  right: MembershipWithOrganization
-): number {
-  return (
-    left.organization.name.localeCompare(right.organization.name) ||
-    String(left.organization._id).localeCompare(String(right.organization._id))
-  );
-}
+import {
+  compareMemberships,
+  normalizeOrgClaim,
+  type MembershipWithOrganization,
+} from "./lib/orgContextShared";
 
 export const resolveOrgContextForAction = internalQuery({
   args: {},
