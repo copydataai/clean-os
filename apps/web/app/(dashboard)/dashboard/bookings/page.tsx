@@ -12,6 +12,7 @@ import AssignCleanerSheet from "@/components/cleaners/AssignCleanerSheet";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -27,15 +28,15 @@ import { FUNNEL_STAGES, OPERATIONS_STATUSES, type LifecycleRow } from "@/compone
 import { cn } from "@/lib/utils";
 import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 
+/* ─── Constants & Helpers ──────────────────────────────────── */
+
 const FUNNEL_UI_ENABLED = process.env.NEXT_PUBLIC_BOOKING_FUNNEL_UI === "true";
 type RowTypeFilter = "all" | "booking" | "pre_booking";
 type OperationalStatusFilter = "all" | (typeof OPERATIONS_STATUSES)[number];
 type FunnelStageFilter = "all" | (typeof FUNNEL_STAGES)[number];
 
 function formatCurrency(cents?: number | null) {
-  if (!cents) {
-    return "—";
-  }
+  if (!cents) return "---";
   return `$${(cents / 100).toLocaleString()}`;
 }
 
@@ -55,6 +56,20 @@ function isAdminRole(role?: string | null) {
     normalized.includes("admin")
   );
 }
+
+const operationalStatusColors: Record<string, string> = {
+  pending_card: "bg-orange-500",
+  card_saved: "bg-green-500",
+  scheduled: "bg-yellow-500",
+  in_progress: "bg-cyan-500",
+  completed: "bg-green-500",
+  payment_failed: "bg-red-500",
+  charged: "bg-green-500",
+  cancelled: "bg-zinc-400",
+  failed: "bg-red-500",
+};
+
+/* ─── Legacy Booking Card ──────────────────────────────────── */
 
 type LegacyBookingCardProps = {
   booking: {
@@ -76,65 +91,77 @@ function LegacyBookingCard({ booking, isBusy, onMarkCompleted, onCharge }: Legac
     bookingId: booking._id,
   });
 
+  const indicatorColor = operationalStatusColors[booking.status] ?? "bg-gray-400";
+
   return (
-    <div className="surface-card p-6">
+    <div className="space-y-4 rounded-xl border border-border/50 bg-card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-lg font-semibold text-foreground">{booking.customerName ?? booking.email}</p>
-          <p className="text-sm text-muted-foreground">{booking.email}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Booking ID: {booking._id}</p>
-        </div>
         <div className="flex items-center gap-3">
+          <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", indicatorColor)} />
+          <div>
+            <p className="text-sm font-medium text-foreground">{booking.customerName ?? booking.email}</p>
+            <p className="text-xs text-muted-foreground">{booking.email}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <StatusBadge status={booking.status} />
-          <span className="text-sm font-semibold text-foreground">{formatCurrency(booking.amount)}</span>
+          <span className="font-mono text-sm font-semibold text-foreground">{formatCurrency(booking.amount)}</span>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
-        <span>Service date: {booking.serviceDate ?? "TBD"}</span>
-        <span>Service type: {booking.serviceType ?? "Standard"}</span>
+      <div className="flex flex-wrap items-center gap-6 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Date</span>
+          <span className="font-mono text-foreground">{booking.serviceDate ?? "TBD"}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Type</span>
+          <span className="text-foreground">{booking.serviceType ?? "Standard"}</span>
+        </div>
       </div>
 
       {assignments && assignments.length > 0 ? (
-        <div className="mt-4">
-          <p className="mb-2 text-xs uppercase text-muted-foreground">Assigned Cleaners</p>
-          <div className="flex flex-wrap gap-2">
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Assigned Cleaners</p>
+          <div className="flex flex-wrap gap-1.5">
             {assignments.map((assignment) => (
               <div
                 key={assignment._id}
-                className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5"
+                className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1"
               >
                 {assignment.cleaner ? (
                   <>
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-white">
+                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-primary text-[9px] font-medium text-white">
                       {assignment.cleaner.firstName.charAt(0)}
                       {assignment.cleaner.lastName.charAt(0)}
                     </div>
-                    <span className="text-sm text-foreground">
+                    <span className="text-xs text-foreground">
                       {assignment.cleaner.firstName} {assignment.cleaner.lastName}
                     </span>
                   </>
                 ) : assignment.crew ? (
-                  <span className="text-sm text-foreground">{assignment.crew.name}</span>
+                  <span className="text-xs text-foreground">{assignment.crew.name}</span>
                 ) : null}
-                <Badge className="bg-muted text-xs text-muted-foreground">{assignment.role}</Badge>
+                <Badge variant="outline" className="text-[9px]">{assignment.role}</Badge>
               </div>
             ))}
           </div>
         </div>
       ) : null}
 
-      <div className="mt-5 flex flex-wrap gap-2">
+      <Separator />
+
+      <div className="flex flex-wrap gap-1.5">
         <Button
           variant="outline"
-          size="sm"
+          size="xs"
           disabled={isBusy || booking.status !== "in_progress"}
           onClick={onMarkCompleted}
         >
           Mark completed
         </Button>
         <Button
-          size="sm"
+          size="xs"
           disabled={
             isBusy ||
             !booking.amount ||
@@ -150,6 +177,8 @@ function LegacyBookingCard({ booking, isBusy, onMarkCompleted, onCharge }: Legac
   );
 }
 
+/* ─── Legacy Bookings View ─────────────────────────────────── */
+
 function LegacyBookingsView() {
   const bookings = useQuery(api.bookings.listBookings, { limit: 50 });
   const markCompleted = useMutation(api.bookings.markJobCompleted);
@@ -158,8 +187,8 @@ function LegacyBookingsView() {
 
   if (!bookings) {
     return (
-      <div className="surface-card p-8 text-center">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className="flex flex-col items-center justify-center py-16">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         <p className="mt-4 text-sm text-muted-foreground">Loading bookings...</p>
       </div>
     );
@@ -175,7 +204,7 @@ function LegacyBookingsView() {
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="space-y-2">
       {bookings.map((booking) => {
         const isBusy = busyId === booking._id;
         return (
@@ -211,6 +240,8 @@ function LegacyBookingsView() {
   );
 }
 
+/* ─── Checklist Readiness ──────────────────────────────────── */
+
 function BookingChecklistReadiness({
   bookingId,
   operationalStatus,
@@ -241,22 +272,24 @@ function BookingChecklistReadiness({
     activeAssignments.every((assignment) => assignment.status === "completed");
 
   return (
-    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-      <Badge className="bg-muted text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+      <Badge variant="outline" className="text-[10px]">
         Checklist {checklistCompleted}/{checklistTotal}
       </Badge>
-      <Badge className="bg-muted text-muted-foreground">
-        Active assignments {activeAssignments.length}
+      <Badge variant="outline" className="text-[10px]">
+        Active {activeAssignments.length}
       </Badge>
       {operationalStatus === "in_progress" && !checklistComplete ? (
-        <Badge className="bg-rose-100 text-rose-700">Clock-out blocked</Badge>
+        <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400 text-[10px]">Clock-out blocked</Badge>
       ) : null}
       {operationalStatus === "in_progress" && allActiveAssignmentsCompleted ? (
-        <Badge className="bg-emerald-100 text-emerald-700">Ready to auto-complete</Badge>
+        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 text-[10px]">Ready to auto-complete</Badge>
       ) : null}
     </div>
   );
 }
+
+/* ─── Main Page ────────────────────────────────────────────── */
 
 export default function BookingsPage() {
   const { activeOrg } = useActiveOrganization();
@@ -278,9 +311,7 @@ export default function BookingsPage() {
   const overrideBookingStatus = useMutation(api.bookings.adminOverrideBookingStatus);
 
   const [busyRowId, setBusyRowId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
-    null
-  );
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const [detailRow, setDetailRow] = useState<LifecycleRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -329,96 +360,110 @@ export default function BookingsPage() {
     return "Unified operations view for pre-booking funnel and live booking lifecycle.";
   }, []);
 
+  /* ─── Legacy view ─── */
+
   if (!FUNNEL_UI_ENABLED) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-8">
         <PageHeader title="Bookings" subtitle={subtitle} />
-        <LegacyBookingsView />
+        <div className="surface-card overflow-hidden rounded-2xl p-4">
+          <LegacyBookingsView />
+        </div>
       </div>
     );
   }
 
+  /* ─── Funnel view ─── */
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <PageHeader title="Bookings" subtitle={subtitle} />
 
       {feedback ? (
         <div
-          className={
+          className={cn(
+            "overflow-hidden rounded-2xl border p-4 text-sm",
             feedback.type === "success"
-              ? "rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700"
-              : "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-          }
+              ? "border-emerald-200 bg-emerald-50/50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300"
+              : "border-red-200 bg-red-50/50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300"
+          )}
         >
           {feedback.message}
         </div>
       ) : null}
 
-      <div className="surface-card space-y-3 p-4">
-        <div className="grid gap-3 md:grid-cols-5">
-          <Select value={rowType} onValueChange={(value) => value && setRowType(value as RowTypeFilter)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Row type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All row types</SelectItem>
-              <SelectItem value="booking">Bookings</SelectItem>
-              <SelectItem value="pre_booking">Pre-booking</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Filters */}
+      <div className="surface-card overflow-hidden rounded-2xl">
+        <div className="p-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            <Select value={rowType} onValueChange={(value) => value && setRowType(value as RowTypeFilter)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Row type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All row types</SelectItem>
+                <SelectItem value="booking">Bookings</SelectItem>
+                <SelectItem value="pre_booking">Pre-booking</SelectItem>
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={operationalStatus}
-            onValueChange={(value) => value && setOperationalStatus(value as OperationalStatusFilter)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Operational status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All operational statuses</SelectItem>
-              {OPERATIONS_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status === "failed" ? "failed (legacy)" : status.replace(/_/g, " ")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={operationalStatus}
+              onValueChange={(value) => value && setOperationalStatus(value as OperationalStatusFilter)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Operational status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All operational statuses</SelectItem>
+                {OPERATIONS_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status === "failed" ? "failed (legacy)" : status.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select
-            value={funnelStage}
-            onValueChange={(value) => value && setFunnelStage(value as FunnelStageFilter)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Funnel stage" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All funnel stages</SelectItem>
-              {FUNNEL_STAGES.map((stage) => (
-                <SelectItem key={stage} value={stage}>
-                  {stage.replace(/_/g, " ")}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select
+              value={funnelStage}
+              onValueChange={(value) => value && setFunnelStage(value as FunnelStageFilter)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Funnel stage" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All funnel stages</SelectItem>
+                {FUNNEL_STAGES.map((stage) => (
+                  <SelectItem key={stage} value={stage}>
+                    {stage.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Input
-            type="date"
-            value={serviceDate}
-            onChange={(event) => setServiceDate(event.target.value)}
-          />
+            <Input
+              type="date"
+              value={serviceDate}
+              onChange={(event) => setServiceDate(event.target.value)}
+            />
 
-          <Input
-            placeholder="Search name, email, IDs"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
+            <Input
+              placeholder="Search name, email, IDs"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">{rows.length} rows on this page</p>
-          <div className="flex items-center gap-2">
+        <Separator />
+
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono font-medium text-foreground">{rows.length}</span> rows on this page
+          </p>
+          <div className="flex items-center gap-1.5">
             <Button
-              size="sm"
+              size="xs"
               variant="outline"
               disabled={!canGoBack}
               onClick={() => {
@@ -431,10 +476,10 @@ export default function BookingsPage() {
                 });
               }}
             >
-              Previous page
+              Previous
             </Button>
             <Button
-              size="sm"
+              size="xs"
               variant="outline"
               disabled={!nextCursor}
               onClick={() => {
@@ -443,15 +488,16 @@ export default function BookingsPage() {
                 setCursor(nextCursor);
               }}
             >
-              Next page
+              Next
             </Button>
           </div>
         </div>
       </div>
 
+      {/* Rows */}
       {!lifecyclePage ? (
-        <div className="surface-card p-8 text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="flex flex-col items-center justify-center py-16">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           <p className="mt-4 text-sm text-muted-foreground">Loading lifecycle rows...</p>
         </div>
       ) : rows.length === 0 ? (
@@ -460,186 +506,73 @@ export default function BookingsPage() {
           description="Try relaxing filters or clearing search terms."
         />
       ) : (
-        <div className="grid gap-4">
-          {rows.map((row) => {
-            if (row.rowType === "pre_booking") {
+        <div className="surface-card overflow-hidden rounded-2xl p-4">
+          <div className="space-y-2">
+            {rows.map((row) => {
+              if (row.rowType === "pre_booking") {
+                return (
+                  <PreBookingCard
+                    key={`pre:${row.bookingRequestId ?? row.quoteRequestId}`}
+                    row={row}
+                  />
+                );
+              }
+
+              if (!row.bookingId) return null;
+
               return (
-                <div key={`pre:${row.bookingRequestId ?? row.quoteRequestId}`} className="surface-card p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-base font-semibold text-foreground">
-                        {row.customerName ?? row.email ?? "Pre-booking lead"}
-                      </p>
-                      <p className="text-sm text-muted-foreground">{row.email ?? "No email"}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-slate-100 text-slate-700">pre-booking</Badge>
-                      {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                    <span>Request ID: {row.bookingRequestId ?? "—"}</span>
-                    <span>Quote Request ID: {row.quoteRequestId ?? "—"}</span>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {row.bookingRequestId ? (
-                      <Link
-                        href={`/dashboard/requests/${row.bookingRequestId}`}
-                        className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-                      >
-                        Open request
-                      </Link>
-                    ) : null}
-                    {row.quoteRequestId ? (
-                      <Link
-                        href={`/dashboard/quotes/${row.quoteRequestId}`}
-                        className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
-                      >
-                        Open quote request
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            }
-
-            if (!row.bookingId) return null;
-
-            const isBusy = busyRowId === row.bookingId;
-            const canCancel =
-              row.operationalStatus === "pending_card" ||
-              row.operationalStatus === "card_saved" ||
-              row.operationalStatus === "scheduled";
-
-            return (
-              <div key={row.bookingId} className="surface-card p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-base font-semibold text-foreground">
-                      {row.customerName ?? row.email ?? row.bookingId}
-                    </p>
-                    <p className="text-sm text-muted-foreground">{row.email ?? "No email"}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Booking ID: {row.bookingId}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {row.operationalStatus ? <StatusBadge status={row.operationalStatus} /> : null}
-                    {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
-                    <span className="text-sm font-semibold text-foreground">{formatCurrency(row.amount)}</span>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  <span>Service date: {row.serviceDate ?? "TBD"}</span>
-                  <span>Service type: {row.serviceType ?? "Standard"}</span>
-                </div>
-                <BookingChecklistReadiness
-                  bookingId={row.bookingId}
-                  operationalStatus={row.operationalStatus}
-                />
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isBusy || row.operationalStatus !== "in_progress"}
-                    onClick={async () => {
-                      setBusyRowId(row.bookingId);
-                      try {
-                        await markCompleted({ bookingId: row.bookingId! });
-                        setFeedback({ type: "success", message: "Booking marked completed." });
-                      } catch (error) {
-                        setFeedback({ type: "error", message: getErrorMessage(error) });
-                      } finally {
-                        setBusyRowId(null);
-                      }
-                    }}
-                  >
-                    Mark completed
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    disabled={
-                      isBusy ||
-                      !row.amount ||
-                      (row.operationalStatus !== "completed" &&
-                        row.operationalStatus !== "payment_failed")
+                <BookingCard
+                  key={row.bookingId}
+                  row={row}
+                  isBusy={busyRowId === row.bookingId}
+                  isAdmin={isAdmin}
+                  onMarkCompleted={async () => {
+                    setBusyRowId(row.bookingId);
+                    try {
+                      await markCompleted({ bookingId: row.bookingId! });
+                      setFeedback({ type: "success", message: "Booking marked completed." });
+                    } catch (error) {
+                      setFeedback({ type: "error", message: getErrorMessage(error) });
+                    } finally {
+                      setBusyRowId(null);
                     }
-                    onClick={async () => {
-                      if (!row.amount) return;
-                      setBusyRowId(row.bookingId);
-                      try {
-                        await chargeJob({
-                          bookingId: row.bookingId!,
-                          amount: row.amount,
-                          description: row.serviceType ?? "Cleaning service",
-                        });
-                        setFeedback({ type: "success", message: "Charge action submitted." });
-                      } catch (error) {
-                        setFeedback({ type: "error", message: getErrorMessage(error) });
-                      } finally {
-                        setBusyRowId(null);
-                      }
-                    }}
-                  >
-                    Charge now
-                  </Button>
-
-                  <AssignCleanerSheet bookingId={row.bookingId} />
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isBusy || !canCancel}
-                    onClick={() => {
-                      setActionError(null);
-                      setCancelRow(row);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={isBusy || row.operationalStatus === "cancelled"}
-                    onClick={() => {
-                      setActionError(null);
-                      setRescheduleRow(row);
-                    }}
-                  >
-                    Reschedule
-                  </Button>
-
-                  {isAdmin ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setActionError(null);
-                        setOverrideRow(row);
-                      }}
-                    >
-                      Override status
-                    </Button>
-                  ) : null}
-
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setDetailRow(row);
-                      setDetailOpen(true);
-                    }}
-                  >
-                    Details
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
+                  }}
+                  onCharge={async () => {
+                    if (!row.amount) return;
+                    setBusyRowId(row.bookingId);
+                    try {
+                      await chargeJob({
+                        bookingId: row.bookingId!,
+                        amount: row.amount,
+                        description: row.serviceType ?? "Cleaning service",
+                      });
+                      setFeedback({ type: "success", message: "Charge action submitted." });
+                    } catch (error) {
+                      setFeedback({ type: "error", message: getErrorMessage(error) });
+                    } finally {
+                      setBusyRowId(null);
+                    }
+                  }}
+                  onCancel={() => {
+                    setActionError(null);
+                    setCancelRow(row);
+                  }}
+                  onReschedule={() => {
+                    setActionError(null);
+                    setRescheduleRow(row);
+                  }}
+                  onOverride={() => {
+                    setActionError(null);
+                    setOverrideRow(row);
+                  }}
+                  onDetails={() => {
+                    setDetailRow(row);
+                    setDetailOpen(true);
+                  }}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -755,6 +688,170 @@ export default function BookingsPage() {
           }
         }}
       />
+    </div>
+  );
+}
+
+/* ─── Pre-Booking Card ─────────────────────────────────────── */
+
+function PreBookingCard({ row }: { row: LifecycleRow }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border/60 bg-card px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-400" />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {row.customerName ?? row.email ?? "Pre-booking lead"}
+            </p>
+            <p className="text-xs text-muted-foreground">{row.email ?? "No email"}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px]">pre-booking</Badge>
+          {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {row.bookingRequestId ? (
+          <Link
+            href={`/dashboard/requests/${row.bookingRequestId}`}
+            className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
+          >
+            Open request
+          </Link>
+        ) : null}
+        {row.quoteRequestId ? (
+          <Link
+            href={`/dashboard/quotes/${row.quoteRequestId}`}
+            className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
+          >
+            Open quote
+          </Link>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Booking Card ─────────────────────────────────────────── */
+
+function BookingCard({
+  row,
+  isBusy,
+  isAdmin,
+  onMarkCompleted,
+  onCharge,
+  onCancel,
+  onReschedule,
+  onOverride,
+  onDetails,
+}: {
+  row: LifecycleRow;
+  isBusy: boolean;
+  isAdmin: boolean;
+  onMarkCompleted: () => Promise<void>;
+  onCharge: () => Promise<void>;
+  onCancel: () => void;
+  onReschedule: () => void;
+  onOverride: () => void;
+  onDetails: () => void;
+}) {
+  const indicatorColor = operationalStatusColors[row.operationalStatus ?? ""] ?? "bg-gray-400";
+  const canCancel =
+    row.operationalStatus === "pending_card" ||
+    row.operationalStatus === "card_saved" ||
+    row.operationalStatus === "scheduled";
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4">
+      {/* Row 1: Identity + status + amount */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", indicatorColor)} />
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              {row.customerName ?? row.email ?? row.bookingId}
+            </p>
+            <p className="text-xs text-muted-foreground">{row.email ?? "No email"}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {row.operationalStatus ? <StatusBadge status={row.operationalStatus} /> : null}
+          {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
+          <span className="font-mono text-sm font-semibold text-foreground">{formatCurrency(row.amount)}</span>
+        </div>
+      </div>
+
+      {/* Row 2: Metrics strip */}
+      <div className="flex flex-wrap items-center gap-6 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Date</span>
+          <span className="font-mono text-foreground">{row.serviceDate ?? "TBD"}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Type</span>
+          <span className="text-foreground">{row.serviceType ?? "Standard"}</span>
+        </div>
+      </div>
+
+      {/* Row 3: Checklist readiness */}
+      <BookingChecklistReadiness
+        bookingId={row.bookingId!}
+        operationalStatus={row.operationalStatus}
+      />
+
+      <Separator />
+
+      {/* Row 4: Actions */}
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          variant="outline"
+          size="xs"
+          disabled={isBusy || row.operationalStatus !== "in_progress"}
+          onClick={onMarkCompleted}
+        >
+          Mark completed
+        </Button>
+        <Button
+          size="xs"
+          disabled={
+            isBusy ||
+            !row.amount ||
+            (row.operationalStatus !== "completed" &&
+              row.operationalStatus !== "payment_failed")
+          }
+          onClick={onCharge}
+        >
+          Charge now
+        </Button>
+        <AssignCleanerSheet bookingId={row.bookingId!} />
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={isBusy || !canCancel}
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={isBusy || row.operationalStatus === "cancelled"}
+          onClick={onReschedule}
+        >
+          Reschedule
+        </Button>
+        {isAdmin ? (
+          <Button size="xs" variant="outline" onClick={onOverride}>
+            Override
+          </Button>
+        ) : null}
+        <Button size="xs" variant="ghost" onClick={onDetails}>
+          Details
+        </Button>
+      </div>
     </div>
   );
 }
