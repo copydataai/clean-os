@@ -387,6 +387,7 @@ export const listRecent = query({
   handler: async (ctx, args) => {
     const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 20;
+    console.log("organization", organization);
 
     let requests;
     if (args.status) {
@@ -406,6 +407,8 @@ export const listRecent = query({
         .take(limit);
     }
 
+    console.log(requests);
+
     const withBookingStatus = await Promise.all(
       requests.map(async (request) => {
         const canonicalRoute = await resolveCanonicalBookingRoute(ctx, request._id);
@@ -422,6 +425,7 @@ export const listRecent = query({
         };
       })
     );
+    console.log(withBookingStatus);
 
     return withBookingStatus;
   },
