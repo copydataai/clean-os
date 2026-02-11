@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
 import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -17,7 +18,9 @@ import ServiceQualificationsManager from "@/components/cleaners/ServiceQualifica
 import PayRatePanel from "@/components/cleaners/PayRatePanel";
 import RatingsInsightsPanel from "@/components/cleaners/RatingsInsightsPanel";
 import EmptyState from "@/components/dashboard/EmptyState";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -34,41 +37,61 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { computeReadinessInsights } from "@/lib/cleanerInsights";
 
+/* ─── Helpers ───────────────────────────────────────────────── */
+
 function formatDate(timestamp?: number | null) {
-  if (!timestamp) {
-    return "—";
-  }
+  if (!timestamp) return "---";
   return new Date(timestamp).toLocaleDateString();
 }
 
 function formatRating(rating?: number | null): string {
-  if (!rating) return "—";
+  if (!rating) return "---";
   return rating.toFixed(1);
 }
+
+function SectionNumber({ n }: { n: string }) {
+  return (
+    <span className="mr-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted/60 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
+      {n}
+    </span>
+  );
+}
+
+function StatCell({ label, value, mono }: { label: string; value: string | number; mono?: boolean }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+        {label}
+      </span>
+      <span className={cn("text-sm font-medium text-foreground", mono && "font-mono text-xs")}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+const avatarColors: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  onboarding: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  applicant: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+  inactive: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  terminated: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+};
+
+/* ─── Main Page ─────────────────────────────────────────────── */
 
 export default function CleanerDetailPage() {
   const params = useParams();
   const router = useRouter();
   const cleanerId = params?.id as Id<"cleaners"> | undefined;
 
-  const cleaner = useQuery(
-    api.cleaners.getWithDetails,
-    cleanerId ? { cleanerId } : "skip"
-  );
-  const assignments = useQuery(
-    api.cleaners.getAssignments,
-    cleanerId ? { cleanerId } : "skip"
-  );
-  const timeOff = useQuery(
-    api.cleaners.getTimeOffRequests,
-    cleanerId ? { cleanerId } : "skip"
-  );
-  const ratingsSummary = useQuery(
-    api.cleaners.getRatingsSummary,
-    cleanerId ? { cleanerId } : "skip"
-  );
+  const cleaner = useQuery(api.cleaners.getWithDetails, cleanerId ? { cleanerId } : "skip");
+  const assignments = useQuery(api.cleaners.getAssignments, cleanerId ? { cleanerId } : "skip");
+  const timeOff = useQuery(api.cleaners.getTimeOffRequests, cleanerId ? { cleanerId } : "skip");
+  const ratingsSummary = useQuery(api.cleaners.getRatingsSummary, cleanerId ? { cleanerId } : "skip");
   const updateCleaner = useMutation(api.cleaners.update);
   const requestTimeOff = useMutation(api.cleaners.requestTimeOff);
 
@@ -76,14 +99,12 @@ export default function CleanerDetailPage() {
   const [isTimeOffSheetOpen, setIsTimeOffSheetOpen] = useState(false);
   const [isStatusSheetOpen, setIsStatusSheetOpen] = useState(false);
 
-  // Time off form state
   const [timeOffStartDate, setTimeOffStartDate] = useState("");
   const [timeOffEndDate, setTimeOffEndDate] = useState("");
   const [timeOffType, setTimeOffType] = useState("personal");
   const [timeOffReason, setTimeOffReason] = useState("");
   const [isSubmittingTimeOff, setIsSubmittingTimeOff] = useState(false);
 
-  // Status change state
   const [newStatus, setNewStatus] = useState("");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
@@ -114,10 +135,7 @@ export default function CleanerDetailPage() {
     if (!cleanerId || !newStatus) return;
     setIsUpdatingStatus(true);
     try {
-      await updateCleaner({
-        cleanerId,
-        status: newStatus,
-      });
+      await updateCleaner({ cleanerId, status: newStatus });
       setIsStatusSheetOpen(false);
     } catch (err) {
       console.error(err);
@@ -126,30 +144,30 @@ export default function CleanerDetailPage() {
     }
   };
 
+  /* Guards */
+
   if (cleaner === null) {
     return (
       <EmptyState
         title="Cleaner not found"
-        description="We couldn't locate this cleaner."
-        action={
-          <Button onClick={() => router.push("/dashboard/cleaners")}>
-            Back to Cleaners
-          </Button>
-        }
+        description="This cleaner profile could not be located."
+        action={<Button onClick={() => router.push("/dashboard/cleaners")}>Back to Roster</Button>}
       />
     );
   }
 
   if (!cleaner) {
     return (
-      <div className="surface-card p-8 text-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
-        <p className="mt-4 text-sm text-muted-foreground">Loading cleaner...</p>
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="mt-4 text-sm text-muted-foreground">Loading profile...</p>
       </div>
     );
   }
 
   const fullName = `${cleaner.firstName} ${cleaner.lastName}`;
+  const initials = `${cleaner.firstName.charAt(0)}${cleaner.lastName.charAt(0)}`.toUpperCase();
+  const colorClass = avatarColors[cleaner.status] ?? "bg-muted text-muted-foreground";
   const readinessInsights = computeReadinessInsights({
     serviceQualifications: cleaner.serviceTypes ?? [],
     hasActivePayRate: Boolean(cleaner.activePayRate),
@@ -160,200 +178,204 @@ export default function CleanerDetailPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={fullName}
-        subtitle={`Added ${formatDate(cleaner.createdAt)}`}
-      >
-        <CleanerStatusBadge status={cleaner.status} />
+    <div className="space-y-8">
+      {/* Header */}
+      <PageHeader title={fullName} subtitle={`Added ${formatDate(cleaner.createdAt)}`}>
+        <div className="flex items-center gap-2.5">
+          <Link href="/dashboard/cleaners">
+            <Button variant="outline" size="sm">Back to Roster</Button>
+          </Link>
+          <Separator orientation="vertical" className="h-5" />
+          <CleanerStatusBadge status={cleaner.status} />
+        </div>
       </PageHeader>
 
-      <CleanerInsightsHeader insights={readinessInsights} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* LEFT COLUMN */}
-        <div className="space-y-4 lg:col-span-2">
-          {/* Profile Overview */}
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">
-              Profile Overview
-            </h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div className="surface-soft p-4">
-                <p className="text-xs uppercase text-muted-foreground">Email</p>
-                <p className="mt-2 text-sm font-medium text-foreground">
-                  {cleaner.email}
-                </p>
-              </div>
-              <div className="surface-soft p-4">
-                <p className="text-xs uppercase text-muted-foreground">Phone</p>
-                <p className="mt-2 text-sm font-medium text-foreground">
-                  {cleaner.phone ?? "—"}
-                </p>
-              </div>
-              <div className="surface-soft p-4">
-                <p className="text-xs uppercase text-muted-foreground">
-                  Employment Type
-                </p>
-                <p className="mt-2 text-sm font-medium text-foreground">
-                  {cleaner.employmentType}
-                </p>
-              </div>
-              <div className="surface-soft p-4">
-                <p className="text-xs uppercase text-muted-foreground">Start Date</p>
-                <p className="mt-2 text-sm font-medium text-foreground">
-                  {cleaner.startDate ?? "—"}
-                </p>
-              </div>
+      {/* Hero strip: Avatar + metrics + actions */}
+      <div className="surface-card overflow-hidden rounded-2xl">
+        <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-sm font-bold", colorClass)}>
+              {initials}
             </div>
-
-            {cleaner.bio ? (
-              <div className="mt-4">
-                <h3 className="text-sm font-semibold text-foreground">Bio</h3>
-                <p className="mt-2 text-sm text-muted-foreground">{cleaner.bio}</p>
-              </div>
-            ) : null}
-
-            {cleaner.address?.street ||
-            cleaner.address?.city ||
-            cleaner.address?.state ? (
-              <div className="mt-4">
-                <h3 className="text-sm font-semibold text-foreground">Address</h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  {[
-                    cleaner.address?.street,
-                    cleaner.address?.city,
-                    cleaner.address?.state,
-                    cleaner.address?.postalCode,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "—"}
-                </p>
-              </div>
-            ) : null}
-          </div>
-
-          {/* Weekly Availability */}
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">
-              Weekly Availability
-            </h2>
-            <div className="mt-4">
-              <AvailabilityEditor
-                cleanerId={cleaner._id}
-                availability={cleaner.availability ?? []}
-              />
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              <StatCell label="Email" value={cleaner.email} />
+              <StatCell label="Phone" value={cleaner.phone ?? "---"} />
+              <StatCell label="Type" value={cleaner.employmentType} />
+              <StatCell label="Started" value={cleaner.startDate ?? "---"} mono />
             </div>
           </div>
-
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">Skills Management</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Track skill proficiency and update capabilities used for assignment decisions.
-            </p>
-            <div className="mt-4">
-              <SkillsManager cleanerId={cleaner._id} skills={cleaner.skills ?? []} />
-            </div>
-          </div>
-
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">
-              Service Qualifications
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Keep required services qualified to avoid dispatch bottlenecks.
-            </p>
-            <div className="mt-4">
-              <ServiceQualificationsManager
-                cleanerId={cleaner._id}
-                qualifications={cleaner.serviceTypes ?? []}
-              />
-            </div>
-          </div>
-
-          {/* Recent Assignments */}
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">
-              Recent Assignments
-            </h2>
-            <div className="mt-4">
-              <AssignmentList assignments={assignments ?? []} limit={5} />
-            </div>
+          <div className="flex shrink-0 gap-1.5">
+            <Button variant="outline" size="xs" onClick={() => setIsEditSheetOpen(true)}>
+              Edit
+            </Button>
+            <Button variant="outline" size="xs" onClick={() => setIsTimeOffSheetOpen(true)}>
+              Time Off
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={() => { setNewStatus(cleaner.status); setIsStatusSheetOpen(true); }}
+            >
+              Status
+            </Button>
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className="space-y-4">
-          {/* Actions */}
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">Actions</h2>
-            <div className="mt-4 space-y-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => setIsEditSheetOpen(true)}
-              >
-                Edit profile
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => setIsTimeOffSheetOpen(true)}
-              >
-                Request time off
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => {
-                  setNewStatus(cleaner.status);
-                  setIsStatusSheetOpen(true);
-                }}
-              >
-                Change status
-              </Button>
-            </div>
-          </div>
+        <Separator />
 
-          {/* Performance */}
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">Performance</h2>
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Rating</span>
-                <span className="text-sm font-medium text-foreground">
-                  {formatRating(cleaner.averageRating)} ★
-                </span>
+        {/* Performance strip */}
+        <div className="flex flex-wrap items-center gap-6 px-5 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Rating</span>
+            <span className="font-mono text-sm font-semibold text-foreground">
+              {formatRating(cleaner.averageRating)}
+            </span>
+            {cleaner.totalRatingsCount ? (
+              <span className="text-[10px] text-muted-foreground">
+                ({cleaner.totalRatingsCount} reviews)
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Jobs</span>
+            <span className="font-mono text-sm font-semibold text-foreground">
+              {cleaner.totalJobsCompleted ?? 0}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Reliability</span>
+            <span className={cn(
+              "font-mono text-sm font-semibold",
+              (cleaner.reliabilityScore ?? 100) >= 90 ? "text-emerald-600 dark:text-emerald-400"
+                : (cleaner.reliabilityScore ?? 100) >= 70 ? "text-amber-600 dark:text-amber-400"
+                  : "text-red-600 dark:text-red-400",
+            )}>
+              {cleaner.reliabilityScore ?? 100}%
+            </span>
+          </div>
+          {cleaner.bio && (
+            <>
+              <Separator orientation="vertical" className="h-5" />
+              <p className="flex-1 truncate text-xs text-muted-foreground">{cleaner.bio}</p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Readiness insights */}
+      <CleanerInsightsHeader insights={readinessInsights} />
+
+      {/* Content sections */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main column */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* 01 · Profile & Address */}
+          {(cleaner.address?.street || cleaner.address?.city || cleaner.address?.state) && (
+            <section className="surface-card overflow-hidden rounded-2xl">
+              <div className="flex items-start gap-2 p-5">
+                <SectionNumber n="01" />
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Address</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {[cleaner.address?.street, cleaner.address?.city, cleaner.address?.state, cleaner.address?.postalCode]
+                      .filter(Boolean)
+                      .join(", ") || "---"}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Jobs Completed</span>
-                <span className="text-sm font-medium text-foreground">
-                  {cleaner.totalJobsCompleted ?? 0}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Reliability</span>
-                <span className="text-sm font-medium text-foreground">
-                  {cleaner.reliabilityScore ?? 100}%
-                </span>
+            </section>
+          )}
+
+          {/* 02 · Availability */}
+          <section className="surface-card overflow-hidden rounded-2xl">
+            <div className="flex items-start gap-2 p-5">
+              <SectionNumber n="02" />
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Weekly Availability</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Schedule blocks used for assignment matching.
+                </p>
               </div>
             </div>
-          </div>
+            <Separator />
+            <div className="p-5">
+              <AvailabilityEditor cleanerId={cleaner._id} availability={cleaner.availability ?? []} />
+            </div>
+          </section>
 
+          {/* 03 · Skills */}
+          <section className="surface-card overflow-hidden rounded-2xl">
+            <div className="flex items-start gap-2 p-5">
+              <SectionNumber n="03" />
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Skills</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Proficiency tracking for assignment decisions.
+                </p>
+              </div>
+            </div>
+            <Separator />
+            <div className="p-5">
+              <SkillsManager cleanerId={cleaner._id} skills={cleaner.skills ?? []} />
+            </div>
+          </section>
+
+          {/* 04 · Service Qualifications */}
+          <section id="service-qualifications" className="surface-card overflow-hidden rounded-2xl">
+            <div className="flex items-start gap-2 p-5">
+              <SectionNumber n="04" />
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Service Qualifications</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Required services must be qualified to enable dispatch.
+                </p>
+              </div>
+            </div>
+            <Separator />
+            <div className="p-5">
+              <ServiceQualificationsManager cleanerId={cleaner._id} qualifications={cleaner.serviceTypes ?? []} />
+            </div>
+          </section>
+
+          {/* 05 · Recent Assignments */}
+          <section className="surface-card overflow-hidden rounded-2xl">
+            <div className="flex items-start gap-2 p-5">
+              <SectionNumber n="05" />
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Recent Assignments</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Latest booking assignments and outcomes.
+                </p>
+              </div>
+            </div>
+            <Separator />
+            <div className="p-5">
+              <AssignmentList assignments={assignments ?? []} limit={5} />
+            </div>
+          </section>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Pay Rates */}
           <PayRatePanel cleanerId={cleaner._id} />
 
+          {/* Ratings */}
           <RatingsInsightsPanel cleanerId={cleaner._id} />
 
           {/* Time Off */}
-          <div className="surface-card p-6">
-            <h2 className="text-lg font-semibold text-foreground">Time Off</h2>
-            <div className="mt-4">
+          <section className="surface-card overflow-hidden rounded-2xl">
+            <div className="flex items-center justify-between p-5">
+              <h2 className="text-sm font-semibold text-foreground">Time Off</h2>
+              <Button variant="outline" size="xs" onClick={() => setIsTimeOffSheetOpen(true)}>
+                Request
+              </Button>
+            </div>
+            <Separator />
+            <div className="p-5">
               <TimeOffList timeOffRequests={timeOff ?? []} />
             </div>
-          </div>
+          </section>
         </div>
       </div>
 
@@ -362,16 +384,10 @@ export default function CleanerDetailPage() {
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Edit Profile</SheetTitle>
-            <SheetDescription>
-              Update the cleaner's profile information.
-            </SheetDescription>
+            <SheetDescription>Update profile information for {fullName}.</SheetDescription>
           </SheetHeader>
           <div className="mt-6">
-            <CleanerForm
-              mode="edit"
-              initialData={cleaner}
-              onSuccess={() => setIsEditSheetOpen(false)}
-            />
+            <CleanerForm mode="edit" initialData={cleaner} onSuccess={() => setIsEditSheetOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>
@@ -381,37 +397,21 @@ export default function CleanerDetailPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Request Time Off</SheetTitle>
-            <SheetDescription>
-              Submit a time off request for this cleaner.
-            </SheetDescription>
+            <SheetDescription>Submit a time off request for {fullName}.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
-            <div>
-              <label className="text-sm font-medium text-foreground">
-                Start Date
-              </label>
-              <Input
-                type="date"
-                value={timeOffStartDate}
-                onChange={(e) => setTimeOffStartDate(e.target.value)}
-                className="mt-1"
-              />
+            <div className="space-y-1.5">
+              <label htmlFor="to-start" className="text-xs font-medium text-foreground">Start Date</label>
+              <Input id="to-start" type="date" value={timeOffStartDate} onChange={(e) => setTimeOffStartDate(e.target.value)} />
             </div>
-            <div>
-              <label className="text-sm font-medium text-foreground">
-                End Date
-              </label>
-              <Input
-                type="date"
-                value={timeOffEndDate}
-                onChange={(e) => setTimeOffEndDate(e.target.value)}
-                className="mt-1"
-              />
+            <div className="space-y-1.5">
+              <label htmlFor="to-end" className="text-xs font-medium text-foreground">End Date</label>
+              <Input id="to-end" type="date" value={timeOffEndDate} onChange={(e) => setTimeOffEndDate(e.target.value)} />
             </div>
-            <div>
-              <label className="text-sm font-medium text-foreground">Type</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Type</label>
               <Select value={timeOffType} onValueChange={(v) => v && setTimeOffType(v)}>
-                <SelectTrigger className="mt-1 w-full">
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -423,23 +423,22 @@ export default function CleanerDetailPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="text-sm font-medium text-foreground">
-                Reason (optional)
+            <div className="space-y-1.5">
+              <label htmlFor="to-reason" className="text-xs font-medium text-foreground">
+                Reason <span className="text-[10px] text-muted-foreground">(optional)</span>
               </label>
               <Textarea
+                id="to-reason"
                 value={timeOffReason}
                 onChange={(e) => setTimeOffReason(e.target.value)}
-                placeholder="Provide a reason for the time off..."
-                className="mt-1"
+                placeholder="Reason for time off..."
                 rows={3}
               />
             </div>
             <Button
+              size="sm"
               onClick={handleTimeOffSubmit}
-              disabled={
-                isSubmittingTimeOff || !timeOffStartDate || !timeOffEndDate
-              }
+              disabled={isSubmittingTimeOff || !timeOffStartDate || !timeOffEndDate}
               className="w-full"
             >
               {isSubmittingTimeOff ? "Submitting..." : "Submit Request"}
@@ -453,17 +452,13 @@ export default function CleanerDetailPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Change Status</SheetTitle>
-            <SheetDescription>
-              Update the cleaner's employment status.
-            </SheetDescription>
+            <SheetDescription>Update employment status for {fullName}.</SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
-            <div>
-              <label className="text-sm font-medium text-foreground">
-                New Status
-              </label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">New Status</label>
               <Select value={newStatus} onValueChange={(v) => v && setNewStatus(v)}>
-                <SelectTrigger className="mt-1 w-full">
+                <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -476,6 +471,7 @@ export default function CleanerDetailPage() {
               </Select>
             </div>
             <Button
+              size="sm"
               onClick={handleStatusChange}
               disabled={isUpdatingStatus || !newStatus}
               className="w-full"

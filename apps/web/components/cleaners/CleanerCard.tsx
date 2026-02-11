@@ -24,54 +24,64 @@ function getInitials(firstName: string, lastName: string): string {
 }
 
 function formatRating(rating?: number | null): string {
-  if (!rating) return "—";
+  if (!rating) return "---";
   return rating.toFixed(1);
 }
+
+const avatarColors: Record<string, string> = {
+  active: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  onboarding: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+  applicant: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400",
+  inactive: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400",
+  terminated: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400",
+};
 
 export default function CleanerCard({ cleaner, className }: CleanerCardProps) {
   const initials = getInitials(cleaner.firstName, cleaner.lastName);
   const fullName = `${cleaner.firstName} ${cleaner.lastName}`;
+  const colorClass = avatarColors[cleaner.status] ?? "bg-muted text-muted-foreground";
 
   return (
-    <div
+    <Link
+      href={`/dashboard/cleaners/${cleaner._id}`}
       className={cn(
-        "surface-card p-5",
-        className
+        "group flex items-center gap-4 rounded-xl border border-border/50 bg-card px-4 py-3 transition-all hover:border-border hover:bg-muted/30",
+        className,
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-medium text-white">
-            {initials}
-          </div>
-          <div>
-            <p className="text-lg font-medium text-foreground">{fullName}</p>
-            <p className="text-sm text-muted-foreground">{cleaner.email}</p>
-          </div>
+      {/* Avatar */}
+      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs font-semibold", colorClass)}>
+        {initials}
+      </div>
+
+      {/* Name & email */}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{fullName}</p>
+        <p className="truncate text-xs text-muted-foreground">{cleaner.email}</p>
+      </div>
+
+      {/* Metrics strip */}
+      <div className="hidden items-center gap-4 sm:flex">
+        <div className="text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Rating</p>
+          <p className="font-mono text-xs font-medium text-foreground">{formatRating(cleaner.averageRating)}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <CleanerStatusBadge status={cleaner.status} />
-          <Badge className="bg-muted text-muted-foreground">
-            {cleaner.employmentType}
-          </Badge>
+        <div className="text-right">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Jobs</p>
+          <p className="font-mono text-xs font-medium text-foreground">{cleaner.totalJobsCompleted ?? 0}</p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-muted-foreground">
-        <span>Rating: {formatRating(cleaner.averageRating)} ★</span>
-        <span>Jobs: {cleaner.totalJobsCompleted ?? 0}</span>
-        {cleaner.phone ? <span>Phone: {cleaner.phone}</span> : null}
+      {/* Badges */}
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Badge variant="outline" className="text-[10px]">{cleaner.employmentType}</Badge>
+        <CleanerStatusBadge status={cleaner.status} />
       </div>
 
-      <div className="mt-5 flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">ID: {cleaner._id}</p>
-        <Link
-          href={`/dashboard/cleaners/${cleaner._id}`}
-          className="text-sm font-medium text-foreground underline-offset-4 hover:underline"
-        >
-          View
-        </Link>
-      </div>
-    </div>
+      {/* Arrow */}
+      <svg className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
   );
 }
