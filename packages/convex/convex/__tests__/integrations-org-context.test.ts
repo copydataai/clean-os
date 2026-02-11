@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { expectConvexErrorCode } from "./helpers/convexError";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -68,12 +69,13 @@ describe.sequential("integrations org context", () => {
       subject: fixture.userClerkId,
     });
 
-    const fallbackStatus = await authedWithoutOrgClaim.query(
-      api.integrations.getTallyIntegrationStatus,
-      {},
+    await expectConvexErrorCode(
+      authedWithoutOrgClaim.query(
+        api.integrations.getTallyIntegrationStatus,
+        {},
+      ),
+      "ORG_CLAIM_MISSING"
     );
-    expect(fallbackStatus.orgHandle).toBe("org-a");
-    expect(fallbackStatus.status).toBe("incomplete");
 
     const scopedStatus = await authedWithoutOrgClaim.query(
       api.integrations.getTallyIntegrationStatus,

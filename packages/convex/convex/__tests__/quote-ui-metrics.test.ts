@@ -11,6 +11,32 @@ const modules: Record<string, () => Promise<any>> = {
   "../quotes.ts": () => import("../quotes"),
 };
 
+async function createAuthedOrgClient(
+  t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
+  clerkOrgId: string
+) {
+  const clerkUserId = `authed_${Math.random().toString(36).slice(2, 10)}`;
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      clerkId: clerkUserId,
+      email: `${clerkUserId}@example.com`,
+      firstName: "Test",
+      lastName: "Authed",
+    });
+    await ctx.db.insert("organizationMemberships", {
+      clerkId: `membership_${Math.random().toString(36).slice(2, 10)}`,
+      userId,
+      organizationId,
+      role: "owner",
+    });
+  });
+  return t.withIdentity({
+    subject: clerkUserId,
+    orgId: clerkOrgId,
+  });
+}
+
 let quoteNumberCounter = 30000;
 
 async function createRequestAndQuote(
@@ -104,7 +130,8 @@ async function createTimelineFixture(
 describe.sequential("quote UI metrics", () => {
   it("computes 30-day cohort counts and rates", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const nowMs = 1_740_000_000_000;
 
     await createRequestAndQuote(t, organizationId, {
@@ -128,7 +155,7 @@ describe.sequential("quote UI metrics", () => {
     const originalNow = Date.now;
     Date.now = () => nowMs;
     try {
-      const metrics = await t.query(api.quotes.getQuoteFunnelMetrics, { days: 30 });
+      const metrics = await authed.query(api.quotes.getQuoteFunnelMetrics, { days: 30 });
       expect(metrics.requestedCount).toBe(3);
       expect(metrics.quotedCount).toBe(2);
       expect(metrics.confirmedCount).toBe(1);
@@ -141,7 +168,8 @@ describe.sequential("quote UI metrics", () => {
 
   it("computes median cycle durations and returns reminder timeline latest-first", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const nowMs = 1_740_000_000_000;
 
     await createRequestAndQuote(t, organizationId, {
@@ -163,14 +191,14 @@ describe.sequential("quote UI metrics", () => {
     const originalNow = Date.now;
     Date.now = () => nowMs;
     try {
-      const metrics = await t.query(api.quotes.getQuoteFunnelMetrics, { days: 30 });
+      const metrics = await authed.query(api.quotes.getQuoteFunnelMetrics, { days: 30 });
       expect(metrics.medianTimeToQuoteMs).toBe(24 * 60 * 60 * 1000);
       expect(metrics.medianTimeToConfirmMs).toBe(24 * 60 * 60 * 1000);
     } finally {
       Date.now = originalNow;
     }
 
-    const timeline = await t.query(api.quotes.getQuoteReminderTimeline, {
+    const timeline = await authed.query(api.quotes.getQuoteReminderTimeline, {
       quoteRequestId: timelineFixture.quoteRequestId,
     });
     expect(timeline).toHaveLength(2);

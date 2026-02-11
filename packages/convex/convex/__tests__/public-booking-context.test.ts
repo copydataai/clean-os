@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { expectConvexErrorCode } from "./helpers/convexError";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -224,12 +225,13 @@ describe.sequential("public booking context", () => {
       organizationId: orgA,
     });
 
-    await expect(
+    await expectConvexErrorCode(
       t.mutation(api.bookings.createBookingFromRequest, {
         requestId,
         organizationId: orgB,
-      })
-    ).rejects.toThrow("ORG_MISMATCH");
+      }),
+      "ORG_MISMATCH"
+    );
 
     const missingOrgRequestId = await t.run(async (ctx) => {
       return await ctx.db.insert("bookingRequests", {
@@ -241,11 +243,12 @@ describe.sequential("public booking context", () => {
       });
     });
 
-    await expect(
+    await expectConvexErrorCode(
       t.mutation(api.bookings.createBookingFromRequest, {
         requestId: missingOrgRequestId,
         organizationId: orgA,
-      })
-    ).rejects.toThrow("ORG_CONTEXT_REQUIRED");
+      }),
+      "ORG_CONTEXT_REQUIRED"
+    );
   });
 });

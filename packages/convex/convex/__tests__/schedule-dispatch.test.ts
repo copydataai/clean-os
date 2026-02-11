@@ -1,6 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { createTestOrganization } from "./helpers/orgTestUtils";
 
@@ -16,10 +17,37 @@ const modules: Record<string, () => Promise<any>> = {
   "../customers.ts": () => import("../customers"),
 };
 
+async function createAuthedOrgClient(
+  t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
+  clerkOrgId: string
+) {
+  const clerkUserId = `authed_${Math.random().toString(36).slice(2, 10)}`;
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      clerkId: clerkUserId,
+      email: `${clerkUserId}@example.com`,
+      firstName: "Test",
+      lastName: "Authed",
+    });
+    await ctx.db.insert("organizationMemberships", {
+      clerkId: `membership_${Math.random().toString(36).slice(2, 10)}`,
+      userId,
+      organizationId,
+      role: "owner",
+    });
+  });
+  return t.withIdentity({
+    subject: clerkUserId,
+    orgId: clerkOrgId,
+  });
+}
+
 describe.sequential("schedule dispatch query", () => {
   it("returns checklist rollups per booking in dispatch payload", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const now = Date.now();
     const date = "2026-02-13";
 
@@ -79,7 +107,7 @@ describe.sequential("schedule dispatch query", () => {
       }
     );
 
-    const dispatch = await t.query(api.schedule.getDispatchDay, { date });
+    const dispatch = await authed.query(api.schedule.getDispatchDay, { date });
     const bookingWithChecklist = dispatch.bookings.find(
       (booking: any) => booking._id === bookingWithChecklistId
     );

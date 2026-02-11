@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { cn } from "@/lib/utils";
+
+/* ─── Types ─────────────────────────────────────────────────── */
 
 type QuoteProfileFormState = {
   key: string;
@@ -45,6 +49,57 @@ const DEFAULT_FORM: QuoteProfileFormState = {
   quoteValidityDays: "30",
 };
 
+/* ─── Sub-components ────────────────────────────────────────── */
+
+function SectionNumber({ n }: { n: string }) {
+  return (
+    <span className="mr-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted/60 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
+      {n}
+    </span>
+  );
+}
+
+function FieldWrapper({
+  id,
+  label,
+  hint,
+  children,
+  className,
+}: {
+  id: string;
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <div className="flex items-baseline justify-between gap-2">
+        <label htmlFor={id} className="text-xs font-medium text-foreground">
+          {label}
+        </label>
+        {hint && (
+          <span className="text-[10px] text-muted-foreground">{hint}</span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function CompletionDot({ filled }: { filled: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-block h-1 w-1 rounded-full transition-colors",
+        filled ? "bg-emerald-500" : "bg-border",
+      )}
+    />
+  );
+}
+
+/* ─── Main Form ─────────────────────────────────────────────── */
+
 export default function QuoteProfileSettingsForm() {
   const profile = useQuery(api.quoteProfiles.getActiveProfile, {});
   const updateProfile = useMutation(api.quoteProfiles.updateProfile);
@@ -64,9 +119,7 @@ export default function QuoteProfileSettingsForm() {
         console.error(error);
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsBootstrapping(false);
-        }
+        if (!cancelled) setIsBootstrapping(false);
       });
 
     return () => {
@@ -96,204 +149,206 @@ export default function QuoteProfileSettingsForm() {
     });
   }, [profile]);
 
+  const set = (field: keyof QuoteProfileFormState) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+    if (status !== "idle") setStatus("idle");
+  };
+
+  // Identity completion
+  const identityFields = [form.displayName, form.legalName, form.phone, form.email];
+  const identityFilled = identityFields.filter(Boolean).length;
+  const addressFields = [form.addressLine1, form.city, form.state, form.postalCode, form.country];
+  const addressFilled = addressFields.filter(Boolean).length;
+
   if (profile === undefined || (profile === null && isBootstrapping)) {
     return (
-      <div className="surface-card p-8 text-center">
-        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className="flex flex-col items-center justify-center py-20">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         <p className="mt-4 text-sm text-muted-foreground">
-          {profile === null ? "Creating default quote profile..." : "Loading quote profile..."}
+          {profile === null ? "Creating default profile..." : "Loading profile..."}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="surface-card p-6">
-      <div className="grid gap-8">
-        <section className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold text-foreground">Business Identity</h2>
-            <p className="text-sm text-muted-foreground">
-              Information used in quotes and customer-facing communication.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="displayName">Display Name</Label>
-              <Input
-                id="displayName"
-                value={form.displayName}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, displayName: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="legalName">Legal Name</Label>
-              <Input
-                id="legalName"
-                value={form.legalName}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, legalName: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
-              <Input
-                id="phone"
-                value={form.phone}
-                onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                value={form.email}
-                onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="website">Website</Label>
-              <Input
-                id="website"
-                value={form.website}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, website: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="addressLine1">Address Line 1</Label>
-              <Input
-                id="addressLine1"
-                value={form.addressLine1}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, addressLine1: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="addressLine2">Address Line 2</Label>
-              <Input
-                id="addressLine2"
-                value={form.addressLine2}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, addressLine2: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                value={form.city}
-                onChange={(event) => setForm((prev) => ({ ...prev, city: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="state">State</Label>
-              <Input
-                id="state"
-                value={form.state}
-                onChange={(event) => setForm((prev) => ({ ...prev, state: event.target.value }))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="postalCode">Postal Code</Label>
-              <Input
-                id="postalCode"
-                value={form.postalCode}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, postalCode: event.target.value }))
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={form.country}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, country: event.target.value }))
-                }
-              />
-            </div>
-          </div>
-        </section>
+    <div className="space-y-8">
+      {/* Profile identifier strip */}
+      <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card px-4 py-3">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          Profile
+        </span>
+        <Separator orientation="vertical" className="h-4" />
+        <span className="font-mono text-xs text-foreground">{form.key}</span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <CompletionDot filled={identityFilled === identityFields.length} />
+            Identity {identityFilled}/{identityFields.length}
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <CompletionDot filled={addressFilled === addressFields.length} />
+            Address {addressFilled}/{addressFields.length}
+          </span>
+        </div>
+      </div>
 
-        <section className="space-y-4">
+      {/* 01 · Business Identity */}
+      <section className="surface-card overflow-hidden rounded-2xl">
+        <div className="flex items-start gap-2 p-5">
+          <SectionNumber n="01" />
+          <div className="flex-1">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Business Identity</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Company details used in quotes and customer-facing communications.
+                </p>
+              </div>
+              <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+                {identityFilled}/{identityFields.length} fields
+              </Badge>
+            </div>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-5 p-5">
+          {/* Company names */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldWrapper id="displayName" label="Display Name" hint="Shown on quotes">
+              <Input id="displayName" value={form.displayName} onChange={set("displayName")} placeholder="Kathy's Clean" />
+            </FieldWrapper>
+            <FieldWrapper id="legalName" label="Legal Name" hint="For invoices & contracts">
+              <Input id="legalName" value={form.legalName} onChange={set("legalName")} placeholder="Kathy's Clean LLC" />
+            </FieldWrapper>
+          </div>
+
+          {/* Contact */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldWrapper id="phone" label="Phone">
+              <Input id="phone" type="tel" value={form.phone} onChange={set("phone")} placeholder="(303) 555-0123" />
+            </FieldWrapper>
+            <FieldWrapper id="email" label="Email">
+              <Input id="email" type="email" value={form.email} onChange={set("email")} placeholder="hello@kathysclean.com" />
+            </FieldWrapper>
+          </div>
+
+          {/* Website */}
+          <FieldWrapper id="website" label="Website">
+            <Input id="website" type="url" value={form.website} onChange={set("website")} placeholder="https://kathysclean.com" />
+          </FieldWrapper>
+
+          <Separator className="opacity-50" />
+
+          {/* Address */}
           <div>
-            <h2 className="text-base font-semibold text-foreground">Quote Defaults</h2>
-            <p className="text-sm text-muted-foreground">
-              Baseline tax, currency, and validity settings for generated quotes.
+            <div className="mb-3 flex items-center gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                Business Address
+              </h3>
+              <Badge variant="outline" className="font-mono text-[10px] tabular-nums">
+                {addressFilled}/{addressFields.length}
+              </Badge>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FieldWrapper id="addressLine1" label="Street Address">
+                <Input id="addressLine1" value={form.addressLine1} onChange={set("addressLine1")} placeholder="123 Main St" />
+              </FieldWrapper>
+              <FieldWrapper id="addressLine2" label="Unit / Suite" hint="Optional">
+                <Input id="addressLine2" value={form.addressLine2} onChange={set("addressLine2")} placeholder="Suite 100" />
+              </FieldWrapper>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-4">
+              <FieldWrapper id="city" label="City" className="sm:col-span-2">
+                <Input id="city" value={form.city} onChange={set("city")} placeholder="Denver" />
+              </FieldWrapper>
+              <FieldWrapper id="state" label="State">
+                <Input id="state" value={form.state} onChange={set("state")} placeholder="CO" />
+              </FieldWrapper>
+              <FieldWrapper id="postalCode" label="ZIP">
+                <Input id="postalCode" value={form.postalCode} onChange={set("postalCode")} placeholder="80202" className="font-mono" />
+              </FieldWrapper>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-4">
+              <FieldWrapper id="country" label="Country" className="sm:col-span-2">
+                <Input id="country" value={form.country} onChange={set("country")} placeholder="US" />
+              </FieldWrapper>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 02 · Quote Defaults */}
+      <section className="surface-card overflow-hidden rounded-2xl">
+        <div className="flex items-start gap-2 p-5">
+          <SectionNumber n="02" />
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Quote Defaults</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Currency, tax, and validity settings applied to new quotes.
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="defaultCurrency">Default Currency</Label>
+        </div>
+
+        <Separator />
+
+        <div className="p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FieldWrapper id="defaultCurrency" label="Currency" hint="ISO 4217">
               <Input
                 id="defaultCurrency"
                 value={form.defaultCurrency}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, defaultCurrency: event.target.value }))
-                }
+                onChange={set("defaultCurrency")}
+                placeholder="usd"
+                className="font-mono uppercase"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="defaultTaxName">Default Tax Name</Label>
+            </FieldWrapper>
+            <FieldWrapper id="defaultTaxName" label="Tax Jurisdiction">
               <Input
                 id="defaultTaxName"
                 value={form.defaultTaxName}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, defaultTaxName: event.target.value }))
-                }
+                onChange={set("defaultTaxName")}
+                placeholder="Colorado"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="defaultTaxRateBps">Default Tax Rate (bps)</Label>
+            </FieldWrapper>
+            <FieldWrapper id="defaultTaxRateBps" label="Tax Rate" hint="basis points">
               <Input
                 id="defaultTaxRateBps"
                 type="number"
                 min="0"
                 value={form.defaultTaxRateBps}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, defaultTaxRateBps: event.target.value }))
-                }
+                onChange={set("defaultTaxRateBps")}
+                placeholder="0"
+                className="font-mono"
               />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="quoteValidityDays">Quote Validity (days)</Label>
+            </FieldWrapper>
+            <FieldWrapper id="quoteValidityDays" label="Validity Period" hint="days">
               <Input
                 id="quoteValidityDays"
                 type="number"
                 min="1"
                 value={form.quoteValidityDays}
-                onChange={(event) =>
-                  setForm((prev) => ({ ...prev, quoteValidityDays: event.target.value }))
-                }
+                onChange={set("quoteValidityDays")}
+                placeholder="30"
+                className="font-mono"
               />
-            </div>
+            </FieldWrapper>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
-      <div className="mt-6 flex items-center gap-3">
+      {/* Save bar */}
+      <div className="flex items-center gap-3">
         <Button
+          size="sm"
           disabled={isSaving}
           onClick={async () => {
             setIsSaving(true);
             setStatus("idle");
             try {
-              const quoteValidityDays = Math.max(
-                1,
-                Number.parseInt(form.quoteValidityDays || "30", 10)
-              );
-              const defaultTaxRateBps = Math.max(
-                0,
-                Number.parseInt(form.defaultTaxRateBps || "0", 10)
-              );
+              const quoteValidityDays = Math.max(1, Number.parseInt(form.quoteValidityDays || "30", 10));
+              const defaultTaxRateBps = Math.max(0, Number.parseInt(form.defaultTaxRateBps || "0", 10));
 
               await updateProfile({
                 key: form.key,
@@ -324,10 +379,19 @@ export default function QuoteProfileSettingsForm() {
         >
           {isSaving ? "Saving..." : "Save Profile"}
         </Button>
-        {status === "saved" ? <p className="text-sm text-emerald-600">Profile saved.</p> : null}
-        {status === "error" ? (
-          <p className="text-sm text-red-600">Failed to save profile.</p>
-        ) : null}
+
+        {status === "saved" && (
+          <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Profile saved.
+          </span>
+        )}
+        {status === "error" && (
+          <span className="flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500" />
+            Failed to save profile.
+          </span>
+        )}
       </div>
     </div>
   );

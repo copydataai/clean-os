@@ -1,10 +1,108 @@
-import { query } from "./_generated/server";
+import { internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import {
   getUserMemberships,
   requireActiveOrganization,
   requireAuthenticatedUser,
 } from "./lib/orgContext";
+
+type MembershipWithOrganization = Doc<"organizationMemberships"> & {
+  organization: Doc<"organizations">;
+};
+
+function normalizeOrgClaim(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function compareMemberships(
+  left: MembershipWithOrganization,
+  right: MembershipWithOrganization
+): number {
+  return (
+    left.organization.name.localeCompare(right.organization.name) ||
+    String(left.organization._id).localeCompare(String(right.organization._id))
+  );
+}
+
+export const resolveOrgContextForAction = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        user: null,
+        memberships: [] as MembershipWithOrganization[],
+        activeOrganization: null,
+        activeMembership: null,
+      };
+    }
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+
+    if (!user) {
+      return {
+        user: null,
+        memberships: [] as MembershipWithOrganization[],
+        activeOrganization: null,
+        activeMembership: null,
+      };
+    }
+
+    const memberships = await ctx.db
+      .query("organizationMemberships")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    const membershipsWithOrganizations = (
+      await Promise.all(
+        memberships.map(async (membership) => {
+          const organization = await ctx.db.get(membership.organizationId);
+          if (!organization) {
+            return null;
+          }
+          return {
+            ...membership,
+            organization,
+          };
+        })
+      )
+    )
+      .filter((membership): membership is MembershipWithOrganization => Boolean(membership))
+      .sort(compareMemberships);
+
+    const orgClerkId =
+      normalizeOrgClaim(identity.orgId) ??
+      normalizeOrgClaim(identity.org_id);
+
+    const activeOrganization = orgClerkId
+      ? await ctx.db
+          .query("organizations")
+          .withIndex("by_clerk_id", (q) => q.eq("clerkId", orgClerkId))
+          .unique()
+      : null;
+
+    const activeMembership = activeOrganization
+      ? membershipsWithOrganizations.find(
+          (membership) => membership.organizationId === activeOrganization._id
+        ) ?? null
+      : null;
+
+    return {
+      user,
+      memberships: membershipsWithOrganizations,
+      activeOrganization,
+      activeMembership,
+    };
+  },
+});
 
 export const getCurrentUser = query({
   args: {},

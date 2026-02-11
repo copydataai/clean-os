@@ -1,20 +1,29 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { UserIdentity } from "convex/server";
-import { api } from "../_generated/api";
+import { ConvexError } from "convex/values";
+import type { QueryCtx, MutationCtx, ActionCtx } from "../_generated/server";
+import { internal } from "../_generated/api";
+
+type DbCtx = QueryCtx | MutationCtx;
+type AnyCtx = DbCtx | ActionCtx;
 
 type MembershipWithOrganization = Doc<"organizationMemberships"> & {
   organization: Doc<"organizations">;
 };
 
-const isTestEnvironment = process.env.NODE_ENV === "test";
-type AuthenticatedUser = Doc<"users"> | {
-  _id: Id<"users">;
-  clerkId: string;
-  email: string;
-  firstName?: string;
-  lastName?: string;
-  imageUrl?: string;
-};
+const ADMIN_ROLES = new Set(["admin", "owner"]);
+const ADMIN_SUFFIXES = [":admin", ":owner"];
+
+export type OrgAuthErrorCode =
+  | "AUTH_REQUIRED"
+  | "AUTH_USER_NOT_FOUND"
+  | "ORG_MEMBERSHIP_REQUIRED"
+  | "ORG_CLAIM_MISSING"
+  | "ORG_UNAUTHORIZED"
+  | "ORG_CONTEXT_REQUIRED"
+  | "ORG_MISMATCH";
+
+type AuthenticatedUser = Doc<"users">;
 type AuthenticatedUserResult = {
   identity: UserIdentity;
   user: AuthenticatedUser;
@@ -27,8 +36,22 @@ type ActiveOrganizationResult = {
   memberships: MembershipWithOrganization[];
 };
 
-function hasDatabaseAccess(ctx: any): boolean {
-  return Boolean(ctx?.db && typeof ctx.db.query === "function");
+type ActionOrgContextSnapshot = {
+  user: Doc<"users"> | null;
+  memberships: MembershipWithOrganization[];
+  activeOrganization: Doc<"organizations"> | null;
+  activeMembership: MembershipWithOrganization | null;
+};
+
+function throwOrgAuthError(code: OrgAuthErrorCode, details?: Record<string, unknown>): never {
+  throw new ConvexError({
+    code,
+    ...(details ?? {}),
+  });
+}
+
+function hasDatabaseAccess(ctx: AnyCtx): ctx is DbCtx {
+  return "db" in ctx && Boolean((ctx as DbCtx).db);
 }
 
 function normalizeOrgClaim(value: unknown): string | null {
@@ -39,139 +62,81 @@ function normalizeOrgClaim(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+async function resolveActionOrgContext(ctx: ActionCtx): Promise<ActionOrgContextSnapshot> {
+  return (await ctx.runQuery(internal.queries.resolveOrgContextForAction, {})) as ActionOrgContextSnapshot;
+}
+
 export function isAdminRole(role?: string | null): boolean {
   const normalized = (role ?? "").toLowerCase();
   return (
-    normalized === "admin" ||
-    normalized === "owner" ||
-    normalized.endsWith(":admin") ||
-    normalized.endsWith(":owner") ||
-    normalized.includes("admin")
+    ADMIN_ROLES.has(normalized) ||
+    ADMIN_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
   );
 }
 
-export async function requireIdentity(ctx: any): Promise<UserIdentity> {
+export async function requireIdentity(ctx: AnyCtx): Promise<UserIdentity> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
-    throw new Error("AUTH_REQUIRED");
+    throwOrgAuthError("AUTH_REQUIRED");
   }
   return identity as UserIdentity;
 }
 
-export async function requireAuthenticatedUser(ctx: any): Promise<AuthenticatedUserResult> {
+export async function requireAuthenticatedUser(ctx: AnyCtx): Promise<AuthenticatedUserResult> {
   const identity = (await ctx.auth.getUserIdentity()) as UserIdentity | null;
   if (!identity) {
-    if (!isTestEnvironment) {
-      throw new Error("AUTH_REQUIRED");
-    }
-
-    const fallbackUser = await ctx.db.query("users").first();
-    if (fallbackUser) {
-      return {
-        identity: ({ subject: fallbackUser.clerkId } as UserIdentity),
-        user: fallbackUser,
-      };
-    }
-
-    return {
-      identity: ({ subject: "test-user" } as UserIdentity),
-      user: {
-        _id: "test-user" as Id<"users">,
-        clerkId: "test-user",
-        email: "test-user@example.com",
-      },
-    };
+    throwOrgAuthError("AUTH_REQUIRED");
   }
 
   if (!hasDatabaseAccess(ctx)) {
-    const user = (await ctx.runQuery(api.queries.getCurrentUser, {})) as AuthenticatedUser | null;
-    if (user) {
-      return { identity, user };
+    const snapshot = await resolveActionOrgContext(ctx);
+    if (!snapshot.user) {
+      throwOrgAuthError("AUTH_USER_NOT_FOUND");
     }
-
-    if (!isTestEnvironment) {
-      throw new Error("AUTH_USER_NOT_FOUND");
-    }
-
-    return {
-      identity,
-      user: {
-        _id: "test-user" as Id<"users">,
-        clerkId: identity.subject,
-        email: "test-user@example.com",
-      },
-    };
+    return { identity, user: snapshot.user };
   }
 
   const user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .unique();
 
   if (!user) {
-    if (!isTestEnvironment) {
-      throw new Error("AUTH_USER_NOT_FOUND");
-    }
-    return {
-      identity,
-      user: {
-        _id: "test-user" as Id<"users">,
-        clerkId: identity.subject,
-        email: "test-user@example.com",
-      },
-    };
+    throwOrgAuthError("AUTH_USER_NOT_FOUND");
   }
 
   return { identity, user };
 }
 
+function compareMemberships(
+  left: MembershipWithOrganization,
+  right: MembershipWithOrganization
+): number {
+  return (
+    left.organization.name.localeCompare(right.organization.name) ||
+    String(left.organization._id).localeCompare(String(right.organization._id))
+  );
+}
+
 export async function getUserMemberships(
-  ctx: any,
+  ctx: AnyCtx,
   userId: Id<"users">
 ): Promise<MembershipWithOrganization[]> {
   if (!hasDatabaseAccess(ctx)) {
-    const organizations = (await ctx.runQuery(api.queries.getUserOrganizations, {})) as Array<
-      Doc<"organizations"> & { role?: string | null }
-    >;
-
-    const syntheticMemberships: MembershipWithOrganization[] = organizations.map((organization) => {
-      const organizationDoc: Doc<"organizations"> = {
-        _id: organization._id,
-        _creationTime: organization._creationTime,
-        clerkId: organization.clerkId,
-        name: organization.name,
-        slug: organization.slug,
-        imageUrl: organization.imageUrl,
-      };
-
-      return {
-      _creationTime: 0,
-      _id: `action-membership-${String(organization._id)}` as Id<"organizationMemberships">,
-      clerkId: `action-membership-${String(organization._id)}`,
-      userId,
-      organizationId: organization._id,
-      role: organization.role ?? "member",
-      organization: organizationDoc,
-      };
-    });
-
-    return syntheticMemberships.sort((left, right) => {
-      const nameComparison = left.organization.name.localeCompare(right.organization.name);
-      if (nameComparison !== 0) {
-        return nameComparison;
-      }
-      return String(left.organization._id).localeCompare(String(right.organization._id));
-    });
+    const snapshot = await resolveActionOrgContext(ctx);
+    return snapshot.memberships
+      .filter((membership) => membership.userId === userId)
+      .sort(compareMemberships);
   }
 
   const memberships = await ctx.db
     .query("organizationMemberships")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
+    .withIndex("by_user", (q) => q.eq("userId", userId))
     .collect();
 
   const enriched = (
     await Promise.all(
-      memberships.map(async (membership: Doc<"organizationMemberships">) => {
+      memberships.map(async (membership) => {
         const organization = await ctx.db.get(membership.organizationId);
         if (!organization) {
           return null;
@@ -184,17 +149,11 @@ export async function getUserMemberships(
     )
   ).filter((value): value is MembershipWithOrganization => Boolean(value));
 
-  return enriched.sort((left, right) => {
-    const nameComparison = left.organization.name.localeCompare(right.organization.name);
-    if (nameComparison !== 0) {
-      return nameComparison;
-    }
-    return String(left.organization._id).localeCompare(String(right.organization._id));
-  });
+  return enriched.sort(compareMemberships);
 }
 
 export async function resolveActiveOrganizationFromIdentity(
-  ctx: any,
+  ctx: AnyCtx,
   identityInput?: UserIdentity | null
 ): Promise<Doc<"organizations"> | null> {
   const identity = identityInput ?? ((await ctx.auth.getUserIdentity()) as UserIdentity | null);
@@ -203,8 +162,8 @@ export async function resolveActiveOrganizationFromIdentity(
   }
 
   if (!hasDatabaseAccess(ctx)) {
-    const activeOrganization = await ctx.runQuery(api.queries.getActiveOrganization, {});
-    return (activeOrganization as Doc<"organizations"> | null) ?? null;
+    const snapshot = await resolveActionOrgContext(ctx);
+    return snapshot.activeOrganization;
   }
 
   const orgClerkId =
@@ -217,52 +176,40 @@ export async function resolveActiveOrganizationFromIdentity(
 
   return await ctx.db
     .query("organizations")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", orgClerkId))
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", orgClerkId))
     .unique();
 }
 
-export async function requireActiveOrganization(ctx: any): Promise<ActiveOrganizationResult> {
+export async function requireActiveOrganization(ctx: AnyCtx): Promise<ActiveOrganizationResult> {
   const { identity, user } = await requireAuthenticatedUser(ctx);
 
-  let memberships = await getUserMemberships(ctx, user._id);
-  if (memberships.length === 0 && isTestEnvironment && hasDatabaseAccess(ctx)) {
-    const firstOrganization = await ctx.db.query("organizations").first();
-    if (firstOrganization) {
-      memberships = [
-        {
-          _id: "test-membership" as Id<"organizationMemberships">,
-          clerkId: "test-membership",
-          userId: user._id,
-          organizationId: firstOrganization._id,
-          role: "owner",
-          organization: firstOrganization,
-        } as MembershipWithOrganization,
-      ];
-    }
-  }
-
+  const memberships = await getUserMemberships(ctx, user._id);
   if (memberships.length === 0) {
-    throw new Error("ORG_MEMBERSHIP_REQUIRED");
+    throwOrgAuthError("ORG_MEMBERSHIP_REQUIRED");
   }
 
   const activeFromIdentity = await resolveActiveOrganizationFromIdentity(ctx, identity);
   if (!activeFromIdentity) {
-    const fallback =
-      memberships.find((membership) => isAdminRole(membership.role)) ?? memberships[0];
-    return {
-      identity,
-      user,
-      organization: fallback.organization,
-      membership: fallback,
-      memberships,
-    };
+    if (memberships.length === 1) {
+      const only = memberships[0];
+      return {
+        identity,
+        user,
+        organization: only.organization,
+        membership: only,
+        memberships,
+      };
+    }
+    throwOrgAuthError("ORG_CLAIM_MISSING");
   }
 
   const membership = memberships.find(
     (item) => item.organizationId === activeFromIdentity._id
   );
   if (!membership) {
-    throw new Error("ORG_UNAUTHORIZED");
+    throwOrgAuthError("ORG_UNAUTHORIZED", {
+      organizationId: String(activeFromIdentity._id),
+    });
   }
 
   return {
@@ -279,32 +226,56 @@ export function assertRecordInActiveOrg(
   activeOrganizationId: Id<"organizations">
 ) {
   if (!recordOrganizationId) {
-    if (isTestEnvironment) {
-      return;
-    }
-    throw new Error("ORG_CONTEXT_REQUIRED");
+    throwOrgAuthError("ORG_CONTEXT_REQUIRED");
   }
 
   if (recordOrganizationId !== activeOrganizationId) {
-    throw new Error("ORG_MISMATCH");
+    throwOrgAuthError("ORG_MISMATCH", {
+      expectedOrganizationId: String(activeOrganizationId),
+      recordOrganizationId: String(recordOrganizationId),
+    });
   }
 }
 
 export async function requireOrganizationAdmin(
-  ctx: any,
+  ctx: AnyCtx,
   organizationId?: Id<"organizations">
 ) {
   if (organizationId) {
     const { user } = await requireAuthenticatedUser(ctx);
-    const memberships = await getUserMemberships(ctx, user._id);
-    const membership = memberships.find((item) => item.organizationId === organizationId);
 
-    if (!membership) {
-      throw new Error("ORG_UNAUTHORIZED");
+    if (hasDatabaseAccess(ctx)) {
+      const membership = await ctx.db
+        .query("organizationMemberships")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", user._id).eq("organizationId", organizationId)
+        )
+        .first();
+
+      if (!membership || !isAdminRole(membership.role)) {
+        throwOrgAuthError("ORG_UNAUTHORIZED");
+      }
+
+      const organization = await ctx.db.get(membership.organizationId);
+      if (!organization) {
+        throwOrgAuthError("ORG_UNAUTHORIZED");
+      }
+
+      return {
+        user,
+        organization,
+        membership: {
+          ...membership,
+          organization,
+        },
+      };
     }
 
-    if (!isAdminRole(membership.role)) {
-      throw new Error("ORG_UNAUTHORIZED");
+    const snapshot = await resolveActionOrgContext(ctx);
+    const membership = snapshot.memberships.find((item) => item.organizationId === organizationId);
+
+    if (!membership || !isAdminRole(membership.role)) {
+      throwOrgAuthError("ORG_UNAUTHORIZED");
     }
 
     return {
@@ -314,20 +285,15 @@ export async function requireOrganizationAdmin(
     };
   }
 
-  const { user, memberships, organization } = await requireActiveOrganization(ctx);
-  const membership = memberships.find((item) => item.organizationId === organization._id);
-
-  if (!membership) {
-    throw new Error("ORG_UNAUTHORIZED");
-  }
+  const { user, membership, organization } = await requireActiveOrganization(ctx);
 
   if (!isAdminRole(membership.role)) {
-    throw new Error("ORG_UNAUTHORIZED");
+    throwOrgAuthError("ORG_UNAUTHORIZED");
   }
 
   return {
     user,
-    organization: membership.organization,
+    organization,
     membership,
   };
 }

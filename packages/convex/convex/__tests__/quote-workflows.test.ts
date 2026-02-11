@@ -14,6 +14,32 @@ const modules: Record<string, () => Promise<any>> = {
   "../customers.ts": () => import("../customers"),
 };
 
+async function createAuthedOrgClient(
+  t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
+  clerkOrgId: string
+) {
+  const clerkUserId = `authed_${Math.random().toString(36).slice(2, 10)}`;
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      clerkId: clerkUserId,
+      email: `${clerkUserId}@example.com`,
+      firstName: "Test",
+      lastName: "Authed",
+    });
+    await ctx.db.insert("organizationMemberships", {
+      clerkId: `membership_${Math.random().toString(36).slice(2, 10)}`,
+      userId,
+      organizationId,
+      role: "owner",
+    });
+  });
+  return t.withIdentity({
+    subject: clerkUserId,
+    orgId: clerkOrgId,
+  });
+}
+
 let quoteNumberCounter = 10000;
 
 async function insertQuoteRequest(
@@ -98,7 +124,8 @@ async function insertQuote(
 describe.sequential("quote workflows", () => {
   it("maps quote statuses to the 3-column board buckets", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
 
     const fallbackRequested = await insertQuoteRequest(t, organizationId, {
       requestStatus: "quoted",
@@ -125,7 +152,7 @@ describe.sequential("quote workflows", () => {
       acceptedAt: now,
     });
 
-    const board = await t.query(api.quotes.listQuoteBoard, { limit: 50 });
+    const board = await authed.query(api.quotes.listQuoteBoard, { limit: 50 });
     const byId = new Map<Id<"quoteRequests">, any>(board.map((row: any) => [row._id, row]));
 
     expect(byId.get(fallbackRequested)?.boardColumn).toBe("quoted");
@@ -138,12 +165,13 @@ describe.sequential("quote workflows", () => {
 
   it("syncs requested/quoted state and blocks manual confirmed moves", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
 
     const quoteRequestId = await insertQuoteRequest(t, organizationId);
     const quoteId = await insertQuote(t, organizationId, quoteRequestId, { status: "draft" });
 
-    await t.mutation(api.quotes.moveBoardCard, {
+    await authed.mutation(api.quotes.moveBoardCard, {
       quoteRequestId,
       targetColumn: "quoted",
     });
@@ -161,7 +189,7 @@ describe.sequential("quote workflows", () => {
     expect(afterQuoted.quote?.acceptedAt).toBeUndefined();
 
     await expect(
-      t.mutation(api.quotes.moveBoardCard, {
+      authed.mutation(api.quotes.moveBoardCard, {
         quoteRequestId,
         targetColumn: "confirmed",
       })

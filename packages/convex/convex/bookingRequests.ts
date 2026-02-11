@@ -516,7 +516,9 @@ export const markLinkSent = mutation({
     if (!request) {
       throw new Error("Booking request not found");
     }
-    assertRecordInActiveOrg(request.organizationId, organization._id);
+    if (request.organizationId !== organization._id) {
+      throw new Error("ORG_MISMATCH");
+    }
 
     await ctx.db.patch(args.requestId, {
       linkSentAt: Date.now(),
@@ -553,7 +555,9 @@ export const markConfirmLinkSent = mutation({
     if (!request) {
       throw new Error("Booking request not found");
     }
-    assertRecordInActiveOrg(request.organizationId, organization._id);
+    if (request.organizationId !== organization._id) {
+      throw new Error("ORG_MISMATCH");
+    }
 
     await ctx.db.patch(args.requestId, {
       confirmLinkSentAt: Date.now(),
@@ -570,7 +574,9 @@ export const getById = query({
     if (!request) {
       return null;
     }
-    assertRecordInActiveOrg(request.organizationId, organization._id);
+    if (request.organizationId !== organization._id) {
+      throw new Error("ORG_MISMATCH");
+    }
 
     const canonicalRoute = await resolveCanonicalBookingRoute(ctx, request._id);
     return {
@@ -588,7 +594,6 @@ export const listRecent = query({
   handler: async (ctx, args) => {
     const { organization } = await requireActiveOrganization(ctx);
     const limit = args.limit ?? 20;
-    console.log("organization", organization);
 
     let requests;
     if (args.status) {
@@ -608,8 +613,6 @@ export const listRecent = query({
         .take(limit);
     }
 
-    console.log(requests);
-
     const withBookingStatus = await Promise.all(
       requests.map(async (request) => {
         const canonicalRoute = await resolveCanonicalBookingRoute(ctx, request._id);
@@ -626,8 +629,6 @@ export const listRecent = query({
         };
       })
     );
-    console.log(withBookingStatus);
-
     return withBookingStatus;
   },
 });

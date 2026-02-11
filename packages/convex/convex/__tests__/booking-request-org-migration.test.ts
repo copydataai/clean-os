@@ -17,9 +17,10 @@ describe.sequential("booking request org migration", () => {
 
     const ids = await t.run(async (ctx) => {
       const now = Date.now();
+      const clerkUserId = `user_${Math.random().toString(36).slice(2, 8)}`;
       const userId = await ctx.db.insert("users", {
-        clerkId: `user_${Math.random().toString(36).slice(2, 8)}`,
-        email: `user_${Math.random().toString(36).slice(2, 8)}@example.com`,
+        clerkId: clerkUserId,
+        email: `${clerkUserId}@example.com`,
       });
 
       const orgA = await ctx.db.insert("organizations", {
@@ -80,7 +81,7 @@ describe.sequential("booking request org migration", () => {
         updatedAt: now,
       });
 
-      return { resolvableRequestId, unresolvedRequestId };
+      return { resolvableRequestId, unresolvedRequestId, clerkUserId };
     });
 
     const dryRun = await t.mutation(
@@ -105,7 +106,11 @@ describe.sequential("booking request org migration", () => {
     expect(after.resolvable?.organizationId).toBeTruthy();
     expect(after.unresolved?.organizationId).toBeUndefined();
 
-    const report = await t.query(
+    const authed = t.withIdentity({
+      subject: ids.clerkUserId,
+    });
+
+    const report = await authed.query(
       api.bookingRequestOrgMigration.getBookingRequestOrganizationBackfillReport,
       { limit: 20 }
     );

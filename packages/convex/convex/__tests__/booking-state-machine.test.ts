@@ -56,10 +56,37 @@ async function insertUser(t: ReturnType<typeof convexTest>) {
   });
 }
 
+async function createAuthedOrgClient(
+  t: ReturnType<typeof convexTest>,
+  organizationId: Id<"organizations">,
+  clerkOrgId: string
+) {
+  const clerkUserId = `authed_${Math.random().toString(36).slice(2, 10)}`;
+  await t.run(async (ctx) => {
+    const userId = await ctx.db.insert("users", {
+      clerkId: clerkUserId,
+      email: `${clerkUserId}@example.com`,
+      firstName: "Test",
+      lastName: "Authed",
+    });
+    await ctx.db.insert("organizationMemberships", {
+      clerkId: `membership_${Math.random().toString(36).slice(2, 10)}`,
+      userId,
+      organizationId,
+      role: "owner",
+    });
+  });
+  return t.withIdentity({
+    subject: clerkUserId,
+    orgId: clerkOrgId,
+  });
+}
+
 describe.sequential("booking state machine", () => {
   it("allows valid transitions and rejects invalid transitions in strict mode", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const bookingId = await insertBooking(t, { organizationId });
 
     const previousStrictMode = process.env.BOOKING_STATE_MACHINE_STRICT;
@@ -148,20 +175,21 @@ describe.sequential("booking state machine", () => {
 
   it("allows cancellation only from pending_card, card_saved, or scheduled", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const cancellableBookingId = await insertBooking(t, {
       status: "scheduled",
       organizationId,
     });
     const blockedBookingId = await insertBooking(t, { status: "in_progress", organizationId });
 
-    await t.mutation(api.bookings.cancelBooking, {
+    await authed.mutation(api.bookings.cancelBooking, {
       bookingId: cancellableBookingId,
       reason: "Customer requested cancellation",
     });
 
     await expect(
-      t.mutation(api.bookings.cancelBooking, {
+      authed.mutation(api.bookings.cancelBooking, {
         bookingId: blockedBookingId,
         reason: "Too late cancellation attempt",
       })
@@ -179,7 +207,8 @@ describe.sequential("booking state machine", () => {
 
   it("applies schedule gate promotion and demotion", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const bookingId = await insertBooking(t, {
       status: "card_saved",
       serviceDate: "2026-02-09",
@@ -231,7 +260,8 @@ describe.sequential("booking state machine", () => {
 
   it("rolls booking status from assignments with any-start/all-finish behavior", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const bookingId = await insertBooking(t, {
       status: "scheduled",
       serviceDate: "2026-02-11",
@@ -267,23 +297,24 @@ describe.sequential("booking state machine", () => {
       return [assignmentAId, assignmentBId] as const;
     });
 
-    await t.mutation(api.cleaners.clockIn, { assignmentId: assignmentA });
+    await authed.mutation(api.cleaners.clockIn, { assignmentId: assignmentA });
     let booking = await t.run(async (ctx) => ctx.db.get(bookingId));
     expect(booking?.status).toBe("in_progress");
 
-    await t.mutation(api.cleaners.clockIn, { assignmentId: assignmentB });
-    await t.mutation(api.cleaners.clockOut, { assignmentId: assignmentA });
+    await authed.mutation(api.cleaners.clockIn, { assignmentId: assignmentB });
+    await authed.mutation(api.cleaners.clockOut, { assignmentId: assignmentA });
     booking = await t.run(async (ctx) => ctx.db.get(bookingId));
     expect(booking?.status).toBe("in_progress");
 
-    await t.mutation(api.cleaners.clockOut, { assignmentId: assignmentB });
+    await authed.mutation(api.cleaners.clockOut, { assignmentId: assignmentB });
     booking = await t.run(async (ctx) => ctx.db.get(bookingId));
     expect(booking?.status).toBe("completed");
   });
 
   it("records reschedule lifecycle events and keeps status lifecycle-driven", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const bookingId = await insertBooking(t, {
       status: "card_saved",
       serviceDate: "2026-02-09",
@@ -292,7 +323,7 @@ describe.sequential("booking state machine", () => {
       organizationId,
     });
 
-    await t.mutation(api.bookings.rescheduleBooking, {
+    await authed.mutation(api.bookings.rescheduleBooking, {
       bookingId,
       newServiceDate: "2026-02-10",
       newWindowStart: "10:00",
@@ -315,7 +346,8 @@ describe.sequential("booking state machine", () => {
 
   it("backfills legacy failed bookings to payment_failed when payment evidence exists", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const bookingId = await insertBooking(t, { status: "failed", organizationId });
 
     await t.run(async (ctx) => {
@@ -345,10 +377,11 @@ describe.sequential("booking state machine", () => {
 
   it("derives unified funnel stage for operational and pre-booking contexts", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
 
     const bookingId = await insertBooking(t, { status: "completed", organizationId });
-    const bookingStage = await t.query(api.bookingLifecycle.getUnifiedFunnelStage, {
+    const bookingStage = await authed.query(api.bookingLifecycle.getUnifiedFunnelStage, {
       bookingId,
     });
     expect(bookingStage?.funnelStage).toBe("service_completed");
@@ -377,7 +410,7 @@ describe.sequential("booking state machine", () => {
       });
     });
 
-    const preBookingStage = await t.query(api.bookingLifecycle.getUnifiedFunnelStage, {
+    const preBookingStage = await authed.query(api.bookingLifecycle.getUnifiedFunnelStage, {
       requestId,
     });
 
@@ -387,7 +420,8 @@ describe.sequential("booking state machine", () => {
 
   it("recomputes customer stats on completed/charged transitions", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const now = Date.now();
 
     const customerId = await t.run(async (ctx) => {
@@ -440,7 +474,8 @@ describe.sequential("booking state machine", () => {
 
   it("lists unified lifecycle rows with filtering and cursor pagination", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const base = Date.now();
 
     await t.run(async (ctx) => {
@@ -478,21 +513,21 @@ describe.sequential("booking state machine", () => {
       });
     });
 
-    const firstPage = await t.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
+    const firstPage = await authed.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
       limit: 2,
     });
     expect(firstPage.rows.length).toBe(2);
     expect(firstPage.nextCursor).toBeTruthy();
     expect(firstPage.rows[0]?.rowType).toBe("pre_booking");
 
-    const secondPage = await t.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
+    const secondPage = await authed.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
       limit: 2,
       cursor: firstPage.nextCursor ?? undefined,
     });
     expect(secondPage.rows.length).toBeGreaterThanOrEqual(1);
     expect(secondPage.rows.some((row: any) => row.rowType === "booking")).toBe(true);
 
-    const filtered = await t.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
+    const filtered = await authed.query(api.bookingLifecycle.listUnifiedLifecycleRows, {
       rowType: "booking",
       funnelStage: "service_completed",
       search: "beta",
@@ -506,7 +541,8 @@ describe.sequential("booking state machine", () => {
 
   it("returns lifecycle timeline rows with actor metadata and pagination", async () => {
     const t = convexTest(schema, modules);
-    const { organizationId } = await createTestOrganization(t);
+    const { organizationId, clerkOrgId } = await createTestOrganization(t);
+    const authed = await createAuthedOrgClient(t, organizationId, clerkOrgId);
     const bookingId = await insertBooking(t, { status: "card_saved", organizationId });
     const actorUserId = await insertUser(t);
     const base = Date.now();
@@ -545,7 +581,7 @@ describe.sequential("booking state machine", () => {
       });
     });
 
-    const firstPage = await t.query(api.bookingLifecycle.getBookingLifecycleTimeline, {
+    const firstPage = await authed.query(api.bookingLifecycle.getBookingLifecycleTimeline, {
       bookingId,
       limit: 2,
     });
@@ -555,7 +591,7 @@ describe.sequential("booking state machine", () => {
     expect(firstPage.rows[1]?.actorName).toBeTruthy();
     expect(firstPage.nextCursor).toBeTruthy();
 
-    const secondPage = await t.query(api.bookingLifecycle.getBookingLifecycleTimeline, {
+    const secondPage = await authed.query(api.bookingLifecycle.getBookingLifecycleTimeline, {
       bookingId,
       limit: 2,
       cursor: firstPage.nextCursor ?? undefined,

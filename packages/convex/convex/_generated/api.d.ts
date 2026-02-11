@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as __tests___helpers_convexError from "../__tests__/helpers/convexError.js";
 import type * as __tests___helpers_orgTestUtils from "../__tests__/helpers/orgTestUtils.js";
 import type * as bookingDb from "../bookingDb.js";
 import type * as bookingLifecycle from "../bookingLifecycle.js";
@@ -67,6 +68,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "__tests__/helpers/convexError": typeof __tests___helpers_convexError;
   "__tests__/helpers/orgTestUtils": typeof __tests___helpers_orgTestUtils;
   bookingDb: typeof bookingDb;
   bookingLifecycle: typeof bookingLifecycle;

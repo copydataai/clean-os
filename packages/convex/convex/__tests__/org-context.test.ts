@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
+import { expectConvexErrorCode, getConvexErrorCode } from "./helpers/convexError";
 import {
   assertRecordInActiveOrg,
   requireActiveOrganization,
@@ -80,7 +81,7 @@ describe.sequential("org context helper", () => {
     expect(resolved.user._id).toBe(fixture.userId);
   });
 
-  it("falls back deterministically when no org claim is set and user has multiple memberships", async () => {
+  it("throws ORG_CLAIM_MISSING when no org claim is set and user has multiple memberships", async () => {
     const t = convexTest(schema, modules);
     const fixture = await seedUserWithOrganizations(t);
 
@@ -88,12 +89,12 @@ describe.sequential("org context helper", () => {
       subject: fixture.userClerkId,
     });
 
-    const resolved = await authed.run(async (ctx) => {
-      return await requireActiveOrganization(ctx);
-    });
-
-    expect(resolved.organization._id).toBe(fixture.alphaOrgId);
-    expect(resolved.membership.organizationId).toBe(fixture.alphaOrgId);
+    await expectConvexErrorCode(
+      authed.run(async (ctx) => {
+        return await requireActiveOrganization(ctx);
+      }),
+      "ORG_CLAIM_MISSING"
+    );
   });
 
   it("falls back to single membership when no org claim is set", async () => {
@@ -172,11 +173,12 @@ describe.sequential("org context helper", () => {
       orgId: fixture.blockedOrgClerkId,
     });
 
-    await expect(
+    await expectConvexErrorCode(
       authed.run(async (ctx) => {
         return await requireActiveOrganization(ctx);
-      })
-    ).rejects.toThrow("ORG_UNAUTHORIZED");
+      }),
+      "ORG_UNAUTHORIZED"
+    );
   });
 
   it("requires at least one org membership", async () => {
@@ -193,16 +195,20 @@ describe.sequential("org context helper", () => {
 
     const authed = t.withIdentity({ subject: userClerkId });
 
-    await expect(
+    await expectConvexErrorCode(
       authed.run(async (ctx) => {
         return await requireActiveOrganization(ctx);
-      })
-    ).rejects.toThrow("ORG_MEMBERSHIP_REQUIRED");
+      }),
+      "ORG_MEMBERSHIP_REQUIRED"
+    );
   });
 
   it("throws ORG_MISMATCH for cross-org record checks", () => {
-    expect(() => {
+    try {
       assertRecordInActiveOrg("org_a" as Id<"organizations">, "org_b" as Id<"organizations">);
-    }).toThrow("ORG_MISMATCH");
+      expect.fail("Expected ORG_MISMATCH");
+    } catch (error) {
+      expect(getConvexErrorCode(error)).toBe("ORG_MISMATCH");
+    }
   });
 });

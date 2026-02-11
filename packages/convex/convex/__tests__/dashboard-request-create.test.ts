@@ -7,6 +7,7 @@ import {
   createOrgMembershipFixture,
   createTestOrganization,
 } from "./helpers/orgTestUtils";
+import { expectConvexErrorCode } from "./helpers/convexError";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -168,15 +169,16 @@ describe.sequential("dashboard request create mutation", () => {
       bookingRequestId: linkedRequestId,
     });
 
-    await expect(
+    await expectConvexErrorCode(
       authed.mutation(
         api.bookingRequests.createFromDashboard,
         buildPayload({
           mode: "existing",
           existingQuoteRequestId: linkedQuoteRequestId,
         })
-      )
-    ).rejects.toThrow("QUOTE_ALREADY_LINKED_TO_REQUEST");
+      ),
+      "QUOTE_ALREADY_LINKED_TO_REQUEST"
+    );
   });
 
   it("rejects linking a quote request from another organization", async () => {
@@ -208,14 +210,15 @@ describe.sequential("dashboard request create mutation", () => {
       }
     );
 
-    await expect(
+    await expectConvexErrorCode(
       authed.mutation(
         api.bookingRequests.createFromDashboard,
         buildPayload({
           mode: "existing",
           existingQuoteRequestId: foreignQuoteRequestId,
         })
-      )
-    ).rejects.toThrow("ORG_MISMATCH");
+      ),
+      "ORG_MISMATCH"
+    );
   });
 });

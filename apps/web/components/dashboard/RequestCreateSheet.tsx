@@ -56,6 +56,36 @@ function trimToOptional(value: string): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function getErrorCode(error: unknown): string | null {
+  const parseMessageCode = (message: string): string | null => {
+    if (/^[A-Z0-9_]+$/.test(message)) {
+      return message;
+    }
+    try {
+      const parsed = JSON.parse(message) as { code?: unknown };
+      return typeof parsed?.code === "string" ? parsed.code : null;
+    } catch {
+      return null;
+    }
+  };
+
+  if (error && typeof error === "object") {
+    const data = (error as { data?: unknown }).data;
+    if (data && typeof data === "object") {
+      const code = (data as { code?: unknown }).code;
+      if (typeof code === "string") {
+        return code;
+      }
+    }
+  }
+
+  if (error instanceof Error) {
+    return parseMessageCode(error.message);
+  }
+
+  return null;
+}
+
 export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProps) {
   const router = useRouter();
   const createFromDashboard = useMutation(api.bookingRequests.createFromDashboard);
@@ -232,17 +262,19 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
         `/dashboard/requests/${result.bookingRequestId}?created=1&quote_mode=${quoteMode}`
       );
     } catch (submitError) {
-      const message =
-        submitError instanceof Error ? submitError.message : "Failed to create request.";
+      const message = submitError instanceof Error
+        ? submitError.message
+        : "Failed to create request.";
+      const code = getErrorCode(submitError);
 
-      if (message.includes("QUOTE_ALREADY_LINKED_TO_REQUEST")) {
+      if (code === "QUOTE_ALREADY_LINKED_TO_REQUEST") {
         setError(
           "That quote is already linked to another request. Open the existing linked request instead."
         );
       } else if (
-        message.includes("ORG_MISMATCH") ||
-        message.includes("ORG_CONTEXT_REQUIRED") ||
-        message.includes("QUOTE_REQUEST_NOT_FOUND")
+        code === "ORG_MISMATCH" ||
+        code === "ORG_CONTEXT_REQUIRED" ||
+        code === "QUOTE_REQUEST_NOT_FOUND"
       ) {
         setError("Unable to link this quote in the current organization.");
       } else {

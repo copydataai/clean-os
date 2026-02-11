@@ -2,6 +2,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import schema from "../schema";
+import { expectConvexErrorCode } from "./helpers/convexError";
 
 const modules: Record<string, () => Promise<any>> = {
   "../_generated/api.ts": () => import("../_generated/api"),
@@ -82,25 +83,28 @@ describe.sequential("org mutation guardrails", () => {
       orgId: fixture.orgAClerkId,
     });
 
-    await expect(
+    await expectConvexErrorCode(
       asOrgA.mutation(api.bookings.cancelBooking, {
         bookingId: fixture.foreignBookingId,
         reason: "cross-org test",
-      })
-    ).rejects.toThrow("ORG_MISMATCH");
+      }),
+      "ORG_MISMATCH"
+    );
 
-    await expect(
+    await expectConvexErrorCode(
       asOrgA.mutation(api.bookingRequests.markLinkSent, {
         requestId: fixture.foreignRequestId,
-      })
-    ).rejects.toThrow("ORG_MISMATCH");
+      }),
+      "ORG_MISMATCH"
+    );
 
     const asUnauthorizedOrg = t.withIdentity({
       subject: fixture.userClerkId,
       orgId: fixture.orgBClerkId,
     });
 
-    await expect(asUnauthorizedOrg.query(api.dashboard.getStats, {})).rejects.toThrow(
+    await expectConvexErrorCode(
+      asUnauthorizedOrg.query(api.dashboard.getStats, {}),
       "ORG_UNAUTHORIZED"
     );
   });

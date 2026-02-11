@@ -51,14 +51,14 @@ function findActiveOrg<TOrganization extends OrgRecord>(
   return null;
 }
 
+const ADMIN_ROLES = new Set(["admin", "owner"]);
+const ADMIN_SUFFIXES = [":admin", ":owner"];
+
 function isAdminRole(role?: string | null): boolean {
   const normalized = (role ?? "").toLowerCase();
   return (
-    normalized === "admin" ||
-    normalized === "owner" ||
-    normalized.endsWith(":admin") ||
-    normalized.endsWith(":owner") ||
-    normalized.includes("admin")
+    ADMIN_ROLES.has(normalized) ||
+    ADMIN_SUFFIXES.some((suffix) => normalized.endsWith(suffix))
   );
 }
 
@@ -123,6 +123,7 @@ export function deriveOrgContextState<TOrganization extends OrgRecord>(
     organizations.length > 0 &&
     !isSwitching &&
     !isWaitingForPendingClaim &&
+    isBackendAligned &&
     (organizations.length === 1 || activeOrg !== null);
 
   const isResolvingOrgContext =
@@ -132,7 +133,8 @@ export function deriveOrgContextState<TOrganization extends OrgRecord>(
       isLoading ||
       isSwitching ||
       isWaitingForPendingClaim ||
-      shouldAutoSelect
+      shouldAutoSelect ||
+      !isBackendAligned
     );
 
   return {
