@@ -38,11 +38,12 @@ type TallyQuestion = {
   type?: string;
 };
 
-type TallyWebhookRecord = {
+export type TallyWebhookRecord = {
   id?: string;
   url?: string;
   formId?: string;
   eventType?: string;
+  signingSecret?: string | null;
 };
 
 const QUOTE_TARGET_SYNONYMS: Record<string, string[]> = {
@@ -169,7 +170,14 @@ function normalizeTallyQuestions(payload: any): TallyQuestion[] {
   return questions;
 }
 
-function normalizeTallyWebhooks(payload: any): TallyWebhookRecord[] {
+function normalizeTallyWebhookSigningSecret(value: any): string | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  return trimOrUndefined(value);
+}
+
+export function normalizeTallyWebhooks(payload: any): TallyWebhookRecord[] {
   return toTallyItems(payload)
     .map((entry) => ({
       id: trimOrUndefined(entry?.id),
@@ -182,8 +190,52 @@ function normalizeTallyWebhooks(payload: any): TallyWebhookRecord[] {
         trimOrUndefined(entry?.eventType) ??
         trimOrUndefined(entry?.event_type) ??
         trimOrUndefined(entry?.event),
+      signingSecret:
+        entry?.signingSecret !== undefined
+          ? normalizeTallyWebhookSigningSecret(entry?.signingSecret)
+          : normalizeTallyWebhookSigningSecret(entry?.signing_secret),
     }))
     .filter((entry) => Boolean(entry.id || entry.url || entry.formId));
+}
+
+export function shouldUpdateManagedTallyWebhook(args: {
+  webhook?: TallyWebhookRecord;
+  targetUrl: string;
+  formId: string;
+  expectedSigningSecret: string;
+}): boolean {
+  const webhook = args.webhook;
+  if (!webhook) {
+    return false;
+  }
+
+  if (webhook.url !== args.targetUrl || webhook.formId !== args.formId) {
+    return true;
+  }
+
+  if (webhook.signingSecret === null) {
+    return true;
+  }
+
+  if (typeof webhook.signingSecret === "string" && webhook.signingSecret !== args.expectedSigningSecret) {
+    return true;
+  }
+
+  return false;
+}
+
+export function buildManagedTallyWebhookUpsertBody(args: {
+  url: string;
+  formId: string;
+  signingSecret: string;
+}) {
+  return {
+    url: args.url,
+    eventTypes: ["FORM_RESPONSE"],
+    formId: args.formId,
+    isEnabled: true,
+    signingSecret: args.signingSecret,
+  };
 }
 
 function sanitizeMappings(mappings?: TallyMappings | null): TallyMappings {
@@ -1117,18 +1169,23 @@ export const ensureTallyWebhooks = action({
       }
 
       if (matchedWebhook?.id) {
-        const needsUpdate = matchedWebhook.url !== targetUrl || matchedWebhook.formId !== formId;
+        const needsUpdate = shouldUpdateManagedTallyWebhook({
+          webhook: matchedWebhook,
+          targetUrl,
+          formId,
+          expectedSigningSecret: decrypted.webhookSecret,
+        });
 
         if (needsUpdate) {
           await ctx.runAction(internalApi.integrationsNode.tallyApiRequest, {
             apiKey: decrypted.apiKey,
             path: `/webhooks/${matchedWebhook.id}`,
             method: "PATCH",
-            body: {
+            body: buildManagedTallyWebhookUpsertBody({
               url: targetUrl,
-              eventTypes: ["FORM_RESPONSE"],
               formId,
-            },
+              signingSecret: decrypted.webhookSecret,
+            }),
           });
 
           operationResults.push({
@@ -1152,11 +1209,11 @@ export const ensureTallyWebhooks = action({
         apiKey: decrypted.apiKey,
         path: "/webhooks",
         method: "POST",
-        body: {
+        body: buildManagedTallyWebhookUpsertBody({
           url: targetUrl,
-          eventTypes: ["FORM_RESPONSE"],
           formId,
-        },
+          signingSecret: decrypted.webhookSecret,
+        }),
       });
 
       const createdWebhook = normalizeTallyWebhooks(created.data)[0];
