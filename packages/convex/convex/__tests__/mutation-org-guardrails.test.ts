@@ -9,6 +9,7 @@ const modules: Record<string, () => Promise<any>> = {
   "../_generated/server.ts": () => import("../_generated/server"),
   "../bookings.ts": () => import("../bookings"),
   "../bookingRequests.ts": () => import("../bookingRequests"),
+  "../quoteRequests.ts": () => import("../quoteRequests"),
   "../dashboard.ts": () => import("../dashboard"),
 };
 
@@ -63,12 +64,21 @@ async function seedGuardrailFixture(t: ReturnType<typeof convexTest>) {
       updatedAt: now,
     });
 
+    const foreignQuoteRequestId = await ctx.db.insert("quoteRequests", {
+      organizationId: orgBId,
+      requestStatus: "requested",
+      email: "foreign@example.com",
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return {
       userClerkId,
       orgAClerkId,
       orgBClerkId,
       foreignBookingId,
       foreignRequestId,
+      foreignQuoteRequestId,
     };
   });
 }
@@ -94,6 +104,20 @@ describe.sequential("org mutation guardrails", () => {
     await expectConvexErrorCode(
       asOrgA.mutation(api.bookingRequests.markLinkSent, {
         requestId: fixture.foreignRequestId,
+      }),
+      "ORG_MISMATCH"
+    );
+
+    await expectConvexErrorCode(
+      asOrgA.query(api.bookings.getBooking, {
+        id: fixture.foreignBookingId,
+      }),
+      "ORG_MISMATCH"
+    );
+
+    await expectConvexErrorCode(
+      asOrgA.query(api.quoteRequests.getById, {
+        id: fixture.foreignQuoteRequestId,
       }),
       "ORG_MISMATCH"
     );
