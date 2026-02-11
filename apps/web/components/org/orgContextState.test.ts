@@ -5,20 +5,47 @@ type TestOrganization = {
   _id: string;
   clerkId: string;
   name: string;
+  role?: string;
 };
 
-function makeOrganization(id: string): TestOrganization {
+function makeOrganization(id: string, role?: string): TestOrganization {
   return {
     _id: id,
     clerkId: `clerk_${id}`,
     name: `Org ${id}`,
+    role,
   };
 }
 
 describe("deriveOrgContextState", () => {
-  it("multi-org with missing claim is not ready and auto-selects", () => {
-    const firstOrganization = makeOrganization("org_a");
-    const secondOrganization = makeOrganization("org_b");
+  it("multi-org with missing claim is not ready and auto-selects an admin org", () => {
+    const firstOrganization = makeOrganization("org_a", "member");
+    const secondOrganization = makeOrganization("org_b", "admin");
+
+    const state = deriveOrgContextState({
+      organizations: [firstOrganization, secondOrganization],
+      orgId: null,
+      backendActiveOrgClerkId: null,
+      isAuthLoaded: true,
+      isOrganizationListLoaded: true,
+      hasFetchedOrganizations: true,
+      hasFetchedBackendActiveOrg: true,
+      canSetActive: true,
+      isSwitching: false,
+      pendingOrgClerkId: null,
+    });
+
+    expect(state.activeOrg).toBeNull();
+    expect(state.isOrgContextReady).toBe(false);
+    expect(state.isResolvingOrgContext).toBe(true);
+    expect(state.shouldAutoSelect).toBe(true);
+    expect(state.autoSelectTarget?._id).toBe(secondOrganization._id);
+    expect(state.shouldRefreshOrgClaim).toBe(false);
+  });
+
+  it("multi-org with missing claim falls back to first org when no admin role exists", () => {
+    const firstOrganization = makeOrganization("org_a", "member");
+    const secondOrganization = makeOrganization("org_b", "cleaner");
 
     const state = deriveOrgContextState({
       organizations: [firstOrganization, secondOrganization],

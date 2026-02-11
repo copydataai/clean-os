@@ -1,5 +1,6 @@
 type OrgRecord = {
   clerkId: string;
+  role?: string | null;
 };
 
 type OrgContextInput<TOrganization extends OrgRecord> = {
@@ -48,6 +49,24 @@ function findActiveOrg<TOrganization extends OrgRecord>(
   }
 
   return null;
+}
+
+function isAdminRole(role?: string | null): boolean {
+  const normalized = (role ?? "").toLowerCase();
+  return (
+    normalized === "admin" ||
+    normalized === "owner" ||
+    normalized.endsWith(":admin") ||
+    normalized.endsWith(":owner") ||
+    normalized.includes("admin")
+  );
+}
+
+function findAutoSelectTarget<TOrganization extends OrgRecord>(
+  organizations: TOrganization[]
+): TOrganization | null {
+  const adminOrganization = organizations.find((organization) => isAdminRole(organization.role));
+  return adminOrganization ?? organizations[0] ?? null;
 }
 
 export function deriveOrgContextState<TOrganization extends OrgRecord>(
@@ -124,7 +143,7 @@ export function deriveOrgContextState<TOrganization extends OrgRecord>(
     isOrgContextReady,
     isResolvingOrgContext,
     shouldAutoSelect,
-    autoSelectTarget: shouldAutoSelect ? organizations[0] ?? null : null,
+    autoSelectTarget: shouldAutoSelect ? findAutoSelectTarget(organizations) : null,
     shouldRefreshOrgClaim,
     refreshOrgClaimTargetClerkId: shouldRefreshOrgClaim ? orgId ?? null : null,
   };
