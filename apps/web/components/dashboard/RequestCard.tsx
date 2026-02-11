@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useAction, useMutation } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Id } from "@clean-os/convex/data-model";
-import { getBookingRequestLink, getConfirmRequestLink } from "@/lib/bookingLinks";
+import { getConfirmRequestLink } from "@/lib/bookingLinks";
 
 type RequestCardProps = {
   request: {
@@ -41,10 +41,11 @@ function renderTag(label: string) {
 }
 
 export default function RequestCard({ request, confirmationFormUrl, className }: RequestCardProps) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const [cardEmailState, setCardEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
   const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
   const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
+  const sendCardRequestEmail = useAction(api.emailTriggers.sendCardRequestEmail);
   const canonicalBookingHandle = request.canonicalBookingHandle ?? null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
@@ -54,34 +55,22 @@ export default function RequestCard({ request, confirmationFormUrl, className }:
     ...(request.pets ?? []).map((value) => `Pets: ${value}`),
   ].slice(0, 4);
 
-  async function copyBookingLink() {
+  async function sendCardRequest() {
     if (!canonicalBookingHandle) {
-      setCopyState("error");
-      setTimeout(() => setCopyState("idle"), 2000);
+      setCardEmailState("error");
+      setTimeout(() => setCardEmailState("idle"), 2000);
       return;
     }
-    const link = getBookingRequestLink(request._id, canonicalBookingHandle);
     try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = link;
-        textarea.setAttribute("readonly", "true");
-        textarea.style.position = "absolute";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
+      setCardEmailState("sending");
+      await sendCardRequestEmail({ requestId: request._id });
       await markLinkSent({ requestId: request._id });
-      setCopyState("copied");
-      setTimeout(() => setCopyState("idle"), 1500);
+      setCardEmailState("sent");
+      setTimeout(() => setCardEmailState("idle"), 2000);
     } catch (error) {
       console.error(error);
-      setCopyState("error");
-      setTimeout(() => setCopyState("idle"), 2000);
+      setCardEmailState("error");
+      setTimeout(() => setCardEmailState("idle"), 2500);
     }
   }
 
@@ -154,12 +143,14 @@ export default function RequestCard({ request, confirmationFormUrl, className }:
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">Request ID: {request._id}</p>
         <div className="flex flex-wrap items-center gap-3">
-          <Button size="sm" variant="outline" onClick={copyBookingLink} disabled={!canonicalBookingHandle}>
-            {copyState === "copied"
-              ? "Copied"
-              : copyState === "error"
-              ? "Copy failed"
-              : "Copy booking link"}
+          <Button size="sm" variant="outline" onClick={sendCardRequest} disabled={!canonicalBookingHandle || cardEmailState === "sending"}>
+            {cardEmailState === "sending"
+              ? "Sending..."
+              : cardEmailState === "sent"
+              ? "Email sent"
+              : cardEmailState === "error"
+              ? "Send failed"
+              : "Send card request email"}
           </Button>
           <Button
             size="sm"

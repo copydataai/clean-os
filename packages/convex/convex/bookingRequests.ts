@@ -525,6 +525,16 @@ export const markLinkSent = mutation({
   },
 });
 
+export const markLinkSentInternal = internalMutation({
+  args: { requestId: v.id("bookingRequests") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.requestId, {
+      linkSentAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const markConfirmLinkSentInternal = internalMutation({
   args: { requestId: v.id("bookingRequests") },
   handler: async (ctx, args) => {
