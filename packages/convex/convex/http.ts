@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { logTallyRouteValidationFailure } from "./lib/tallyWebhookHttp";
 import { resend } from "./resend";
 
 const http = httpRouter();
@@ -56,14 +57,23 @@ http.route({
   pathPrefix: "/tally-request-webhook/",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const pathname = new URL(request.url).pathname;
+    const routeToken = extractTallyRouteToken(pathname, "/tally-request-webhook/");
     const signature = requireTallySignature(request);
     if (!signature) {
+      await logTallyRouteValidationFailure(ctx, {
+        endpoint: "request",
+        routeToken: routeToken ?? undefined,
+        message: "Missing signature",
+      });
       return new Response("Missing signature", { status: 400 });
     }
 
-    const pathname = new URL(request.url).pathname;
-    const routeToken = extractTallyRouteToken(pathname, "/tally-request-webhook/");
     if (!routeToken) {
+      await logTallyRouteValidationFailure(ctx, {
+        endpoint: "request",
+        message: "Missing route token",
+      });
       return new Response("Missing route token", { status: 400 });
     }
 
@@ -95,14 +105,23 @@ http.route({
   pathPrefix: "/tally-confirmation-webhook/",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
+    const pathname = new URL(request.url).pathname;
+    const routeToken = extractTallyRouteToken(pathname, "/tally-confirmation-webhook/");
     const signature = requireTallySignature(request);
     if (!signature) {
+      await logTallyRouteValidationFailure(ctx, {
+        endpoint: "confirmation",
+        routeToken: routeToken ?? undefined,
+        message: "Missing signature",
+      });
       return new Response("Missing signature", { status: 400 });
     }
 
-    const pathname = new URL(request.url).pathname;
-    const routeToken = extractTallyRouteToken(pathname, "/tally-confirmation-webhook/");
     if (!routeToken) {
+      await logTallyRouteValidationFailure(ctx, {
+        endpoint: "confirmation",
+        message: "Missing route token",
+      });
       return new Response("Missing route token", { status: 400 });
     }
 

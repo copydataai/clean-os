@@ -42,6 +42,7 @@ import type * as lib_orgContext from "../lib/orgContext.js";
 import type * as lib_publicBookingContext from "../lib/publicBookingContext.js";
 import type * as lib_tallyMappings from "../lib/tallyMappings.js";
 import type * as lib_tallyRuntime from "../lib/tallyRuntime.js";
+import type * as lib_tallyWebhookHttp from "../lib/tallyWebhookHttp.js";
 import type * as payments from "../payments.js";
 import type * as paymentsNode from "../paymentsNode.js";
 import type * as pdf_quotePdf from "../pdf/quotePdf.js";
@@ -100,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   "lib/publicBookingContext": typeof lib_publicBookingContext;
   "lib/tallyMappings": typeof lib_tallyMappings;
   "lib/tallyRuntime": typeof lib_tallyRuntime;
+  "lib/tallyWebhookHttp": typeof lib_tallyWebhookHttp;
   payments: typeof payments;
   paymentsNode: typeof paymentsNode;
   "pdf/quotePdf": typeof pdf_quotePdf;
