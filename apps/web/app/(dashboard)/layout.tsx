@@ -7,7 +7,6 @@ import { api } from "@clean-os/convex/api";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -17,7 +16,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import ActiveOrganizationProvider from "@/components/org/ActiveOrganizationProvider";
@@ -69,14 +67,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition hover:bg-sidebar-accent/70"
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-              CO
+              KC
             </div>
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-sm font-semibold text-sidebar-foreground">
-                Clean OS
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                Operations command center
+                KathyClean OS
               </span>
             </div>
           </Link>
@@ -130,20 +125,6 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-
-        <SidebarFooter className="border-t border-sidebar-border/80 px-2 py-3">
-          {currentUser ? (
-            <div className="rounded-xl border border-sidebar-border bg-sidebar px-3 py-2">
-              <p className="truncate text-xs font-medium text-sidebar-foreground">
-                {currentUser.firstName ?? currentUser.email}
-              </p>
-              <p className="truncate text-[11px] text-muted-foreground">Operator</p>
-            </div>
-          ) : (
-            <div className="px-2 py-1 text-xs text-muted-foreground">v1.0.0</div>
-          )}
-        </SidebarFooter>
-        <SidebarRail />
       </Sidebar>
 
       <SidebarInset className="bg-transparent">
