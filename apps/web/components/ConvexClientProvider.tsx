@@ -12,7 +12,7 @@ if (!process.env.NEXT_PUBLIC_CONVEX_URL) {
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL)
 
 function useConvexAuth() {
-  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { isLoaded, isSignedIn, getToken, orgId, orgRole } = useAuth()
 
   const getTokenWithFreshClaims = useCallback(
     async (options?: Parameters<typeof getToken>[0]) =>
@@ -25,8 +25,10 @@ function useConvexAuth() {
       isLoaded,
       isSignedIn,
       getToken: getTokenWithFreshClaims,
+      orgId,
+      orgRole,
     }),
-    [getTokenWithFreshClaims, isLoaded, isSignedIn]
+    [getTokenWithFreshClaims, isLoaded, isSignedIn, orgId, orgRole]
   )
 }
 

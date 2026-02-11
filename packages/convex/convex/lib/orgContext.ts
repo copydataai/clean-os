@@ -15,6 +15,9 @@ type AuthenticatedUser = Doc<"users"> | {
   _id: Id<"users">;
   clerkId: string;
   email: string;
+  firstName?: string;
+  lastName?: string;
+  imageUrl?: string;
 };
 type AuthenticatedUserResult = {
   identity: Identity;
