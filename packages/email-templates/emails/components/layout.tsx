@@ -18,15 +18,29 @@ interface EmailLayoutProps {
 export default function EmailLayout({ preview, children }: EmailLayoutProps) {
   return (
     <Html>
-      <Head />
+      <Head>
+        <style>
+          {`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap');`}
+        </style>
+      </Head>
       <Preview>{preview}</Preview>
       <Body style={body}>
         <Container style={container}>
-          <Text style={logo}>Clean OS</Text>
-          <Section style={content}>{children}</Section>
-          <Hr style={hr} />
+          {/* ── Brand mark ── */}
+          <Section style={brandSection}>
+            <Text style={brandMark}>KATHYCLEAN&thinsp;OS</Text>
+            <Hr style={brandRule} />
+          </Section>
+
+          {/* ── Content card ── */}
+          <Section style={card}>{children}</Section>
+
+          {/* ── Footer ── */}
           <Text style={footer}>
-            Clean OS &mdash; Professional cleaning services
+            KathyClean &middot; Professional cleaning, simplified
+          </Text>
+          <Text style={footerSub}>
+            Questions? Reply directly to this email.
           </Text>
         </Container>
       </Body>
@@ -34,39 +48,64 @@ export default function EmailLayout({ preview, children }: EmailLayoutProps) {
   );
 }
 
-const body = {
-  backgroundColor: "#f9fafb",
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+const fontBody =
+  '"DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
+
+const body: React.CSSProperties = {
+  backgroundColor: "#F0ECE4",
+  fontFamily: fontBody,
+  margin: 0,
+  padding: 0,
 };
 
-const container = {
+const container: React.CSSProperties = {
   margin: "0 auto",
-  padding: "40px 20px",
+  padding: "48px 20px 40px",
   maxWidth: "560px",
 };
 
-const logo = {
-  fontSize: "24px",
-  fontWeight: "700" as const,
-  color: "#111827",
-  textAlign: "center" as const,
-  margin: "0 0 32px",
+const brandSection: React.CSSProperties = {
+  textAlign: "center",
+  marginBottom: "32px",
 };
 
-const content = {
-  backgroundColor: "#ffffff",
-  borderRadius: "8px",
-  padding: "32px 24px",
+const brandMark: React.CSSProperties = {
+  fontSize: "13px",
+  fontWeight: 700,
+  letterSpacing: "0.22em",
+  color: "#1A3C34",
+  textTransform: "uppercase",
+  margin: "0 0 12px",
+  fontFamily: fontBody,
 };
 
-const hr = {
-  borderColor: "#e5e7eb",
-  margin: "32px 0 16px",
+const brandRule: React.CSSProperties = {
+  borderColor: "#C5BCAD",
+  borderWidth: "1px 0 0",
+  borderStyle: "solid",
+  margin: "0 auto",
+  width: "48px",
 };
 
-const footer = {
+const card: React.CSSProperties = {
+  backgroundColor: "#FFFFFF",
+  borderRadius: "12px",
+  padding: "36px 32px 32px",
+  borderTop: "3px solid #1A3C34",
+};
+
+const footer: React.CSSProperties = {
   fontSize: "12px",
-  color: "#9ca3af",
-  textAlign: "center" as const,
+  color: "#8E9688",
+  textAlign: "center",
+  margin: "28px 0 4px",
+  fontFamily: fontBody,
+};
+
+const footerSub: React.CSSProperties = {
+  fontSize: "11px",
+  color: "#AAA79E",
+  textAlign: "center",
+  margin: "0",
+  fontFamily: fontBody,
 };

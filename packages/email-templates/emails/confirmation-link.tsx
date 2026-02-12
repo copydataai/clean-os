@@ -1,4 +1,11 @@
-import { Text, Button, Section, Row, Column } from "@react-email/components";
+import {
+  Text,
+  Button,
+  Section,
+  Row,
+  Column,
+  Hr,
+} from "@react-email/components";
 import * as React from "react";
 import EmailLayout from "./components/layout";
 
@@ -16,7 +23,14 @@ export default function ConfirmationLinkEmail({
   confirmUrl,
 }: ConfirmationLinkEmailProps) {
   return (
-    <EmailLayout preview={`${firstName}, your quote is ready — confirm your booking`}>
+    <EmailLayout
+      preview={`${firstName}, your quote is ready — confirm your booking`}
+    >
+      {/* ── Status pill ── */}
+      <Section style={pillSection}>
+        <Text style={statusPill}>APPROVED</Text>
+      </Section>
+
       <Text style={heading}>Your Quote Has Been Approved</Text>
       <Text style={paragraph}>
         Hi {firstName}, great news! We&apos;ve reviewed your request
@@ -26,10 +40,13 @@ export default function ConfirmationLinkEmail({
       {(service || frequency) && (
         <Section style={detailsBox}>
           {service && (
-            <Row style={detailRow}>
-              <Column style={detailLabel}>Service</Column>
-              <Column style={detailValue}>{service}</Column>
-            </Row>
+            <>
+              <Row style={detailRow}>
+                <Column style={detailLabel}>Service</Column>
+                <Column style={detailValue}>{service}</Column>
+              </Row>
+              {frequency && <Hr style={divider} />}
+            </>
           )}
           {frequency && (
             <Row style={detailRow}>
@@ -48,7 +65,7 @@ export default function ConfirmationLinkEmail({
 
       <Section style={ctaSection}>
         <Button href={confirmUrl} style={ctaButton}>
-          Confirm Your Booking
+          Confirm Your Booking &rarr;
         </Button>
       </Section>
 
@@ -60,60 +77,98 @@ export default function ConfirmationLinkEmail({
   );
 }
 
-const heading = {
-  fontSize: "20px",
-  fontWeight: "600" as const,
-  color: "#111827",
-  margin: "0 0 16px",
+const fontHeading =
+  '"Fraunces", Georgia, "Times New Roman", serif';
+
+const pillSection: React.CSSProperties = {
+  textAlign: "center",
+  margin: "0 0 20px",
 };
 
-const paragraph = {
+const statusPill: React.CSSProperties = {
+  display: "inline-block",
+  fontSize: "10px",
+  fontWeight: 700,
+  letterSpacing: "0.1em",
+  textTransform: "uppercase",
+  color: "#2D6A4F",
+  backgroundColor: "#EDF5F0",
+  border: "1px solid #B8D4C4",
+  borderRadius: "20px",
+  padding: "6px 18px",
+  margin: "0 auto",
+};
+
+const heading: React.CSSProperties = {
+  fontSize: "24px",
+  fontWeight: 600,
+  color: "#1A2F23",
+  textAlign: "center",
+  margin: "0 0 12px",
+  letterSpacing: "-0.02em",
+  fontFamily: fontHeading,
+};
+
+const paragraph: React.CSSProperties = {
   fontSize: "14px",
   lineHeight: "24px",
-  color: "#374151",
-  margin: "0 0 16px",
+  color: "#3D5347",
+  margin: "0 0 18px",
 };
 
-const detailsBox = {
-  backgroundColor: "#f9fafb",
-  borderRadius: "6px",
-  padding: "16px",
-  margin: "16px 0",
+const detailsBox: React.CSSProperties = {
+  backgroundColor: "#FAF7F2",
+  borderRadius: "10px",
+  padding: "16px 20px",
+  margin: "0 0 22px",
+  border: "1px solid #EDE8DF",
 };
 
-const detailRow = {
-  marginBottom: "8px",
+const detailRow: React.CSSProperties = {
+  marginBottom: "0",
 };
 
-const detailLabel = {
+const detailLabel: React.CSSProperties = {
   fontSize: "13px",
-  color: "#6b7280",
+  color: "#7A8E80",
   width: "100px",
+  paddingTop: "6px",
+  paddingBottom: "6px",
 };
 
-const detailValue = {
+const detailValue: React.CSSProperties = {
   fontSize: "13px",
-  color: "#111827",
-  fontWeight: "500" as const,
+  color: "#1A2F23",
+  fontWeight: 600,
+  paddingTop: "6px",
+  paddingBottom: "6px",
 };
 
-const ctaSection = {
-  textAlign: "center" as const,
+const divider: React.CSSProperties = {
+  borderColor: "#E8E2D8",
+  borderWidth: "1px 0 0",
+  borderStyle: "solid",
+  margin: "0",
+};
+
+const ctaSection: React.CSSProperties = {
+  textAlign: "center",
   margin: "24px 0",
 };
 
-const ctaButton = {
-  backgroundColor: "#111827",
+const ctaButton: React.CSSProperties = {
+  backgroundColor: "#1A3C34",
   color: "#ffffff",
   fontSize: "14px",
-  fontWeight: "600" as const,
-  padding: "12px 32px",
-  borderRadius: "6px",
+  fontWeight: 600,
+  padding: "14px 44px",
+  borderRadius: "8px",
   textDecoration: "none",
+  letterSpacing: "0.01em",
 };
 
-const smallText = {
+const smallText: React.CSSProperties = {
   fontSize: "12px",
-  color: "#9ca3af",
-  margin: "16px 0 0",
+  color: "#94A39A",
+  margin: "8px 0 0",
 };
