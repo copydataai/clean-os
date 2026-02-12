@@ -67,7 +67,7 @@ export default function QuoteReceivedEmail({
             <Hr style={divider} />
           </>
         )}
-        {squareFootage && (
+        {squareFootage != null && (
           <>
             <DetailRow
               label="Sq. ft."
