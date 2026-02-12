@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
@@ -16,7 +16,12 @@ import DispatchFilters from "./DispatchFilters";
 import DispatchMap from "./DispatchMap";
 import DispatchQueue from "./DispatchQueue";
 import DispatchBookingSheet from "./DispatchBookingSheet";
-import { DispatchDayPayload, DispatchFiltersState, DispatchPriority } from "./types";
+import {
+  DispatchDayPayload,
+  DispatchFiltersState,
+  DispatchPriority,
+  DispatchRouteSuggestion,
+} from "./types";
 
 const DEFAULT_FILTERS: DispatchFiltersState = {
   assignmentState: "all",
@@ -45,6 +50,14 @@ export default function DispatchBoard() {
   const [savingBookingId, setSavingBookingId] = useState<Id<"bookings"> | null>(null);
   const [reordering, setReordering] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
+  const [backfillNote, setBackfillNote] = useState<string | null>(null);
+  const [routeSuggestion, setRouteSuggestion] = useState<DispatchRouteSuggestion | null>(
+    null
+  );
+  const [routeLoading, setRouteLoading] = useState(false);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [applyingRoute, setApplyingRoute] = useState(false);
+  const routeRequestRef = useRef(0);
 
   const dispatchData = useQuery(api.schedule.getDispatchDay, {
     date,
@@ -56,7 +69,23 @@ export default function DispatchBoard() {
 
   const updateDispatchMeta = useMutation(api.schedule.updateDispatchMeta);
   const reorderDispatch = useMutation(api.schedule.reorderDispatch);
-  const backfillDispatchLocations = useAction(api.schedule.backfillDispatchLocations);
+  const runDispatchGeocodeSweep = useAction(api.schedule.runDispatchGeocodeSweep);
+  const suggestDispatchRoute = useAction(api.schedule.suggestDispatchRoute);
+
+  const reorderForDate = useCallback(
+    async (orderedBookingIds: Id<"bookings">[]) => {
+      setReordering(true);
+      try {
+        await reorderDispatch({
+          date,
+          orderedBookingIds,
+        });
+      } finally {
+        setReordering(false);
+      }
+    },
+    [date, reorderDispatch]
+  );
 
   useEffect(() => {
     if (!dispatchData) return;
@@ -118,6 +147,69 @@ export default function DispatchBoard() {
           : Math.round((dispatchData.totals.assigned / bookings.length) * 100),
     };
   }, [dispatchData]);
+
+  const refreshRouteSuggestion = useCallback(async () => {
+    if (!dispatchData) return;
+
+    const mappedCount = dispatchData.bookings.filter((booking) => hasCoordinates(booking)).length;
+    if (mappedCount === 0) {
+      routeRequestRef.current += 1;
+      setRouteSuggestion(null);
+      setRouteError(null);
+      setRouteLoading(false);
+      return;
+    }
+
+    const requestId = routeRequestRef.current + 1;
+    routeRequestRef.current = requestId;
+    setRouteLoading(true);
+    setRouteError(null);
+
+    try {
+      const suggestion = await suggestDispatchRoute({
+        date,
+        status: filters.status,
+        cleanerId: filters.cleanerId,
+        assignmentState: filters.assignmentState,
+        priority: filters.priority,
+        maxStops: 80,
+      });
+      if (routeRequestRef.current !== requestId) return;
+      setRouteSuggestion(suggestion as DispatchRouteSuggestion);
+    } catch {
+      if (routeRequestRef.current !== requestId) return;
+      setRouteSuggestion(null);
+      setRouteError("Route optimization failed. Check Mapbox config and try again.");
+    } finally {
+      if (routeRequestRef.current === requestId) {
+        setRouteLoading(false);
+      }
+    }
+  }, [date, dispatchData, filters, suggestDispatchRoute]);
+
+  useEffect(() => {
+    if (!dispatchData) return;
+    void refreshRouteSuggestion();
+  }, [dispatchData, refreshRouteSuggestion]);
+
+  const applySuggestedRoute = useCallback(async () => {
+    if (!dispatchData || !routeSuggestion) return;
+    if (routeSuggestion.date !== date) return;
+    if (routeSuggestion.orderedBookingIds.length <= 1) return;
+
+    const seenBookingIds = new Set(routeSuggestion.orderedBookingIds);
+    const remainingBookingIds = dispatchData.bookings
+      .map((booking) => booking._id)
+      .filter((bookingId) => !seenBookingIds.has(bookingId));
+    const combinedOrder = [...routeSuggestion.orderedBookingIds, ...remainingBookingIds];
+
+    setApplyingRoute(true);
+    try {
+      await reorderForDate(combinedOrder);
+    } finally {
+      setApplyingRoute(false);
+    }
+  }, [date, dispatchData, reorderForDate, routeSuggestion]);
 
   if (!dispatchData || !dispatchInsights) {
     return (
@@ -196,12 +288,23 @@ export default function DispatchBoard() {
         cleaners={dispatchData.cleaners}
         totals={dispatchData.totals}
         backfilling={backfilling}
+        backfillNote={backfillNote}
         onDateChange={setDate}
         onFiltersChange={setFilters}
         onBackfillLocations={async () => {
           setBackfilling(true);
           try {
-            await backfillDispatchLocations({ limit: 100, dryRun: false });
+            const result = await runDispatchGeocodeSweep({
+              seedLimit: 250,
+              processLimit: 250,
+            });
+            setBackfillNote(
+              `Queued ${result.seedQueued} / scanned ${result.seedScanned}. Processed ${result.processed}, geocoded ${result.geocoded}, retry ${result.retryScheduled}, failed ${result.failedPermanent}.`
+            );
+          } catch {
+            setBackfillNote(
+              "Geocode refresh failed. Verify MAPBOX_GEOCODING_TOKEN and try again."
+            );
           } finally {
             setBackfilling(false);
           }
@@ -246,15 +349,7 @@ export default function DispatchBoard() {
             }
           }}
           onReorder={async (orderedBookingIds) => {
-            setReordering(true);
-            try {
-              await reorderDispatch({
-                date,
-                orderedBookingIds,
-              });
-            } finally {
-              setReordering(false);
-            }
+            await reorderForDate(orderedBookingIds);
           }}
         />
 
@@ -263,6 +358,14 @@ export default function DispatchBoard() {
             bookings={dispatchData.bookings}
             selectedBookingId={selectedBookingId}
             onSelectBooking={setSelectedBookingId}
+            routeSuggestion={routeSuggestion}
+            routeLoading={routeLoading}
+            routeError={routeError}
+            applyingRoute={applyingRoute}
+            onRequestRoute={() => {
+              void refreshRouteSuggestion();
+            }}
+            onApplyRoute={applySuggestedRoute}
           />
         </div>
       </div>
@@ -297,6 +400,14 @@ export default function DispatchBoard() {
                 setMobileMapOpen(false);
                 setDetailsOpen(true);
               }}
+              routeSuggestion={routeSuggestion}
+              routeLoading={routeLoading}
+              routeError={routeError}
+              applyingRoute={applyingRoute}
+              onRequestRoute={() => {
+                void refreshRouteSuggestion();
+              }}
+              onApplyRoute={applySuggestedRoute}
             />
           </div>
         </SheetContent>

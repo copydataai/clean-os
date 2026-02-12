@@ -80,3 +80,17 @@ export type DispatchDayPayload = {
   bookings: DispatchBooking[];
   cleaners: DispatchCleanerSummary[];
 };
+
+export type DispatchRouteSuggestion = {
+  date: string;
+  totalVisibleStops: number;
+  mappedStops: number;
+  tokenConfigured: boolean;
+  provider: "mapbox" | "fallback";
+  orderedBookingIds: Id<"bookings">[];
+  skippedBookingIds: Id<"bookings">[];
+  unmappedBookingIds: Id<"bookings">[];
+  routeCoordinates: Array<[number, number]>;
+  totalDistanceMeters: number | null;
+  totalDurationSeconds: number | null;
+};

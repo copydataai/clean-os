@@ -18,6 +18,7 @@ type DispatchFiltersProps = {
   cleaners: DispatchCleanerSummary[];
   totals: DispatchTotals;
   backfilling: boolean;
+  backfillNote?: string | null;
   onDateChange: (date: string) => void;
   onFiltersChange: (filters: DispatchFiltersState) => void;
   onBackfillLocations: () => Promise<void>;
@@ -43,6 +44,7 @@ export default function DispatchFilters({
   cleaners,
   totals,
   backfilling,
+  backfillNote,
   onDateChange,
   onFiltersChange,
   onBackfillLocations,
@@ -93,6 +95,10 @@ export default function DispatchFilters({
             </Button>
           </div>
         </div>
+
+        {backfillNote ? (
+          <p className="text-xs text-muted-foreground">{backfillNote}</p>
+        ) : null}
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[180px_190px_150px_230px_auto] xl:items-center">
