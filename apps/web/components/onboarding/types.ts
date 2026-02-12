@@ -26,8 +26,8 @@ export const operationalStatusColors: Record<string, string> = {
 };
 
 export function formatCurrency(cents?: number | null) {
-  if (!cents) return "---";
-  return `$${(cents / 100).toLocaleString()}`;
+  if (cents == null) return "---";
+  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function getErrorMessage(error: unknown) {
