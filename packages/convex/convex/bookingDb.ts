@@ -48,6 +48,12 @@ export const createBooking = internalMutation({
       updatedAt: now,
     });
 
+    await ctx.runMutation(internal.schedule.enqueueDispatchGeocodeJob, {
+      bookingId,
+      reason: "booking_created",
+      force: true,
+    });
+
     await ctx.runMutation(internal.bookingStateMachine.appendLifecycleEvent, {
       bookingId,
       eventType: "created",

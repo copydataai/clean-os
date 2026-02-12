@@ -332,6 +332,20 @@ async function ensureLifecycleCustomerRecord(
       ...patch,
       updatedAt: Date.now(),
     });
+
+    if (patch.address) {
+      const bookings = await ctx.db
+        .query("bookings")
+        .withIndex("by_customer", (q: any) => q.eq("customerId", canonical._id))
+        .collect();
+      if (bookings.length > 0) {
+        await ctx.runMutation(internal.schedule.enqueueDispatchGeocodeJobsBatch, {
+          bookingIds: bookings.map((booking: Doc<"bookings">) => booking._id),
+          reason: "customer_address_updated",
+          force: true,
+        });
+      }
+    }
   }
 
   return canonical._id;
@@ -673,6 +687,20 @@ export const update = mutation({
       Object.entries(updates).filter(([, value]) => value !== undefined)
     ) as Record<string, unknown>;
 
+    const previousAddress = normalizeAddress(
+      customer.address as AddressInput | undefined
+    );
+    const nextAddress =
+      filteredUpdates.address !== undefined
+        ? normalizeAddress(filteredUpdates.address as AddressInput | undefined)
+        : undefined;
+    if (filteredUpdates.address !== undefined) {
+      filteredUpdates.address = nextAddress;
+    }
+    const addressChanged =
+      filteredUpdates.address !== undefined &&
+      JSON.stringify(nextAddress ?? {}) !== JSON.stringify(previousAddress ?? {});
+
     if (filteredUpdates.email) {
       filteredUpdates.email = String(filteredUpdates.email).trim();
       filteredUpdates.emailNormalized = normalizeEmailAddress(String(filteredUpdates.email));
@@ -683,6 +711,20 @@ export const update = mutation({
         ...filteredUpdates,
         updatedAt: Date.now(),
       });
+
+      if (addressChanged) {
+        const bookings = await ctx.db
+          .query("bookings")
+          .withIndex("by_customer", (q: any) => q.eq("customerId", customerId))
+          .collect();
+        if (bookings.length > 0) {
+          await ctx.runMutation(internal.schedule.enqueueDispatchGeocodeJobsBatch, {
+            bookingIds: bookings.map((booking: Doc<"bookings">) => booking._id),
+            reason: "customer_address_updated",
+            force: true,
+          });
+        }
+      }
     }
 
     return customerId;

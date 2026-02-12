@@ -72,6 +72,12 @@ export const createBookingFromTally = mutation({
       updatedAt: now,
     });
 
+    await ctx.runMutation(internal.schedule.enqueueDispatchGeocodeJob, {
+      bookingId,
+      reason: "booking_created",
+      force: true,
+    });
+
     await ctx.runMutation(internal.bookingStateMachine.appendLifecycleEvent, {
       bookingId,
       eventType: "created",
@@ -202,6 +208,12 @@ export const createBookingFromRequest = mutation({
       bookingRequestId: request._id,
       createdAt: now,
       updatedAt: now,
+    });
+
+    await ctx.runMutation(internal.schedule.enqueueDispatchGeocodeJob, {
+      bookingId,
+      reason: "booking_created",
+      force: true,
     });
 
     await ctx.runMutation(internal.bookingStateMachine.appendLifecycleEvent, {
