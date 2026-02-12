@@ -17,4 +17,14 @@ crons.interval(
   {}
 );
 
+crons.interval(
+  "dispatch-geocode-sweep",
+  { minutes: 15 },
+  internal.schedule.dispatchGeocodeSweepInternal,
+  {
+    seedLimit: 250,
+    processLimit: 250,
+  }
+);
+
 export default crons;

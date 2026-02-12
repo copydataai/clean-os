@@ -136,6 +136,26 @@ const bookings = defineTable({
   .index("by_customer", ["customerId"])
   .index("by_stripe_customer", ["stripeCustomerId"]);
 
+const dispatchGeocodeJobs = defineTable({
+  organizationId: v.optional(v.id("organizations")),
+  bookingId: v.id("bookings"),
+  status: v.string(), // queued|processing|retry|completed|failed
+  reason: v.optional(v.string()),
+  attempts: v.number(),
+  nextAttemptAt: v.number(),
+  lockedAt: v.optional(v.number()),
+  completedAt: v.optional(v.number()),
+  addressLine: v.optional(v.string()),
+  addressHash: v.optional(v.string()),
+  lastError: v.optional(v.string()),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+})
+  .index("by_booking", ["bookingId"])
+  .index("by_status_next_attempt", ["status", "nextAttemptAt"])
+  .index("by_org_status_next_attempt", ["organizationId", "status", "nextAttemptAt"])
+  .index("by_organization", ["organizationId"]);
+
 const bookingLifecycleEvents = defineTable({
   bookingId: v.id("bookings"),
   eventType: v.string(),
@@ -1024,6 +1044,7 @@ export default defineSchema({
   setupIntents,
   paymentMethods,
   bookings,
+  dispatchGeocodeJobs,
   bookingLifecycleEvents,
   bookingRequests,
   quoteRequests,
