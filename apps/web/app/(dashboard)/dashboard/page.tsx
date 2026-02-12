@@ -5,7 +5,7 @@ import { api } from "@clean-os/convex/api";
 import { Authenticated } from "convex/react";
 import PageHeader from "@/components/dashboard/PageHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
-import RequestCard from "@/components/dashboard/RequestCard";
+import OverviewOnboardingRow from "@/components/dashboard/OverviewOnboardingRow";
 import { onboardingApi } from "@/lib/onboarding/api";
 
 function formatCurrency(cents: number): string {
@@ -27,10 +27,6 @@ export default function DashboardPage() {
   const recentRequests = useQuery(
     onboardingApi.listRecentRequests,
     shouldFetchDashboardData ? { limit: 3 } : "skip"
-  );
-  const tallyLinks = useQuery(
-    api.integrations.getTallyFormLinksForActiveOrganization,
-    shouldFetchDashboardData ? {} : "skip"
   );
 
   const isDashboardLoading =
@@ -81,19 +77,19 @@ export default function DashboardPage() {
           <div className="surface-card p-6">
             <p className="text-sm font-medium text-muted-foreground">Revenue This Month</p>
             <p className="mt-2 text-3xl font-semibold text-foreground">{formatCurrency(stats?.revenueThisMonthCents || 0)}</p>
-            <p className="mt-1 text-sm text-green-600">+18% from last month</p>
+            <p className="mt-1 text-xs text-muted-foreground">Current month total</p>
           </div>
 
           <div className="surface-card p-6">
             <p className="text-sm font-medium text-muted-foreground">Jobs Completed</p>
             <p className="mt-2 text-3xl font-semibold text-foreground">{stats?.jobsCompletedThisMonth || 0}</p>
-            <p className="mt-1 text-sm text-green-600">+12% from last month</p>
+            <p className="mt-1 text-xs text-muted-foreground">Completed this month</p>
           </div>
 
           <div className="surface-card p-6">
             <p className="text-sm font-medium text-muted-foreground">Active Clients</p>
             <p className="mt-2 text-3xl font-semibold text-foreground">{stats?.activeClients || 0}</p>
-            <p className="mt-1 text-sm text-green-600">+5% from last month</p>
+            <p className="mt-1 text-xs text-muted-foreground">Unique client emails</p>
           </div>
 
           <div className="surface-card p-6">
@@ -118,10 +114,9 @@ export default function DashboardPage() {
                   <p className="text-sm text-muted-foreground">No recent onboarding records</p>
                 ) : (
                   recentRequests?.map((request) => (
-                    <RequestCard
+                    <OverviewOnboardingRow
                       key={request._id}
                       request={request}
-                      confirmationFormUrl={tallyLinks?.confirmationFormUrl ?? null}
                     />
                   ))
                 )}
@@ -138,7 +133,7 @@ export default function DashboardPage() {
                     <div key={job._id} className="flex items-center justify-between surface-soft p-4">
                       <div className="flex-1">
                         <p className="font-medium text-foreground">{job.customerName || job.email}</p>
-                        <p className="text-sm text-muted-foreground">{job.serviceType || "Standard Cleaning"}</p>
+                        <p className="text-sm text-muted-foreground">{job.serviceType || "—"}</p>
                       </div>
                       <div className="flex items-center gap-4">
                         <StatusBadge status={job.status} />
@@ -155,23 +150,23 @@ export default function DashboardPage() {
 
           <div className="space-y-6">
             <div className="surface-card p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Onboarding Status</h2>
-              <div className="space-y-3 text-sm text-muted-foreground">
+              <h2 className="text-lg font-semibold text-foreground mb-4">Onboarding Snapshot</h2>
+              <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between">
                   <span>Requested</span>
-                  <StatusBadge status="requested" />
+                  <span className="font-mono text-foreground">{stats?.pendingRequests || 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Confirmed</span>
-                  <StatusBadge status="confirmed" />
+                  <span className="font-mono text-foreground">{stats?.confirmedRequests || 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Card requested</span>
-                  <StatusBadge status="booking_created" label="card requested" />
+                  <span>Awaiting card setup</span>
+                  <span className="font-mono text-foreground">{stats?.pendingBookings || 0}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Card Saved</span>
-                  <StatusBadge status="card_saved" />
+                  <span>Scheduled today</span>
+                  <span className="font-mono text-foreground">{stats?.jobsScheduledToday || 0}</span>
                 </div>
               </div>
             </div>
@@ -187,7 +182,7 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-muted-foreground">{job.serviceDate || "TBD"}</p>
                       <p className="mt-2 font-semibold text-foreground">{job.customerName || job.email}</p>
                       <div className="mt-2 flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">{job.serviceType || "Standard"}</span>
+                        <span className="text-muted-foreground">{job.serviceType || "—"}</span>
                         <StatusBadge status={job.status} />
                       </div>
                     </div>
