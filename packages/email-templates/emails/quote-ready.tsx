@@ -107,8 +107,11 @@ export default function QuoteReadyEmail({
       )}
 
       <Text style={smallText}>
-        This quote is valid for 30 days. If you have any questions, reply to
-        this email.
+        {(() => {
+          const validDays = Math.max(0, Math.ceil((validUntilTimestamp - Date.now()) / (1000 * 60 * 60 * 24)));
+          return `This quote is valid for ${validDays} day${validDays !== 1 ? "s" : ""}.`;
+        })()}{" "}
+        If you have any questions, reply to this email.
       </Text>
     </EmailLayout>
   );
@@ -235,6 +238,6 @@ const linkStyle: React.CSSProperties = {
 
 const smallText: React.CSSProperties = {
   fontSize: "12px",
-  color: "#94A39A",
+  color: "#6B7F72",
   margin: "8px 0 0",
 };
