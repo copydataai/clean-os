@@ -49,34 +49,20 @@ export default function QuoteReceivedEmail({
       {/* ── Request details ── */}
       <Section style={detailsBox}>
         <Text style={detailsHeading}>Your request details</Text>
-        {service && (
-          <>
-            <DetailRow label="Service" value={service} />
-            <Hr style={divider} />
-          </>
-        )}
-        {serviceType && (
-          <>
-            <DetailRow label="Type" value={serviceType} />
-            <Hr style={divider} />
-          </>
-        )}
-        {frequency && (
-          <>
-            <DetailRow label="Frequency" value={frequency} />
-            <Hr style={divider} />
-          </>
-        )}
-        {squareFootage != null && (
-          <>
-            <DetailRow
-              label="Sq. ft."
-              value={squareFootage.toLocaleString()}
-            />
-            <Hr style={divider} />
-          </>
-        )}
-        {locationLine && <DetailRow label="Location" value={locationLine} />}
+        {(() => {
+          const fields: { label: string; value: string }[] = [];
+          if (service) fields.push({ label: "Service", value: service });
+          if (serviceType) fields.push({ label: "Type", value: serviceType });
+          if (frequency) fields.push({ label: "Frequency", value: frequency });
+          if (squareFootage != null) fields.push({ label: "Sq. ft.", value: squareFootage.toLocaleString() });
+          if (locationLine) fields.push({ label: "Location", value: locationLine });
+          return fields.map((field, i) => (
+            <React.Fragment key={field.label}>
+              <DetailRow label={field.label} value={field.value} />
+              {i < fields.length - 1 && <Hr style={divider} />}
+            </React.Fragment>
+          ));
+        })()}
       </Section>
 
       <Text style={paragraph}>
