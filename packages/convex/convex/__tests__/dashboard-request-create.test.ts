@@ -106,6 +106,7 @@ describe.sequential("dashboard request create mutation", () => {
       firstName: "Existing",
       lastName: "Customer",
       email: "existing@example.com",
+      phone: "5550001111",
       service: "Recurring clean",
       serviceType: "Standard",
       squareFootage: 1200,
@@ -137,7 +138,46 @@ describe.sequential("dashboard request create mutation", () => {
     });
 
     expect(records.bookingRequest?.quoteRequestId).toBe(quoteRequestId);
+    expect(records.bookingRequest?.contactDetails).toBe("Existing Customer");
+    expect(records.bookingRequest?.email).toBe("existing@example.com");
+    expect(records.bookingRequest?.phoneNumber).toBe("5550001111");
     expect(records.quoteRequest?.bookingRequestId).toBe(result.bookingRequestId);
+  });
+
+  it("falls back to payload contact fields when selected quote is missing them", async () => {
+    const t = convexTest(schema, modules);
+    const fixture = await createOrgMembershipFixture(t);
+    const authed = t.withIdentity({
+      subject: fixture.clerkUserId,
+      orgId: fixture.clerkOrgId,
+    });
+
+    const quoteRequestId = await t.mutation(internal.quoteRequests.createQuoteRequest, {
+      organizationId: fixture.organizationId,
+      service: "Recurring clean",
+      serviceType: "Standard",
+      squareFootage: 1200,
+      address: "900 Howard St",
+      postalCode: "94103",
+      city: "San Francisco",
+      state: "CA",
+    });
+
+    const result = await authed.mutation(
+      api.bookingRequests.createFromDashboard,
+      buildPayload({
+        mode: "existing",
+        existingQuoteRequestId: quoteRequestId,
+      })
+    );
+
+    const bookingRequest = await t.run(async (ctx) => {
+      return await ctx.db.get(result.bookingRequestId as Id<"bookingRequests">);
+    });
+
+    expect(bookingRequest?.contactDetails).toBe("Jamie Rivera");
+    expect(bookingRequest?.email).toBe("jamie@example.com");
+    expect(bookingRequest?.phoneNumber).toBe("5551234567");
   });
 
   it("rejects when selected quote is already linked", async () => {

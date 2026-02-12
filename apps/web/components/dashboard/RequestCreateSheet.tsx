@@ -60,6 +60,15 @@ function trimToOptional(value: string): string | undefined {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
+function trimOrEmpty(value: string | null | undefined): string {
+  return (value ?? "").trim();
+}
+
+function trimOrFallback(value: string | null | undefined, fallback: string): string {
+  const trimmed = trimOrEmpty(value);
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
 function getErrorCode(error: unknown): string | null {
   const parseMessageCode = (message: string): string | null => {
     if (/^[A-Z0-9_]+$/.test(message)) {
@@ -145,10 +154,46 @@ export default function RequestCreateSheet({
       : "skip"
   );
 
+  const selectedQuoteDetails = useQuery(
+    onboardingApi.getQuoteRequestById,
+    open && mode === "existing" && selectedQuoteRequestId
+      ? { id: selectedQuoteRequestId }
+      : "skip"
+  );
+
   const selectedQuote = useMemo(
     () => quoteResults?.find((quote) => quote._id === selectedQuoteRequestId) ?? null,
     [quoteResults, selectedQuoteRequestId]
   );
+
+  const selectedQuotePreview = useMemo(() => {
+    if (!selectedQuoteRequestId) return null;
+
+    const firstName = trimOrEmpty(selectedQuoteDetails?.firstName ?? selectedQuote?.firstName);
+    const lastName = trimOrEmpty(selectedQuoteDetails?.lastName ?? selectedQuote?.lastName);
+    const fullName = `${firstName} ${lastName}`.trim();
+    const emailValue = trimOrEmpty(selectedQuoteDetails?.email ?? selectedQuote?.email);
+    const serviceValue = trimOrEmpty(
+      selectedQuoteDetails?.serviceType ??
+        selectedQuoteDetails?.service ??
+        selectedQuote?.serviceType ??
+        selectedQuote?.service
+    );
+    const addressValue = [
+      trimOrEmpty(selectedQuoteDetails?.address ?? selectedQuote?.address),
+      trimOrEmpty(selectedQuoteDetails?.city ?? selectedQuote?.city),
+      trimOrEmpty(selectedQuoteDetails?.state ?? selectedQuote?.state),
+    ]
+      .filter(Boolean)
+      .join(", ");
+
+    return {
+      name: fullName || selectedQuote?.fullName || emailValue || "Unnamed quote",
+      email: emailValue || null,
+      service: serviceValue || null,
+      address: addressValue || null,
+    };
+  }, [selectedQuote, selectedQuoteDetails, selectedQuoteRequestId]);
 
   function resetForm() {
     setMode("new");
@@ -187,23 +232,89 @@ export default function RequestCreateSheet({
     event.preventDefault();
     setError(null);
 
+    const isExistingMode = mode === "existing";
+
+    if (isExistingMode && !selectedQuoteRequestId) {
+      setError("Select an existing quote.");
+      return;
+    }
+
+    if (isExistingMode && selectedQuoteDetails === undefined) {
+      setError("Loading selected quote details. Try again in a moment.");
+      return;
+    }
+
+    if (isExistingMode && !selectedQuoteDetails) {
+      setError("Selected quote is unavailable.");
+      return;
+    }
+
+    const existingQuote = isExistingMode ? selectedQuoteDetails : null;
+    const derivedContact = {
+      firstName: isExistingMode
+        ? trimOrEmpty(existingQuote?.firstName ?? selectedQuote?.firstName ?? firstName)
+        : firstName.trim(),
+      lastName: isExistingMode
+        ? trimOrEmpty(existingQuote?.lastName ?? selectedQuote?.lastName ?? lastName)
+        : lastName.trim(),
+      email: isExistingMode
+        ? trimOrEmpty(existingQuote?.email ?? selectedQuote?.email ?? email)
+        : email.trim(),
+      phone: isExistingMode
+        ? trimOrEmpty(existingQuote?.phone ?? phone)
+        : phone.trim(),
+    };
+    const derivedSquareFootageRaw = isExistingMode
+      ? existingQuote?.squareFootage != null
+        ? String(existingQuote.squareFootage)
+        : squareFootage
+      : squareFootage;
+    const derivedQuote = {
+      service: isExistingMode
+        ? trimOrFallback(existingQuote?.service ?? selectedQuote?.service ?? service, "Quoted service")
+        : service.trim(),
+      serviceType: isExistingMode
+        ? trimOrFallback(
+            existingQuote?.serviceType ?? selectedQuote?.serviceType ?? serviceType,
+            "Quoted service"
+          )
+        : serviceType.trim(),
+      frequency: isExistingMode
+        ? trimOrEmpty(existingQuote?.frequency ?? frequency)
+        : frequency.trim(),
+      squareFootage: derivedSquareFootageRaw,
+      address: isExistingMode
+        ? trimOrFallback(existingQuote?.address ?? selectedQuote?.address ?? address, "Unknown address")
+        : address.trim(),
+      addressLine2: isExistingMode
+        ? trimOrEmpty(existingQuote?.addressLine2 ?? addressLine2)
+        : addressLine2.trim(),
+      postalCode: isExistingMode
+        ? trimOrFallback(existingQuote?.postalCode ?? postalCode, "00000")
+        : postalCode.trim(),
+      city: isExistingMode
+        ? trimOrFallback(existingQuote?.city ?? selectedQuote?.city ?? city, "Unknown city")
+        : city.trim(),
+      state: isExistingMode
+        ? trimOrFallback(existingQuote?.state ?? selectedQuote?.state ?? state, "NA")
+        : state.trim(),
+      additionalNotes: isExistingMode
+        ? trimOrEmpty(existingQuote?.additionalNotes ?? quoteAdditionalNotes)
+        : quoteAdditionalNotes.trim(),
+    };
+
     const errors = validateRequestCreateInput({
       mode,
       existingQuoteRequestId: selectedQuoteRequestId,
-      contact: {
-        firstName,
-        lastName,
-        email,
-        phone,
-      },
+      contact: derivedContact,
       quote: {
-        service,
-        serviceType,
-        squareFootage,
-        address,
-        postalCode,
-        city,
-        state,
+        service: derivedQuote.service,
+        serviceType: derivedQuote.serviceType,
+        squareFootage: derivedQuote.squareFootage,
+        address: derivedQuote.address,
+        postalCode: derivedQuote.postalCode,
+        city: derivedQuote.city,
+        state: derivedQuote.state,
       },
     });
 
@@ -212,39 +323,31 @@ export default function RequestCreateSheet({
       return;
     }
 
-    const squareFootageValue = Number.parseInt(squareFootage, 10);
-    if (!Number.isFinite(squareFootageValue) || squareFootageValue <= 0) {
+    const parsedSquareFootage = Number.parseInt(derivedQuote.squareFootage, 10);
+    if (!isExistingMode && (!Number.isFinite(parsedSquareFootage) || parsedSquareFootage <= 0)) {
       setError("Square footage must be a positive number.");
       return;
     }
-
-    if (mode === "existing" && !selectedQuoteRequestId) {
-      setError("Select an existing quote request.");
-      return;
-    }
+    const squareFootageValue =
+      Number.isFinite(parsedSquareFootage) && parsedSquareFootage > 0 ? parsedSquareFootage : 1;
 
     setIsSubmitting(true);
     try {
       const result = await createFromDashboard({
         mode,
         existingQuoteRequestId: mode === "existing" ? selectedQuoteRequestId ?? undefined : undefined,
-        contact: {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          email: email.trim(),
-          phone: phone.trim(),
-        },
+        contact: derivedContact,
         quote: {
-          service: service.trim(),
-          serviceType: serviceType.trim(),
-          frequency: trimToOptional(frequency),
+          service: derivedQuote.service,
+          serviceType: derivedQuote.serviceType,
+          frequency: trimToOptional(derivedQuote.frequency),
           squareFootage: squareFootageValue,
-          address: address.trim(),
-          addressLine2: trimToOptional(addressLine2),
-          postalCode: postalCode.trim(),
-          city: city.trim(),
-          state: state.trim(),
-          additionalNotes: trimToOptional(quoteAdditionalNotes),
+          address: derivedQuote.address,
+          addressLine2: trimToOptional(derivedQuote.addressLine2),
+          postalCode: derivedQuote.postalCode,
+          city: derivedQuote.city,
+          state: derivedQuote.state,
+          additionalNotes: trimToOptional(derivedQuote.additionalNotes),
         },
         request: {
           accessMethod: parseCommaSeparated(accessMethodInput),
@@ -397,156 +500,184 @@ export default function RequestCreateSheet({
                   )}
                 </div>
 
-                {selectedQuote ? (
-                  <p className="text-xs text-muted-foreground">
-                    Selected quote: {formatQuoteLabel(selectedQuote).title}
-                  </p>
+                {selectedQuoteRequestId ? (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 p-3 text-xs text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-200">
+                    <p className="font-semibold uppercase tracking-[0.12em]">Using selected quote data</p>
+                    {selectedQuoteDetails === undefined ? (
+                      <p className="mt-2 text-emerald-700 dark:text-emerald-300">
+                        Loading selected quote details...
+                      </p>
+                    ) : selectedQuoteDetails === null ? (
+                      <p className="mt-2 text-rose-700 dark:text-rose-300">
+                        Selected quote is unavailable.
+                      </p>
+                    ) : (
+                      <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                        <p>
+                          <span className="font-semibold">Name:</span> {selectedQuotePreview?.name ?? "---"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Email:</span> {selectedQuotePreview?.email ?? "---"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Service:</span> {selectedQuotePreview?.service ?? "---"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Address:</span> {selectedQuotePreview?.address ?? "---"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 ) : null}
               </div>
             ) : null}
 
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">Contact</h3>
-              <FieldGroup>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor="request-first-name">First name *</FieldLabel>
-                    <Input
-                      id="request-first-name"
-                      value={firstName}
-                      onChange={(event) => setFirstName(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="request-last-name">Last name *</FieldLabel>
-                    <Input
-                      id="request-last-name"
-                      value={lastName}
-                      onChange={(event) => setLastName(event.target.value)}
-                    />
-                  </Field>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor="request-email">Email *</FieldLabel>
-                    <Input
-                      id="request-email"
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="request-phone">Phone *</FieldLabel>
-                    <Input
-                      id="request-phone"
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                    />
-                  </Field>
-                </div>
-              </FieldGroup>
-            </div>
-
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">Quote details</h3>
-              <FieldGroup>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor="request-service">Service *</FieldLabel>
-                    <Input
-                      id="request-service"
-                      value={service}
-                      onChange={(event) => setService(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="request-service-type">Service type *</FieldLabel>
-                    <Input
-                      id="request-service-type"
-                      value={serviceType}
-                      onChange={(event) => setServiceType(event.target.value)}
-                    />
-                  </Field>
+            {mode === "new" ? (
+              <>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground">Contact</h3>
+                  <FieldGroup>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor="request-first-name">First name *</FieldLabel>
+                        <Input
+                          id="request-first-name"
+                          value={firstName}
+                          onChange={(event) => setFirstName(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="request-last-name">Last name *</FieldLabel>
+                        <Input
+                          id="request-last-name"
+                          value={lastName}
+                          onChange={(event) => setLastName(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor="request-email">Email *</FieldLabel>
+                        <Input
+                          id="request-email"
+                          type="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="request-phone">Phone *</FieldLabel>
+                        <Input
+                          id="request-phone"
+                          value={phone}
+                          onChange={(event) => setPhone(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+                  </FieldGroup>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field>
-                    <FieldLabel htmlFor="request-frequency">Frequency</FieldLabel>
-                    <Input
-                      id="request-frequency"
-                      value={frequency}
-                      onChange={(event) => setFrequency(event.target.value)}
-                      placeholder="Weekly, bi-weekly, monthly"
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="request-square-footage">Square footage *</FieldLabel>
-                    <Input
-                      id="request-square-footage"
-                      inputMode="numeric"
-                      value={squareFootage}
-                      onChange={(event) => setSquareFootage(event.target.value)}
-                    />
-                  </Field>
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground">Quote details</h3>
+                  <FieldGroup>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor="request-service">Service *</FieldLabel>
+                        <Input
+                          id="request-service"
+                          value={service}
+                          onChange={(event) => setService(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="request-service-type">Service type *</FieldLabel>
+                        <Input
+                          id="request-service-type"
+                          value={serviceType}
+                          onChange={(event) => setServiceType(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field>
+                        <FieldLabel htmlFor="request-frequency">Frequency</FieldLabel>
+                        <Input
+                          id="request-frequency"
+                          value={frequency}
+                          onChange={(event) => setFrequency(event.target.value)}
+                          placeholder="Weekly, bi-weekly, monthly"
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="request-square-footage">Square footage *</FieldLabel>
+                        <Input
+                          id="request-square-footage"
+                          inputMode="numeric"
+                          value={squareFootage}
+                          onChange={(event) => setSquareFootage(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field>
+                      <FieldLabel htmlFor="request-address">Address *</FieldLabel>
+                      <Input
+                        id="request-address"
+                        value={address}
+                        onChange={(event) => setAddress(event.target.value)}
+                      />
+                    </Field>
+
+                    <Field>
+                      <FieldLabel htmlFor="request-address-line2">Address line 2</FieldLabel>
+                      <Input
+                        id="request-address-line2"
+                        value={addressLine2}
+                        onChange={(event) => setAddressLine2(event.target.value)}
+                      />
+                    </Field>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Field>
+                        <FieldLabel htmlFor="request-postal-code">Postal code *</FieldLabel>
+                        <Input
+                          id="request-postal-code"
+                          value={postalCode}
+                          onChange={(event) => setPostalCode(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="request-city">City *</FieldLabel>
+                        <Input
+                          id="request-city"
+                          value={city}
+                          onChange={(event) => setCity(event.target.value)}
+                        />
+                      </Field>
+                      <Field>
+                        <FieldLabel htmlFor="request-state">State *</FieldLabel>
+                        <Input
+                          id="request-state"
+                          value={state}
+                          onChange={(event) => setState(event.target.value)}
+                        />
+                      </Field>
+                    </div>
+
+                    <Field>
+                      <FieldLabel htmlFor="request-quote-notes">Quote notes</FieldLabel>
+                      <Textarea
+                        id="request-quote-notes"
+                        value={quoteAdditionalNotes}
+                        onChange={(event) => setQuoteAdditionalNotes(event.target.value)}
+                        rows={3}
+                      />
+                    </Field>
+                  </FieldGroup>
                 </div>
-
-                <Field>
-                  <FieldLabel htmlFor="request-address">Address *</FieldLabel>
-                  <Input
-                    id="request-address"
-                    value={address}
-                    onChange={(event) => setAddress(event.target.value)}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="request-address-line2">Address line 2</FieldLabel>
-                  <Input
-                    id="request-address-line2"
-                    value={addressLine2}
-                    onChange={(event) => setAddressLine2(event.target.value)}
-                  />
-                </Field>
-
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field>
-                    <FieldLabel htmlFor="request-postal-code">Postal code *</FieldLabel>
-                    <Input
-                      id="request-postal-code"
-                      value={postalCode}
-                      onChange={(event) => setPostalCode(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="request-city">City *</FieldLabel>
-                    <Input
-                      id="request-city"
-                      value={city}
-                      onChange={(event) => setCity(event.target.value)}
-                    />
-                  </Field>
-                  <Field>
-                    <FieldLabel htmlFor="request-state">State *</FieldLabel>
-                    <Input
-                      id="request-state"
-                      value={state}
-                      onChange={(event) => setState(event.target.value)}
-                    />
-                  </Field>
-                </div>
-
-                <Field>
-                  <FieldLabel htmlFor="request-quote-notes">Quote notes</FieldLabel>
-                  <Textarea
-                    id="request-quote-notes"
-                    value={quoteAdditionalNotes}
-                    onChange={(event) => setQuoteAdditionalNotes(event.target.value)}
-                    rows={3}
-                  />
-                </Field>
-              </FieldGroup>
-            </div>
+              </>
+            ) : null}
 
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">Intake details (optional)</h3>

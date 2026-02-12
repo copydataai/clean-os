@@ -215,8 +215,8 @@ describe("deriveOrgContextState", () => {
       isSwitching: false,
       pendingOrgClerkId: null,
     });
-    expect(missingBackendState.isOrgContextReady).toBe(true);
-    expect(missingBackendState.isResolvingOrgContext).toBe(false);
+    expect(missingBackendState.isOrgContextReady).toBe(false);
+    expect(missingBackendState.isResolvingOrgContext).toBe(true);
     expect(missingBackendState.shouldRefreshOrgClaim).toBe(false);
 
     const mismatchedBackendState = deriveOrgContextState({
@@ -231,8 +231,8 @@ describe("deriveOrgContextState", () => {
       isSwitching: false,
       pendingOrgClerkId: null,
     });
-    expect(mismatchedBackendState.isOrgContextReady).toBe(true);
-    expect(mismatchedBackendState.isResolvingOrgContext).toBe(false);
+    expect(mismatchedBackendState.isOrgContextReady).toBe(false);
+    expect(mismatchedBackendState.isResolvingOrgContext).toBe(true);
     expect(mismatchedBackendState.shouldRefreshOrgClaim).toBe(true);
     expect(mismatchedBackendState.refreshOrgClaimTargetClerkId).toBe(secondOrganization.clerkId);
   });

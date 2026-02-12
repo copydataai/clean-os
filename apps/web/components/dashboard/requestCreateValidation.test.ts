@@ -56,7 +56,31 @@ describe("requestCreateValidation", () => {
       },
     });
 
-    expect(errors).toContain("Select an existing quote request.");
+    expect(errors).toContain("Select an existing quote.");
+  });
+
+  it("only validates quote selection in existing mode", () => {
+    const errors = validateRequestCreateInput({
+      mode: "existing",
+      existingQuoteRequestId: "quote_123",
+      contact: {
+        firstName: "",
+        lastName: "",
+        email: "",
+        phone: "",
+      },
+      quote: {
+        service: "",
+        serviceType: "",
+        squareFootage: "",
+        address: "",
+        postalCode: "",
+        city: "",
+        state: "",
+      },
+    });
+
+    expect(errors).toEqual([]);
   });
 
   it("parses comma separated values", () => {
