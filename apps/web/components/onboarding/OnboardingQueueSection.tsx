@@ -23,8 +23,8 @@ export default function OnboardingQueueSection({
           className={cn(
             "text-[10px] font-medium",
             kind === "intake"
-              ? "border-[color:var(--onboarding-intake-accent)]/45 text-[color:var(--onboarding-intake-accent)]"
-              : "border-[color:var(--onboarding-job-accent)]/45 text-[color:var(--onboarding-job-accent)]"
+              ? "border-[var(--onboarding-intake-accent)]/45 text-[var(--onboarding-intake-accent)]"
+              : "border-[var(--onboarding-job-accent)]/45 text-[var(--onboarding-job-accent)]"
           )}
         >
           {count}
