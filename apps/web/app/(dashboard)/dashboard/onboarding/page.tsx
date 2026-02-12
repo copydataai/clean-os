@@ -345,13 +345,10 @@ export default function OnboardingPage() {
               variant="outline"
               disabled={!canGoBack}
               onClick={() => {
-                setCursorHistory((previous) => {
-                  if (previous.length === 0) return previous;
-                  const copy = [...previous];
-                  const previousCursor = copy.pop();
-                  setCursor(previousCursor || undefined);
-                  return copy;
-                });
+                const copy = [...cursorHistory];
+                const previousCursor = copy.pop();
+                setCursorHistory(copy);
+                setCursor(previousCursor || undefined);
               }}
             >
               Previous
@@ -439,7 +436,10 @@ export default function OnboardingPage() {
                           }
                         }}
                         onCharge={async () => {
-                          if (!row.amount) return;
+                          if (!row.amount) {
+                            setFeedback({ type: "error", message: "Amount is required to charge." });
+                            return;
+                          }
                           setBusyRowId(row.bookingId);
                           try {
                             await chargeJob({
