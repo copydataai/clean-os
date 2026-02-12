@@ -34,7 +34,7 @@ function OnboardingAlertCard({
 
   return (
     <div className={cn("flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 text-sm", toneClasses)}>
-      <p>{children}</p>
+      <div className="m-0">{children}</div>
       {action}
     </div>
   );
