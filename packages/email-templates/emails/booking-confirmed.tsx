@@ -5,6 +5,7 @@ import {
   Row,
   Column,
   Hr,
+  Img,
 } from "@react-email/components";
 import * as React from "react";
 import EmailLayout from "./components/layout";
@@ -125,7 +126,13 @@ export default function BookingConfirmedEmail({
       <Section style={securityNote}>
         <Row>
           <Column style={securityIconCol}>
-            <Text style={securityIcon}>&#128274;</Text>
+            <Img
+              src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232D6A4F' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2' ry='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E"
+              alt="lock"
+              width="16"
+              height="16"
+              style={securityIconImg}
+            />
           </Column>
           <Column>
             <Text style={securityText}>
@@ -349,10 +356,10 @@ const securityIconCol: React.CSSProperties = {
   verticalAlign: "top",
 };
 
-const securityIcon: React.CSSProperties = {
-  fontSize: "16px",
-  margin: "0",
-  lineHeight: "20px",
+const securityIconImg: React.CSSProperties = {
+  width: "16px",
+  height: "16px",
+  margin: "2px 0 0",
 };
 
 const securityText: React.CSSProperties = {
