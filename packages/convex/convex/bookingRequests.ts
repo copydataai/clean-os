@@ -347,11 +347,11 @@ export const createFromDashboard = mutation({
           throw new Error("QUOTE_ALREADY_LINKED_TO_REQUEST");
         }
 
-        const existingFirstName = (existingQuote.firstName ?? firstName).trim();
-        const existingLastName = (existingQuote.lastName ?? lastName).trim();
+        const existingFirstName = (existingQuote.firstName || firstName).trim();
+        const existingLastName = (existingQuote.lastName || lastName).trim();
         const existingContactDetails = `${existingFirstName} ${existingLastName}`.trim();
-        const existingEmail = (existingQuote.email ?? quoteEmail).trim();
-        const existingPhone = (existingQuote.phone ?? quotePhone).trim();
+        const existingEmail = (existingQuote.email || quoteEmail).trim();
+        const existingPhone = (existingQuote.phone || quotePhone).trim();
 
         const bookingRequestId: Id<"bookingRequests"> = await ctx.runMutation(
           internal.bookingRequests.createRequest,
