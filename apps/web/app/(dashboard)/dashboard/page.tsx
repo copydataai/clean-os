@@ -6,6 +6,7 @@ import { Authenticated } from "convex/react";
 import PageHeader from "@/components/dashboard/PageHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import RequestCard from "@/components/dashboard/RequestCard";
+import { onboardingApi } from "@/lib/onboarding/api";
 
 function formatCurrency(cents: number): string {
   return `$${(cents / 100).toLocaleString()}`;
@@ -24,7 +25,7 @@ export default function DashboardPage() {
     shouldFetchDashboardData ? {} : "skip"
   );
   const recentRequests = useQuery(
-    api.bookingRequests.listRecent,
+    onboardingApi.listRecentRequests,
     shouldFetchDashboardData ? { limit: 3 } : "skip"
   );
   const tallyLinks = useQuery(
@@ -96,7 +97,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="surface-card p-6">
-            <p className="text-sm font-medium text-muted-foreground">Pending Bookings</p>
+            <p className="text-sm font-medium text-muted-foreground">Awaiting Card Setup</p>
             <p className="mt-2 text-3xl font-semibold text-foreground">{stats?.pendingBookings || 0}</p>
             <p className="mt-1 text-sm text-muted-foreground">{stats?.jobsScheduledToday || 0} scheduled today</p>
           </div>
@@ -106,7 +107,7 @@ export default function DashboardPage() {
           <div className="lg:col-span-2 space-y-6">
             <div className="surface-card p-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-foreground">New Requests</h2>
+                <h2 className="text-lg font-semibold text-foreground">Onboarding Intake</h2>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <StatusBadge status="requested" label={`${stats?.pendingRequests || 0} requested`} />
                   <StatusBadge status="confirmed" label={`${stats?.confirmedRequests || 0} confirmed`} />
@@ -114,7 +115,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-4 space-y-4">
                 {recentRequests?.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No recent requests</p>
+                  <p className="text-sm text-muted-foreground">No recent onboarding records</p>
                 ) : (
                   recentRequests?.map((request) => (
                     <RequestCard
@@ -154,7 +155,7 @@ export default function DashboardPage() {
 
           <div className="space-y-6">
             <div className="surface-card p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Request Status</h2>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Onboarding Status</h2>
               <div className="space-y-3 text-sm text-muted-foreground">
                 <div className="flex items-center justify-between">
                   <span>Requested</span>

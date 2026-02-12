@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
-import { api } from "@clean-os/convex/api";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { LifecycleRow, LifecycleTimelineEvent } from "./types";
+import { onboardingApi } from "@/lib/onboarding/api";
 
 type BookingLifecycleSheetProps = {
   open: boolean;
@@ -68,9 +68,9 @@ export default function BookingLifecycleSheet({
   onRequestOverride,
 }: BookingLifecycleSheetProps) {
   const bookingId = row?.bookingId ?? null;
-  const booking = useQuery(api.bookings.getBooking, bookingId ? { id: bookingId } : "skip");
+  const booking = useQuery(onboardingApi.getBooking, bookingId ? { id: bookingId } : "skip");
   const assignments = useQuery(
-    api.cleaners.getBookingAssignments,
+    onboardingApi.getBookingAssignments,
     bookingId ? { bookingId } : "skip"
   );
 
@@ -79,7 +79,7 @@ export default function BookingLifecycleSheet({
   const [hasMore, setHasMore] = useState(false);
 
   const timeline = useQuery(
-    api.bookingLifecycle.getBookingLifecycleTimeline,
+    onboardingApi.getBookingTimeline,
     bookingId
       ? {
           bookingId,

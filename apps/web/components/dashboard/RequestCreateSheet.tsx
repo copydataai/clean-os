@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
-import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +21,8 @@ import {
   validateRequestCreateInput,
   type RequestCreateMode,
 } from "./requestCreateValidation";
+import { onboardingApi } from "@/lib/onboarding/api";
+import { onboardingRequestPath } from "@/lib/onboarding/routes";
 
 type CreateFromDashboardResult = {
   bookingRequestId: Id<"bookingRequests">;
@@ -88,7 +89,7 @@ function getErrorCode(error: unknown): string | null {
 
 export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProps) {
   const router = useRouter();
-  const createFromDashboard = useMutation(api.bookingRequests.createFromDashboard);
+  const createFromDashboard = useMutation(onboardingApi.createRequestFromDashboard);
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<RequestCreateMode>("new");
@@ -128,7 +129,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
   const [error, setError] = useState<string | null>(null);
 
   const quoteResults = useQuery(
-    api.quoteRequests.searchForRequestLinking,
+    onboardingApi.searchQuoteRequestsForLinking,
     open && mode === "existing"
       ? {
           query: searchQuery.trim() || undefined,
@@ -259,7 +260,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
       onCreated?.(result);
       const quoteMode = result.reusedQuote ? "reused" : "created";
       router.push(
-        `/dashboard/requests/${result.bookingRequestId}?created=1&quote_mode=${quoteMode}`
+        `${onboardingRequestPath(result.bookingRequestId)}?created=1&quote_mode=${quoteMode}`
       );
     } catch (submitError) {
       const message = submitError instanceof Error

@@ -8,7 +8,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Home09Icon,
   Invoice02Icon,
-  InboxIcon,
   Calendar03Icon,
   CalendarCheckIn01Icon,
   UserGroupIcon,
@@ -44,8 +43,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: Home09Icon },
   { label: "Quotes", href: "/dashboard/quotes", icon: Invoice02Icon },
-  { label: "Requests", href: "/dashboard/requests", icon: InboxIcon },
-  { label: "Bookings", href: "/dashboard/bookings", icon: CalendarCheckIn01Icon },
+  { label: "Onboarding", href: "/dashboard/onboarding", icon: CalendarCheckIn01Icon },
   { label: "Schedule", href: "/dashboard/schedule", icon: Calendar03Icon },
   { label: "Cleaners", href: "/dashboard/cleaners", icon: UserGroupIcon },
   { label: "Customers", href: "/dashboard/customers", icon: ContactIcon },
@@ -177,7 +175,7 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
                   {activeOrg?.name ?? (isLoading ? "Loading organization" : "No organization")}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Requests, scheduling, teams, and customers
+                  Onboarding, scheduling, teams, and customers
                 </p>
               </div>
             </div>

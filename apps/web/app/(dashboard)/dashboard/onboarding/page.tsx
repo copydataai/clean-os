@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
 import PageHeader from "@/components/dashboard/PageHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
@@ -27,10 +27,9 @@ import OverrideStatusDialog from "@/components/bookings/OverrideStatusDialog";
 import { FUNNEL_STAGES, OPERATIONS_STATUSES, type LifecycleRow } from "@/components/bookings/types";
 import { cn } from "@/lib/utils";
 import { useActiveOrganization } from "@/components/org/useActiveOrganization";
+import { onboardingApi } from "@/lib/onboarding/api";
+import { onboardingRequestPath } from "@/lib/onboarding/routes";
 
-/* ─── Constants & Helpers ──────────────────────────────────── */
-
-const FUNNEL_UI_ENABLED = process.env.NEXT_PUBLIC_BOOKING_FUNNEL_UI === "true";
 type RowTypeFilter = "all" | "booking" | "pre_booking";
 type OperationalStatusFilter = "all" | (typeof OPERATIONS_STATUSES)[number];
 type FunnelStageFilter = "all" | (typeof FUNNEL_STAGES)[number];
@@ -69,179 +68,6 @@ const operationalStatusColors: Record<string, string> = {
   failed: "bg-red-500",
 };
 
-/* ─── Legacy Booking Card ──────────────────────────────────── */
-
-type LegacyBookingCardProps = {
-  booking: {
-    _id: Id<"bookings">;
-    customerName?: string | null;
-    email: string;
-    status: string;
-    amount?: number | null;
-    serviceDate?: string | null;
-    serviceType?: string | null;
-  };
-  isBusy: boolean;
-  onMarkCompleted: () => Promise<void>;
-  onCharge: () => Promise<void>;
-};
-
-function LegacyBookingCard({ booking, isBusy, onMarkCompleted, onCharge }: LegacyBookingCardProps) {
-  const assignments = useQuery(api.cleaners.getBookingAssignments, {
-    bookingId: booking._id,
-  });
-
-  const indicatorColor = operationalStatusColors[booking.status] ?? "bg-gray-400";
-
-  return (
-    <div className="space-y-4 rounded-xl border border-border/50 bg-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", indicatorColor)} />
-          <div>
-            <p className="text-sm font-medium text-foreground">{booking.customerName ?? booking.email}</p>
-            <p className="text-xs text-muted-foreground">{booking.email}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <StatusBadge status={booking.status} />
-          <span className="font-mono text-sm font-semibold text-foreground">{formatCurrency(booking.amount)}</span>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-6 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Date</span>
-          <span className="font-mono text-foreground">{booking.serviceDate ?? "TBD"}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Type</span>
-          <span className="text-foreground">{booking.serviceType ?? "Standard"}</span>
-        </div>
-      </div>
-
-      {assignments && assignments.length > 0 ? (
-        <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Assigned Cleaners</p>
-          <div className="flex flex-wrap gap-1.5">
-            {assignments.map((assignment) => (
-              <div
-                key={assignment._id}
-                className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1"
-              >
-                {assignment.cleaner ? (
-                  <>
-                    <div className="flex h-5 w-5 items-center justify-center rounded-md bg-primary text-[9px] font-medium text-white">
-                      {assignment.cleaner.firstName.charAt(0)}
-                      {assignment.cleaner.lastName.charAt(0)}
-                    </div>
-                    <span className="text-xs text-foreground">
-                      {assignment.cleaner.firstName} {assignment.cleaner.lastName}
-                    </span>
-                  </>
-                ) : assignment.crew ? (
-                  <span className="text-xs text-foreground">{assignment.crew.name}</span>
-                ) : null}
-                <Badge variant="outline" className="text-[9px]">{assignment.role}</Badge>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <Separator />
-
-      <div className="flex flex-wrap gap-1.5">
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={isBusy || booking.status !== "in_progress"}
-          onClick={onMarkCompleted}
-        >
-          Mark completed
-        </Button>
-        <Button
-          size="xs"
-          disabled={
-            isBusy ||
-            !booking.amount ||
-            (booking.status !== "completed" && booking.status !== "payment_failed")
-          }
-          onClick={onCharge}
-        >
-          Charge now
-        </Button>
-        <AssignCleanerSheet bookingId={booking._id} />
-      </div>
-    </div>
-  );
-}
-
-/* ─── Legacy Bookings View ─────────────────────────────────── */
-
-function LegacyBookingsView() {
-  const bookings = useQuery(api.bookings.listBookings, { limit: 50 });
-  const markCompleted = useMutation(api.bookings.markJobCompleted);
-  const chargeJob = useAction(api.bookings.chargeCompletedJob);
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  if (!bookings) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="mt-4 text-sm text-muted-foreground">Loading bookings...</p>
-      </div>
-    );
-  }
-
-  if (bookings.length === 0) {
-    return (
-      <EmptyState
-        title="No bookings yet"
-        description="Bookings linked to requests will appear here."
-      />
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {bookings.map((booking) => {
-        const isBusy = busyId === booking._id;
-        return (
-          <LegacyBookingCard
-            key={booking._id}
-            booking={booking}
-            isBusy={isBusy}
-            onMarkCompleted={async () => {
-              setBusyId(booking._id);
-              try {
-                await markCompleted({ bookingId: booking._id });
-              } finally {
-                setBusyId(null);
-              }
-            }}
-            onCharge={async () => {
-              if (!booking.amount) return;
-              setBusyId(booking._id);
-              try {
-                await chargeJob({
-                  bookingId: booking._id,
-                  amount: booking.amount,
-                  description: booking.serviceType ?? "Cleaning service",
-                });
-              } finally {
-                setBusyId(null);
-              }
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-/* ─── Checklist Readiness ──────────────────────────────────── */
-
 function BookingChecklistReadiness({
   bookingId,
   operationalStatus,
@@ -249,7 +75,7 @@ function BookingChecklistReadiness({
   bookingId: Id<"bookings">;
   operationalStatus: string | null;
 }) {
-  const assignments = useQuery(api.cleaners.getBookingAssignments, { bookingId });
+  const assignments = useQuery(onboardingApi.getBookingAssignments, { bookingId });
   if (!assignments) {
     return <p className="text-xs text-muted-foreground">Loading assignment readiness...</p>;
   }
@@ -265,8 +91,7 @@ function BookingChecklistReadiness({
     (sum, assignment) => sum + (assignment.checklist?.completed ?? 0),
     0
   );
-  const checklistComplete =
-    checklistTotal === 0 || checklistCompleted === checklistTotal;
+  const checklistComplete = checklistTotal === 0 || checklistCompleted === checklistTotal;
   const allActiveAssignmentsCompleted =
     activeAssignments.length > 0 &&
     activeAssignments.every((assignment) => assignment.status === "completed");
@@ -280,18 +105,21 @@ function BookingChecklistReadiness({
         Active {activeAssignments.length}
       </Badge>
       {operationalStatus === "in_progress" && !checklistComplete ? (
-        <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400 text-[10px]">Clock-out blocked</Badge>
+        <Badge className="bg-rose-100 text-rose-700 text-[10px] dark:bg-rose-900/40 dark:text-rose-400">
+          Clock-out blocked
+        </Badge>
       ) : null}
       {operationalStatus === "in_progress" && allActiveAssignmentsCompleted ? (
-        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 text-[10px]">Ready to auto-complete</Badge>
+        <Badge className="bg-emerald-100 text-emerald-700 text-[10px] dark:bg-emerald-900/40 dark:text-emerald-400">
+          Ready to auto-complete
+        </Badge>
       ) : null}
     </div>
   );
 }
 
-/* ─── Main Page ────────────────────────────────────────────── */
-
-export default function BookingsPage() {
+export default function OnboardingPage() {
+  const searchParams = useSearchParams();
   const { activeOrg } = useActiveOrganization();
   const isAdmin = Boolean(activeOrg && isAdminRole(activeOrg.role));
 
@@ -304,14 +132,16 @@ export default function BookingsPage() {
   const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
 
-  const markCompleted = useMutation(api.bookings.markJobCompleted);
-  const chargeJob = useAction(api.bookings.chargeCompletedJob);
-  const cancelBooking = useMutation(api.bookings.cancelBooking);
-  const rescheduleBooking = useMutation(api.bookings.rescheduleBooking);
-  const overrideBookingStatus = useMutation(api.bookings.adminOverrideBookingStatus);
+  const markCompleted = useMutation(onboardingApi.markBookingCompleted);
+  const chargeJob = useAction(onboardingApi.chargeBooking);
+  const cancelBooking = useMutation(onboardingApi.cancelBooking);
+  const rescheduleBooking = useMutation(onboardingApi.rescheduleBooking);
+  const overrideBookingStatus = useMutation(onboardingApi.overrideBookingStatus);
 
   const [busyRowId, setBusyRowId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
+    null
+  );
 
   const [detailRow, setDetailRow] = useState<LifecycleRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -322,23 +152,25 @@ export default function BookingsPage() {
   const [actionBusy, setActionBusy] = useState<"cancel" | "reschedule" | "override" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const lifecyclePage = useQuery(
-    api.bookingLifecycle.listUnifiedLifecycleRows,
-    FUNNEL_UI_ENABLED
-      ? {
-          cursor,
-          limit: 30,
-          rowType: rowType === "all" ? undefined : rowType,
-          operationalStatus: operationalStatus === "all" ? undefined : operationalStatus,
-          funnelStage: funnelStage === "all" ? undefined : funnelStage,
-          search: search.trim() ? search.trim() : undefined,
-          serviceDate: serviceDate || undefined,
-        }
-      : "skip"
-  );
+  const lifecyclePage = useQuery(onboardingApi.listRows, {
+    cursor,
+    limit: 30,
+    rowType: rowType === "all" ? undefined : rowType,
+    operationalStatus: operationalStatus === "all" ? undefined : operationalStatus,
+    funnelStage: funnelStage === "all" ? undefined : funnelStage,
+    search: search.trim() ? search.trim() : undefined,
+    serviceDate: serviceDate || undefined,
+  });
 
   const rows = (lifecyclePage?.rows as LifecycleRow[] | undefined) ?? [];
   const nextCursor = lifecyclePage?.nextCursor ?? null;
+
+  const deepLinkedBookingIdRaw = searchParams.get("bookingId");
+  const deepLinkedBookingId =
+    deepLinkedBookingIdRaw && /^[a-z0-9]+$/.test(deepLinkedBookingIdRaw)
+      ? (deepLinkedBookingIdRaw as Id<"bookings">)
+      : null;
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false);
 
   useEffect(() => {
     setCursor(undefined);
@@ -351,33 +183,33 @@ export default function BookingsPage() {
     return () => clearTimeout(timeout);
   }, [feedback]);
 
-  const canGoBack = cursorHistory.length > 0;
+  useEffect(() => {
+    setDeepLinkHandled(false);
+  }, [deepLinkedBookingId]);
 
-  const subtitle = useMemo(() => {
-    if (!FUNNEL_UI_ENABLED) {
-      return "Track booking progress and take quick actions.";
+  useEffect(() => {
+    if (!deepLinkedBookingId || deepLinkHandled || rows.length === 0) {
+      return;
     }
-    return "Unified operations view for pre-booking funnel and live booking lifecycle.";
-  }, []);
 
-  /* ─── Legacy view ─── */
+    const row = rows.find((candidate) => candidate.bookingId === deepLinkedBookingId);
+    if (!row) {
+      return;
+    }
 
-  if (!FUNNEL_UI_ENABLED) {
-    return (
-      <div className="space-y-8">
-        <PageHeader title="Bookings" subtitle={subtitle} />
-        <div className="surface-card overflow-hidden rounded-2xl p-4">
-          <LegacyBookingsView />
-        </div>
-      </div>
-    );
-  }
+    setDetailRow(row);
+    setDetailOpen(true);
+    setDeepLinkHandled(true);
+  }, [deepLinkedBookingId, deepLinkHandled, rows]);
 
-  /* ─── Funnel view ─── */
+  const canGoBack = cursorHistory.length > 0;
 
   return (
     <div className="space-y-8">
-      <PageHeader title="Bookings" subtitle={subtitle} />
+      <PageHeader
+        title="Onboarding"
+        subtitle="Unified intake and booking lifecycle for pre-booking and active jobs."
+      />
 
       {feedback ? (
         <div
@@ -392,7 +224,6 @@ export default function BookingsPage() {
         </div>
       ) : null}
 
-      {/* Filters */}
       <div className="surface-card overflow-hidden rounded-2xl">
         <div className="p-4">
           <div className="grid gap-3 md:grid-cols-5">
@@ -494,15 +325,14 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      {/* Rows */}
       {!lifecyclePage ? (
         <div className="flex flex-col items-center justify-center py-16">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="mt-4 text-sm text-muted-foreground">Loading lifecycle rows...</p>
+          <p className="mt-4 text-sm text-muted-foreground">Loading onboarding rows...</p>
         </div>
       ) : rows.length === 0 ? (
         <EmptyState
-          title="No lifecycle rows"
+          title="No onboarding rows"
           description="Try relaxing filters or clearing search terms."
         />
       ) : (
@@ -692,8 +522,6 @@ export default function BookingsPage() {
   );
 }
 
-/* ─── Pre-Booking Card ─────────────────────────────────────── */
-
 function PreBookingCard({ row }: { row: LifecycleRow }) {
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border/60 bg-card px-4 py-3">
@@ -716,7 +544,7 @@ function PreBookingCard({ row }: { row: LifecycleRow }) {
       <div className="flex flex-wrap gap-1.5">
         {row.bookingRequestId ? (
           <Link
-            href={`/dashboard/requests/${row.bookingRequestId}`}
+            href={onboardingRequestPath(row.bookingRequestId)}
             className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
           >
             Open request
@@ -734,8 +562,6 @@ function PreBookingCard({ row }: { row: LifecycleRow }) {
     </div>
   );
 }
-
-/* ─── Booking Card ─────────────────────────────────────────── */
 
 function BookingCard({
   row,
@@ -766,7 +592,6 @@ function BookingCard({
 
   return (
     <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4">
-      {/* Row 1: Identity + status + amount */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", indicatorColor)} />
@@ -784,7 +609,6 @@ function BookingCard({
         </div>
       </div>
 
-      {/* Row 2: Metrics strip */}
       <div className="flex flex-wrap items-center gap-6 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Date</span>
@@ -796,7 +620,6 @@ function BookingCard({
         </div>
       </div>
 
-      {/* Row 3: Checklist readiness */}
       <BookingChecklistReadiness
         bookingId={row.bookingId!}
         operationalStatus={row.operationalStatus}
@@ -804,7 +627,6 @@ function BookingCard({
 
       <Separator />
 
-      {/* Row 4: Actions */}
       <div className="flex flex-wrap gap-1.5">
         <Button
           variant="outline"
