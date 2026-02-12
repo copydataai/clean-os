@@ -50,8 +50,7 @@ function BookingChecklistReadiness({
         <Badge className="bg-rose-100 text-rose-700 text-[10px] dark:bg-rose-900/40 dark:text-rose-400">
           Clock-out blocked
         </Badge>
-      ) : null}
-      {operationalStatus === "in_progress" && allActiveAssignmentsCompleted ? (
+      ) : operationalStatus === "in_progress" && allActiveAssignmentsCompleted ? (
         <Badge className="bg-emerald-100 text-emerald-700 text-[10px] dark:bg-emerald-900/40 dark:text-emerald-400">
           Ready to auto-complete
         </Badge>
@@ -130,10 +129,12 @@ export default function BookingCard({
             <span className="text-foreground">{row.serviceType ?? "Standard"}</span>
           </div>
         </div>
-        <BookingChecklistReadiness
-          bookingId={row.bookingId!}
-          operationalStatus={row.operationalStatus}
-        />
+        {row.bookingId ? (
+          <BookingChecklistReadiness
+            bookingId={row.bookingId}
+            operationalStatus={row.operationalStatus}
+          />
+        ) : null}
       </div>
 
       <Separator />
@@ -142,14 +143,16 @@ export default function BookingCard({
         <Button size="xs" onClick={onDetails}>
           Details
         </Button>
-        <AssignCleanerSheet
-          bookingId={row.bookingId!}
-          trigger={
-            <Button size="xs" variant="outline">
-              Assign
-            </Button>
-          }
-        />
+        {row.bookingId ? (
+          <AssignCleanerSheet
+            bookingId={row.bookingId}
+            trigger={
+              <Button size="xs" variant="outline">
+                Assign
+              </Button>
+            }
+          />
+        ) : null}
         <Button
           size="xs"
           variant="outline"
