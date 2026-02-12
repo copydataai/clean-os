@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 import { onboardingApi } from "@/lib/onboarding/api";
 import { onboardingRequestPath } from "@/lib/onboarding/routes";
+import RequestCreateSheet from "@/components/dashboard/RequestCreateSheet";
 
 type RowTypeFilter = "all" | "booking" | "pre_booking";
 type OperationalStatusFilter = "all" | (typeof OPERATIONS_STATUSES)[number];
@@ -122,6 +123,7 @@ export default function OnboardingPage() {
   const searchParams = useSearchParams();
   const { activeOrg } = useActiveOrganization();
   const isAdmin = Boolean(activeOrg && isAdminRole(activeOrg.role));
+  const tallyLinks = useQuery(onboardingApi.getTallyLinksForActiveOrganization, {});
 
   const [rowType, setRowType] = useState<RowTypeFilter>("all");
   const [operationalStatus, setOperationalStatus] = useState<OperationalStatusFilter>("all");
@@ -171,6 +173,17 @@ export default function OnboardingPage() {
       ? (deepLinkedBookingIdRaw as Id<"bookings">)
       : null;
   const [deepLinkHandled, setDeepLinkHandled] = useState(false);
+  const [deepLinkResetAttempted, setDeepLinkResetAttempted] = useState(false);
+  const [deepLinkAlert, setDeepLinkAlert] = useState<"needs_reset" | "not_found" | null>(null);
+
+  const hasActiveFilters =
+    rowType !== "all" ||
+    operationalStatus !== "all" ||
+    funnelStage !== "all" ||
+    search.trim().length > 0 ||
+    serviceDate.length > 0 ||
+    Boolean(cursor) ||
+    cursorHistory.length > 0;
 
   useEffect(() => {
     setCursor(undefined);
@@ -184,32 +197,88 @@ export default function OnboardingPage() {
   }, [feedback]);
 
   useEffect(() => {
+    if (!deepLinkedBookingId) {
+      setDeepLinkHandled(false);
+      setDeepLinkResetAttempted(false);
+      setDeepLinkAlert(null);
+      return;
+    }
+
     setDeepLinkHandled(false);
+    setDeepLinkResetAttempted(false);
+    setDeepLinkAlert(null);
   }, [deepLinkedBookingId]);
 
   useEffect(() => {
-    if (!deepLinkedBookingId || deepLinkHandled || rows.length === 0) {
+    if (!deepLinkedBookingId || deepLinkHandled) {
+      return;
+    }
+
+    if (!lifecyclePage) {
       return;
     }
 
     const row = rows.find((candidate) => candidate.bookingId === deepLinkedBookingId);
-    if (!row) {
+    if (row) {
+      setDetailRow(row);
+      setDetailOpen(true);
+      setDeepLinkAlert(null);
+      setDeepLinkHandled(true);
       return;
     }
 
-    setDetailRow(row);
-    setDetailOpen(true);
-    setDeepLinkHandled(true);
-  }, [deepLinkedBookingId, deepLinkHandled, rows]);
+    if (hasActiveFilters && !deepLinkResetAttempted) {
+      setDeepLinkAlert("needs_reset");
+      return;
+    }
+
+    setDeepLinkAlert("not_found");
+  }, [
+    deepLinkedBookingId,
+    deepLinkHandled,
+    deepLinkResetAttempted,
+    hasActiveFilters,
+    lifecyclePage,
+    rows,
+  ]);
 
   const canGoBack = cursorHistory.length > 0;
+
+  function clearFiltersForDeepLink() {
+    setRowType("all");
+    setOperationalStatus("all");
+    setFunnelStage("all");
+    setSearch("");
+    setServiceDate("");
+    setCursor(undefined);
+    setCursorHistory([]);
+    setDeepLinkResetAttempted(true);
+    setDeepLinkAlert(null);
+    setDeepLinkHandled(false);
+  }
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Onboarding"
-        subtitle="Unified intake and booking lifecycle for pre-booking and active jobs."
-      />
+        subtitle="Unified intake and active job lifecycle in one operator queue."
+      >
+        <RequestCreateSheet triggerLabel="New onboarding" />
+      </PageHeader>
+
+      {tallyLinks !== undefined && !tallyLinks?.confirmationFormUrl ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
+          <p>
+            Confirmation links are unavailable until Integrations setup is complete.
+          </p>
+          <Link
+            href="/dashboard/settings/integrations"
+            className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
+          >
+            Open Integrations
+          </Link>
+        </div>
+      ) : null}
 
       {feedback ? (
         <div
@@ -224,6 +293,27 @@ export default function OnboardingPage() {
         </div>
       ) : null}
 
+      {deepLinkedBookingId && deepLinkAlert ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
+          {deepLinkAlert === "needs_reset" ? (
+            <>
+              <p>
+                Booking <span className="font-mono">{deepLinkedBookingId}</span> isn&apos;t visible with
+                current filters.
+              </p>
+              <Button size="xs" variant="outline" onClick={clearFiltersForDeepLink}>
+                Clear filters
+              </Button>
+            </>
+          ) : (
+            <p>
+              Booking <span className="font-mono">{deepLinkedBookingId}</span> wasn&apos;t found on this
+              onboarding page. It may be outside the recent lifecycle window.
+            </p>
+          )}
+        </div>
+      ) : null}
+
       <div className="surface-card overflow-hidden rounded-2xl">
         <div className="p-4">
           <div className="grid gap-3 md:grid-cols-5">
@@ -233,8 +323,8 @@ export default function OnboardingPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All row types</SelectItem>
-                <SelectItem value="booking">Bookings</SelectItem>
-                <SelectItem value="pre_booking">Pre-booking</SelectItem>
+                <SelectItem value="booking">Active jobs</SelectItem>
+                <SelectItem value="pre_booking">Intake</SelectItem>
               </SelectContent>
             </Select>
 
@@ -334,6 +424,12 @@ export default function OnboardingPage() {
         <EmptyState
           title="No onboarding rows"
           description="Try relaxing filters or clearing search terms."
+          action={
+            <RequestCreateSheet
+              triggerLabel="Create onboarding"
+              triggerVariant="outline"
+            />
+          }
         />
       ) : (
         <div className="surface-card overflow-hidden rounded-2xl p-4">
@@ -530,13 +626,13 @@ function PreBookingCard({ row }: { row: LifecycleRow }) {
           <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-400" />
           <div>
             <p className="text-sm font-medium text-foreground">
-              {row.customerName ?? row.email ?? "Pre-booking lead"}
+              {row.customerName ?? row.email ?? "Intake lead"}
             </p>
             <p className="text-xs text-muted-foreground">{row.email ?? "No email"}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px]">pre-booking</Badge>
+          <Badge variant="outline" className="text-[10px]">intake</Badge>
           {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
         </div>
       </div>
@@ -547,7 +643,7 @@ function PreBookingCard({ row }: { row: LifecycleRow }) {
             href={onboardingRequestPath(row.bookingRequestId)}
             className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
           >
-            Open request
+            Open intake
           </Link>
         ) : null}
         {row.quoteRequestId ? (

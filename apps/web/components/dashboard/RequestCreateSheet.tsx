@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentProps } from "react";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
@@ -32,6 +33,8 @@ type CreateFromDashboardResult = {
 
 type RequestCreateSheetProps = {
   onCreated?: (result: CreateFromDashboardResult) => void;
+  triggerLabel?: string;
+  triggerVariant?: ComponentProps<typeof Button>["variant"];
 };
 
 function formatQuoteLabel(quote: {
@@ -87,7 +90,11 @@ function getErrorCode(error: unknown): string | null {
   return null;
 }
 
-export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProps) {
+export default function RequestCreateSheet({
+  onCreated,
+  triggerLabel = "New onboarding",
+  triggerVariant = "default",
+}: RequestCreateSheetProps) {
   const router = useRouter();
   const createFromDashboard = useMutation(onboardingApi.createRequestFromDashboard);
 
@@ -265,12 +272,12 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
     } catch (submitError) {
       const message = submitError instanceof Error
         ? submitError.message
-        : "Failed to create request.";
+        : "Failed to create onboarding.";
       const code = getErrorCode(submitError);
 
       if (code === "QUOTE_ALREADY_LINKED_TO_REQUEST") {
         setError(
-          "That quote is already linked to another request. Open the existing linked request instead."
+          "That quote is already linked to another intake. Open the existing linked intake instead."
         );
       } else if (
         code === "ORG_MISMATCH" ||
@@ -296,14 +303,14 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
         }
       }}
     >
-      <Button size="sm" onClick={() => setOpen(true)}>
-        New request
+      <Button size="sm" variant={triggerVariant} onClick={() => setOpen(true)}>
+        {triggerLabel}
       </Button>
       <SheetContent className="data-[side=right]:sm:max-w-2xl">
         <SheetHeader>
-          <SheetTitle>Create Request</SheetTitle>
+          <SheetTitle>Create Onboarding</SheetTitle>
           <SheetDescription>
-            Create a new intake request and connect it to quote workflows.
+            Create a new onboarding intake and connect it to quote workflows.
           </SheetDescription>
         </SheetHeader>
 
@@ -312,7 +319,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
             {error ? <FieldError>{error}</FieldError> : null}
 
             <div className="space-y-2">
-              <p className="text-sm font-medium text-foreground">Case type</p>
+              <p className="text-sm font-medium text-foreground">Intake type</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -327,7 +334,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
                       : "border-border bg-card text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  New case
+                  New intake
                 </button>
                 <button
                   type="button"
@@ -339,14 +346,14 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
                       : "border-border bg-card text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Existing case
+                  Existing quote
                 </button>
               </div>
             </div>
 
             {mode === "existing" ? (
               <div className="space-y-3 rounded-xl border border-border/70 bg-card p-3">
-                <p className="text-sm font-medium text-foreground">Link existing quote request</p>
+                <p className="text-sm font-medium text-foreground">Link existing quote</p>
                 <Input
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
@@ -355,9 +362,9 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
 
                 <div className="max-h-52 space-y-2 overflow-y-auto">
                   {!quoteResults ? (
-                    <p className="text-xs text-muted-foreground">Loading quote requests...</p>
+                    <p className="text-xs text-muted-foreground">Loading quotes...</p>
                   ) : quoteResults.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No quote requests found for this search.</p>
+                    <p className="text-xs text-muted-foreground">No quotes found for this search.</p>
                   ) : (
                     quoteResults.map((quote) => {
                       const isSelected = selectedQuoteRequestId === quote._id;
@@ -381,7 +388,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
                           <p className="mt-1 text-xs text-muted-foreground">{display.subtitle}</p>
                           {isLinked ? (
                             <p className="mt-1 text-xs text-amber-700">
-                              Already linked to request {quote.bookingRequestId}
+                              Already linked to intake {quote.bookingRequestId}
                             </p>
                           ) : null}
                         </button>
@@ -542,7 +549,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
             </div>
 
             <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground">Request details (optional)</h3>
+              <h3 className="text-sm font-semibold text-foreground">Intake details (optional)</h3>
               <FieldGroup>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field>
@@ -654,7 +661,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor="request-additional-notes">Request notes</FieldLabel>
+                  <FieldLabel htmlFor="request-additional-notes">Intake notes</FieldLabel>
                   <Textarea
                     id="request-additional-notes"
                     rows={3}
@@ -679,7 +686,7 @@ export default function RequestCreateSheet({ onCreated }: RequestCreateSheetProp
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Creating..." : "Create request"}
+              {isSubmitting ? "Creating..." : "Create onboarding"}
             </Button>
           </div>
         </form>

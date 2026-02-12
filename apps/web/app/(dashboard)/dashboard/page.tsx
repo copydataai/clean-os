@@ -166,8 +166,8 @@ export default function DashboardPage() {
                   <StatusBadge status="confirmed" />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Booking Linked</span>
-                  <StatusBadge status="booking_created" label="booking linked" />
+                  <span>Card requested</span>
+                  <StatusBadge status="booking_created" label="card requested" />
                 </div>
                 <div className="flex items-center justify-between">
                   <span>Card Saved</span>

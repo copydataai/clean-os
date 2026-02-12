@@ -102,8 +102,8 @@ export default function RequestDetailPage() {
   if (request === null) {
     return (
       <EmptyState
-        title="Request not found"
-        description="We couldn't locate this booking request."
+        title="Intake not found"
+        description="We couldn't locate this onboarding intake."
       />
     );
   }
@@ -112,7 +112,7 @@ export default function RequestDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="mt-4 text-sm text-muted-foreground">Loading request...</p>
+        <p className="mt-4 text-sm text-muted-foreground">Loading intake...</p>
       </div>
     );
   }
@@ -124,14 +124,14 @@ export default function RequestDetailPage() {
       {wasCreated ? (
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300">
           {quoteMode === "reused"
-            ? "Request created and linked to an existing quote request."
-            : "Request created and a new quote request was generated."}
+            ? "Onboarding intake created and linked to an existing quote."
+            : "Onboarding intake created and a new quote was generated."}
         </div>
       ) : null}
 
       {/* Header */}
       <PageHeader
-        title={request.contactDetails ?? "Onboarding Request"}
+        title={request.contactDetails ?? "Onboarding Intake"}
         subtitle={`Submitted ${formatDate(request.createdAt)}`}
       >
         <div className="flex items-center gap-2.5">
