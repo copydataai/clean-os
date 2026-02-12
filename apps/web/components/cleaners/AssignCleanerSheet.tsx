@@ -55,7 +55,8 @@ function ratingPct(rating?: number | null): number {
   return Math.round((rating / 5) * 100);
 }
 
-function reliabilityColor(score: number): string {
+function reliabilityColor(score: number | null): string {
+  if (score == null) return "text-muted-foreground";
   if (score >= 95) return "text-emerald-600 dark:text-emerald-400";
   if (score >= 80) return "text-amber-600 dark:text-amber-400";
   return "text-rose-600 dark:text-rose-400";
@@ -182,7 +183,7 @@ export default function AssignCleanerSheet({
                 const isSelected = selectedCleanerId === cleaner._id;
                 const initials = `${cleaner.firstName.charAt(0)}${cleaner.lastName.charAt(0)}`;
                 const fullName = `${cleaner.firstName} ${cleaner.lastName}`;
-                const reliability = cleaner.reliabilityScore ?? 100;
+                const reliability = cleaner.reliabilityScore ?? null;
 
                 return (
                   <button
@@ -234,7 +235,7 @@ export default function AssignCleanerSheet({
                               reliabilityColor(reliability)
                             )}
                           >
-                            {reliability}%
+                            {reliability != null ? `${reliability}%` : "N/A"}
                           </span>
                         </div>
                       </div>
