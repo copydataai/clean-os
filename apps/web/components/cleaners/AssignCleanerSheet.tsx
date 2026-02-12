@@ -46,7 +46,7 @@ function avatarColor(name: string) {
 }
 
 function formatRating(rating?: number | null): string {
-  if (!rating) return "—";
+  if (rating == null) return "—";
   return rating.toFixed(1);
 }
 
