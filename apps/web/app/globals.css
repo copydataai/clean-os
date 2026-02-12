@@ -80,6 +80,10 @@
   --sidebar-accent-foreground: oklch(0.28 0.035 244);
   --sidebar-border: oklch(0.88 0.012 224);
   --sidebar-ring: oklch(0.64 0.1 220);
+  --onboarding-intake-accent: oklch(0.6 0.085 175);
+  --onboarding-job-accent: oklch(0.58 0.13 219);
+  --onboarding-warning-bg: color-mix(in oklch, oklch(0.78 0.13 86) 28%, white);
+  --onboarding-danger-bg: color-mix(in oklch, oklch(0.61 0.21 23) 25%, white);
 }
 
 .dark {
@@ -114,6 +118,10 @@
   --sidebar-accent-foreground: oklch(0.95 0.01 226);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.69 0.12 214);
+  --onboarding-intake-accent: oklch(0.74 0.11 174);
+  --onboarding-job-accent: oklch(0.74 0.12 219);
+  --onboarding-warning-bg: color-mix(in oklch, oklch(0.75 0.13 86) 22%, transparent);
+  --onboarding-danger-bg: color-mix(in oklch, oklch(0.66 0.21 23) 28%, transparent);
 }
 
 @layer base {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { Id } from "@clean-os/convex/data-model";
@@ -34,6 +34,14 @@ import RequestCreateSheet from "@/components/dashboard/RequestCreateSheet";
 type RowTypeFilter = "all" | "booking" | "pre_booking";
 type OperationalStatusFilter = "all" | (typeof OPERATIONS_STATUSES)[number];
 type FunnelStageFilter = "all" | (typeof FUNNEL_STAGES)[number];
+type AlertTone = "success" | "error" | "warning";
+
+type OnboardingAlert = {
+  id: string;
+  tone: AlertTone;
+  content: ReactNode;
+  action?: ReactNode;
+};
 
 function formatCurrency(cents?: number | null) {
   if (!cents) return "---";
@@ -166,6 +174,8 @@ export default function OnboardingPage() {
 
   const rows = (lifecyclePage?.rows as LifecycleRow[] | undefined) ?? [];
   const nextCursor = lifecyclePage?.nextCursor ?? null;
+  const intakeRows = rows.filter((row) => row.rowType === "pre_booking");
+  const activeJobRows = rows.filter((row) => row.rowType === "booking" && Boolean(row.bookingId));
 
   const deepLinkedBookingIdRaw = searchParams.get("bookingId");
   const deepLinkedBookingId =
@@ -184,6 +194,14 @@ export default function OnboardingPage() {
     serviceDate.length > 0 ||
     Boolean(cursor) ||
     cursorHistory.length > 0;
+  const activeFilterCount = [
+    rowType !== "all",
+    operationalStatus !== "all",
+    funnelStage !== "all",
+    search.trim().length > 0,
+    serviceDate.length > 0,
+    Boolean(cursor) || cursorHistory.length > 0,
+  ].filter(Boolean).length;
 
   useEffect(() => {
     setCursor(undefined);
@@ -244,7 +262,7 @@ export default function OnboardingPage() {
 
   const canGoBack = cursorHistory.length > 0;
 
-  function clearFiltersForDeepLink() {
+  function resetFilters(markDeepLinkResetAttempt: boolean) {
     setRowType("all");
     setOperationalStatus("all");
     setFunnelStage("all");
@@ -252,9 +270,71 @@ export default function OnboardingPage() {
     setServiceDate("");
     setCursor(undefined);
     setCursorHistory([]);
-    setDeepLinkResetAttempted(true);
+    setDeepLinkResetAttempted(markDeepLinkResetAttempt);
     setDeepLinkAlert(null);
     setDeepLinkHandled(false);
+  }
+
+  function clearFiltersForDeepLink() {
+    resetFilters(true);
+  }
+
+  function clearAllFilters() {
+    resetFilters(false);
+  }
+
+  const alerts: OnboardingAlert[] = [];
+  if (tallyLinks !== undefined && !tallyLinks?.confirmationFormUrl) {
+    alerts.push({
+      id: "integration-warning",
+      tone: "warning",
+      content: "Confirmation links are unavailable until Integrations setup is complete.",
+      action: (
+        <Link
+          href="/dashboard/settings/integrations"
+          className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
+        >
+          Open Integrations
+        </Link>
+      ),
+    });
+  }
+  if (feedback) {
+    alerts.push({
+      id: "feedback",
+      tone: feedback.type,
+      content: feedback.message,
+    });
+  }
+  if (deepLinkedBookingId && deepLinkAlert) {
+    alerts.push(
+      deepLinkAlert === "needs_reset"
+        ? {
+            id: "deep-link-needs-reset",
+            tone: "warning",
+            content: (
+              <>
+                Booking <span className="font-mono">{deepLinkedBookingId}</span> isn&apos;t visible with current
+                filters.
+              </>
+            ),
+            action: (
+              <Button size="xs" onClick={clearFiltersForDeepLink}>
+                Clear filters
+              </Button>
+            ),
+          }
+        : {
+            id: "deep-link-not-found",
+            tone: "warning",
+            content: (
+              <>
+                Booking <span className="font-mono">{deepLinkedBookingId}</span> wasn&apos;t found on this onboarding
+                page. It may be outside the recent lifecycle window.
+              </>
+            ),
+          }
+    );
   }
 
   return (
@@ -266,55 +346,11 @@ export default function OnboardingPage() {
         <RequestCreateSheet triggerLabel="New onboarding" />
       </PageHeader>
 
-      {tallyLinks !== undefined && !tallyLinks?.confirmationFormUrl ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
-          <p>
-            Confirmation links are unavailable until Integrations setup is complete.
-          </p>
-          <Link
-            href="/dashboard/settings/integrations"
-            className={cn(buttonVariants({ size: "xs", variant: "outline" }))}
-          >
-            Open Integrations
-          </Link>
-        </div>
-      ) : null}
+      <OnboardingKpiStrip rows={rows} />
 
-      {feedback ? (
-        <div
-          className={cn(
-            "overflow-hidden rounded-2xl border p-4 text-sm",
-            feedback.type === "success"
-              ? "border-emerald-200 bg-emerald-50/50 text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300"
-              : "border-red-200 bg-red-50/50 text-red-800 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-300"
-          )}
-        >
-          {feedback.message}
-        </div>
-      ) : null}
+      <OnboardingAlertRail alerts={alerts} />
 
-      {deepLinkedBookingId && deepLinkAlert ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
-          {deepLinkAlert === "needs_reset" ? (
-            <>
-              <p>
-                Booking <span className="font-mono">{deepLinkedBookingId}</span> isn&apos;t visible with
-                current filters.
-              </p>
-              <Button size="xs" variant="outline" onClick={clearFiltersForDeepLink}>
-                Clear filters
-              </Button>
-            </>
-          ) : (
-            <p>
-              Booking <span className="font-mono">{deepLinkedBookingId}</span> wasn&apos;t found on this
-              onboarding page. It may be outside the recent lifecycle window.
-            </p>
-          )}
-        </div>
-      ) : null}
-
-      <div className="surface-card overflow-hidden rounded-2xl">
+      <div className="surface-card sticky top-20 z-10 overflow-hidden rounded-2xl">
         <div className="p-4">
           <div className="grid gap-3 md:grid-cols-5">
             <Select value={rowType} onValueChange={(value) => value && setRowType(value as RowTypeFilter)}>
@@ -379,10 +415,23 @@ export default function OnboardingPage() {
         <Separator />
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
-          <p className="text-xs text-muted-foreground">
-            <span className="font-mono font-medium text-foreground">{rows.length}</span> rows on this page
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs text-muted-foreground">
+              <span className="font-mono font-medium text-foreground">{rows.length}</span> rows on this page
+            </p>
+            <Badge variant="outline" className="text-[10px] font-medium">
+              {activeFilterCount} active filters
+            </Badge>
+          </div>
           <div className="flex items-center gap-1.5">
+            <Button
+              size="xs"
+              variant="ghost"
+              disabled={!hasActiveFilters}
+              onClick={clearAllFilters}
+            >
+              Clear all
+            </Button>
             <Button
               size="xs"
               variant="outline"
@@ -416,14 +465,15 @@ export default function OnboardingPage() {
       </div>
 
       {!lifecyclePage ? (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="mt-4 text-sm text-muted-foreground">Loading onboarding rows...</p>
-        </div>
+        <OnboardingRowsSkeleton />
       ) : rows.length === 0 ? (
         <EmptyState
           title="No onboarding rows"
-          description="Try relaxing filters or clearing search terms."
+          description={
+            hasActiveFilters
+              ? "No rows match your current filters. Clear filters or create a new onboarding intake."
+              : "No onboarding activity yet. Create onboarding to start intake and active job tracking."
+          }
           action={
             <RequestCreateSheet
               triggerLabel="Create onboarding"
@@ -432,73 +482,93 @@ export default function OnboardingPage() {
           }
         />
       ) : (
-        <div className="surface-card overflow-hidden rounded-2xl p-4">
-          <div className="space-y-2">
-            {rows.map((row) => {
-              if (row.rowType === "pre_booking") {
-                return (
-                  <PreBookingCard
+        <div className="space-y-5 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
+          <OnboardingQueueSection title="Intake" count={intakeRows.length} kind="intake">
+            {intakeRows.length === 0 ? (
+              <QueueSectionEmpty copy="No intake rows in this onboarding view." />
+            ) : (
+              <div className="space-y-2">
+                {intakeRows.map((row, index) => (
+                  <div
                     key={`pre:${row.bookingRequestId ?? row.quoteRequestId}`}
-                    row={row}
-                  />
-                );
-              }
+                    className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+                    style={{ animationDelay: `${Math.min(index * 20, 120)}ms` }}
+                  >
+                    <PreBookingCard row={row} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </OnboardingQueueSection>
 
-              if (!row.bookingId) return null;
+          <OnboardingQueueSection title="Active jobs" count={activeJobRows.length} kind="job">
+            {activeJobRows.length === 0 ? (
+              <QueueSectionEmpty copy="No active jobs in this onboarding view." />
+            ) : (
+              <div className="space-y-2">
+                {activeJobRows.map((row, index) => {
+                  if (!row.bookingId) return null;
 
-              return (
-                <BookingCard
-                  key={row.bookingId}
-                  row={row}
-                  isBusy={busyRowId === row.bookingId}
-                  isAdmin={isAdmin}
-                  onMarkCompleted={async () => {
-                    setBusyRowId(row.bookingId);
-                    try {
-                      await markCompleted({ bookingId: row.bookingId! });
-                      setFeedback({ type: "success", message: "Booking marked completed." });
-                    } catch (error) {
-                      setFeedback({ type: "error", message: getErrorMessage(error) });
-                    } finally {
-                      setBusyRowId(null);
-                    }
-                  }}
-                  onCharge={async () => {
-                    if (!row.amount) return;
-                    setBusyRowId(row.bookingId);
-                    try {
-                      await chargeJob({
-                        bookingId: row.bookingId!,
-                        amount: row.amount,
-                        description: row.serviceType ?? "Cleaning service",
-                      });
-                      setFeedback({ type: "success", message: "Charge action submitted." });
-                    } catch (error) {
-                      setFeedback({ type: "error", message: getErrorMessage(error) });
-                    } finally {
-                      setBusyRowId(null);
-                    }
-                  }}
-                  onCancel={() => {
-                    setActionError(null);
-                    setCancelRow(row);
-                  }}
-                  onReschedule={() => {
-                    setActionError(null);
-                    setRescheduleRow(row);
-                  }}
-                  onOverride={() => {
-                    setActionError(null);
-                    setOverrideRow(row);
-                  }}
-                  onDetails={() => {
-                    setDetailRow(row);
-                    setDetailOpen(true);
-                  }}
-                />
-              );
-            })}
-          </div>
+                  return (
+                    <div
+                      key={row.bookingId}
+                      className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+                      style={{ animationDelay: `${Math.min(index * 20, 120)}ms` }}
+                    >
+                      <BookingCard
+                        row={row}
+                        isBusy={busyRowId === row.bookingId}
+                        isAdmin={isAdmin}
+                        onMarkCompleted={async () => {
+                          setBusyRowId(row.bookingId);
+                          try {
+                            await markCompleted({ bookingId: row.bookingId! });
+                            setFeedback({ type: "success", message: "Booking marked completed." });
+                          } catch (error) {
+                            setFeedback({ type: "error", message: getErrorMessage(error) });
+                          } finally {
+                            setBusyRowId(null);
+                          }
+                        }}
+                        onCharge={async () => {
+                          if (!row.amount) return;
+                          setBusyRowId(row.bookingId);
+                          try {
+                            await chargeJob({
+                              bookingId: row.bookingId!,
+                              amount: row.amount,
+                              description: row.serviceType ?? "Cleaning service",
+                            });
+                            setFeedback({ type: "success", message: "Charge action submitted." });
+                          } catch (error) {
+                            setFeedback({ type: "error", message: getErrorMessage(error) });
+                          } finally {
+                            setBusyRowId(null);
+                          }
+                        }}
+                        onCancel={() => {
+                          setActionError(null);
+                          setCancelRow(row);
+                        }}
+                        onReschedule={() => {
+                          setActionError(null);
+                          setRescheduleRow(row);
+                        }}
+                        onOverride={() => {
+                          setActionError(null);
+                          setOverrideRow(row);
+                        }}
+                        onDetails={() => {
+                          setDetailRow(row);
+                          setDetailOpen(true);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </OnboardingQueueSection>
         </div>
       )}
 
@@ -618,26 +688,157 @@ export default function OnboardingPage() {
   );
 }
 
-function PreBookingCard({ row }: { row: LifecycleRow }) {
+function OnboardingKpiStrip({ rows }: { rows: LifecycleRow[] }) {
+  const intakeCount = rows.filter((row) => row.rowType === "pre_booking").length;
+  const activeJobsCount = rows.filter((row) => row.rowType === "booking" && Boolean(row.bookingId)).length;
+  const inProgressCount = rows.filter(
+    (row) => row.rowType === "booking" && row.operationalStatus === "in_progress"
+  ).length;
+  const kpis = [
+    { label: "Total rows", value: rows.length },
+    { label: "Intake", value: intakeCount },
+    { label: "Active jobs", value: activeJobsCount },
+    { label: "In progress", value: inProgressCount },
+  ];
+
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-dashed border-border/60 bg-card px-4 py-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-slate-400" />
-          <div>
-            <p className="text-sm font-medium text-foreground">
-              {row.customerName ?? row.email ?? "Intake lead"}
-            </p>
-            <p className="text-xs text-muted-foreground">{row.email ?? "No email"}</p>
+    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      {kpis.map((kpi) => (
+        <div key={kpi.label} className="surface-card rounded-xl px-4 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+            {kpi.label}
+          </p>
+          <p className="mt-1 font-mono text-2xl font-semibold text-foreground">{kpi.value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OnboardingAlertRail({ alerts }: { alerts: OnboardingAlert[] }) {
+  if (alerts.length === 0) return null;
+
+  return (
+    <div className="space-y-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      {alerts.map((alert) => (
+        <OnboardingAlertCard key={alert.id} tone={alert.tone} action={alert.action}>
+          {alert.content}
+        </OnboardingAlertCard>
+      ))}
+    </div>
+  );
+}
+
+function OnboardingAlertCard({
+  tone,
+  children,
+  action,
+}: {
+  tone: AlertTone;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  const toneClasses =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50/70 text-emerald-900 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-200"
+      : tone === "error"
+      ? "border-red-200 bg-red-50/70 text-red-900 dark:border-red-800/40 dark:bg-red-950/30 dark:text-red-200"
+      : "border-amber-200 bg-[var(--onboarding-warning-bg)] text-amber-900 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200";
+
+  return (
+    <div className={cn("flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4 text-sm", toneClasses)}>
+      <p>{children}</p>
+      {action}
+    </div>
+  );
+}
+
+function OnboardingQueueSection({
+  title,
+  count,
+  kind,
+  children,
+}: {
+  title: string;
+  count: number;
+  kind: "intake" | "job";
+  children: ReactNode;
+}) {
+  return (
+    <section className="surface-card overflow-hidden rounded-2xl">
+      <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        <Badge
+          variant="outline"
+          className={cn(
+            "text-[10px] font-medium",
+            kind === "intake"
+              ? "border-[color:var(--onboarding-intake-accent)]/45 text-[color:var(--onboarding-intake-accent)]"
+              : "border-[color:var(--onboarding-job-accent)]/45 text-[color:var(--onboarding-job-accent)]"
+          )}
+        >
+          {count}
+        </Badge>
+      </div>
+      <Separator />
+      <div className="p-4">{children}</div>
+    </section>
+  );
+}
+
+function QueueSectionEmpty({ copy }: { copy: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border/70 bg-muted/30 p-4 text-sm text-muted-foreground">
+      {copy}
+    </div>
+  );
+}
+
+function OnboardingRowsSkeleton() {
+  return (
+    <div className="space-y-5">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div key={index} className="surface-card overflow-hidden rounded-2xl p-4">
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 w-44 rounded bg-muted/70" />
+            <div className="h-3 w-72 rounded bg-muted/50" />
+            <div className="h-3 w-56 rounded bg-muted/40" />
+            <div className="h-7 w-28 rounded bg-muted/60" />
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Badge variant="outline" className="text-[10px]">intake</Badge>
+      ))}
+    </div>
+  );
+}
+
+function PreBookingCard({ row }: { row: LifecycleRow }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border/60 bg-card px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
+          <div
+            className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: "var(--onboarding-intake-accent)" }}
+          />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">
+              {row.customerName ?? row.email ?? "Intake lead"}
+            </p>
+            <p className="font-mono text-xs text-muted-foreground">{row.email ?? "No email provided"}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge
+            variant="outline"
+            className="border-[color:var(--onboarding-intake-accent)]/40 text-[10px] text-[color:var(--onboarding-intake-accent)]"
+          >
+            intake
+          </Badge>
           {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="mt-3 flex flex-wrap gap-1.5">
         {row.bookingRequestId ? (
           <Link
             href={onboardingRequestPath(row.bookingRequestId)}
@@ -685,74 +886,70 @@ function BookingCard({
     row.operationalStatus === "pending_card" ||
     row.operationalStatus === "card_saved" ||
     row.operationalStatus === "scheduled";
+  const isActionCriticalState =
+    row.operationalStatus === "in_progress" ||
+    row.operationalStatus === "payment_failed" ||
+    row.operationalStatus === "cancelled";
 
   return (
-    <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4">
+    <div
+      className={cn(
+        "space-y-3 rounded-xl border bg-card p-4",
+        isActionCriticalState
+          ? "border-[color:var(--onboarding-danger-bg)]"
+          : "border-border/50"
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3">
           <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", indicatorColor)} />
-          <div>
-            <p className="text-sm font-medium text-foreground">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">
               {row.customerName ?? row.email ?? row.bookingId}
             </p>
-            <p className="text-xs text-muted-foreground">{row.email ?? "No email"}</p>
+            <p className="font-mono text-xs text-muted-foreground">{row.email ?? "No email provided"}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {row.operationalStatus ? <StatusBadge status={row.operationalStatus} /> : null}
           {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
-          <span className="font-mono text-sm font-semibold text-foreground">{formatCurrency(row.amount)}</span>
+          <span className="rounded-md bg-muted/55 px-2 py-1 font-mono text-sm font-semibold text-foreground">
+            {formatCurrency(row.amount)}
+          </span>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-6 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Date</span>
-          <span className="font-mono text-foreground">{row.serviceDate ?? "TBD"}</span>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-6 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Date</span>
+            <span className="font-mono text-foreground">{row.serviceDate ?? "TBD"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Type</span>
+            <span className="text-foreground">{row.serviceType ?? "Standard"}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Type</span>
-          <span className="text-foreground">{row.serviceType ?? "Standard"}</span>
-        </div>
+        <BookingChecklistReadiness
+          bookingId={row.bookingId!}
+          operationalStatus={row.operationalStatus}
+        />
       </div>
-
-      <BookingChecklistReadiness
-        bookingId={row.bookingId!}
-        operationalStatus={row.operationalStatus}
-      />
 
       <Separator />
 
       <div className="flex flex-wrap gap-1.5">
-        <Button
-          variant="outline"
-          size="xs"
-          disabled={isBusy || row.operationalStatus !== "in_progress"}
-          onClick={onMarkCompleted}
-        >
-          Mark completed
+        <Button size="xs" onClick={onDetails}>
+          Details
         </Button>
-        <Button
-          size="xs"
-          disabled={
-            isBusy ||
-            !row.amount ||
-            (row.operationalStatus !== "completed" &&
-              row.operationalStatus !== "payment_failed")
+        <AssignCleanerSheet
+          bookingId={row.bookingId!}
+          trigger={
+            <Button size="xs" variant="outline">
+              Assign
+            </Button>
           }
-          onClick={onCharge}
-        >
-          Charge now
-        </Button>
-        <AssignCleanerSheet bookingId={row.bookingId!} />
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={isBusy || !canCancel}
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
+        />
         <Button
           size="xs"
           variant="outline"
@@ -761,14 +958,42 @@ function BookingCard({
         >
           Reschedule
         </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="xs"
+            disabled={isBusy || row.operationalStatus !== "in_progress"}
+            onClick={onMarkCompleted}
+          >
+            Mark completed
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={
+              isBusy ||
+              !row.amount ||
+              (row.operationalStatus !== "completed" &&
+                row.operationalStatus !== "payment_failed")
+            }
+            onClick={onCharge}
+          >
+            Charge
+          </Button>
+        </div>
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={isBusy || !canCancel}
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
         {isAdmin ? (
-          <Button size="xs" variant="outline" onClick={onOverride}>
+          <Button size="xs" variant="ghost" onClick={onOverride}>
             Override
           </Button>
         ) : null}
-        <Button size="xs" variant="ghost" onClick={onDetails}>
-          Details
-        </Button>
       </div>
     </div>
   );
