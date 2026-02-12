@@ -329,7 +329,16 @@ export default function RequestCreateSheet({
       return;
     }
     const squareFootageValue =
-      Number.isFinite(parsedSquareFootage) && parsedSquareFootage > 0 ? parsedSquareFootage : 1;
+      Number.isFinite(parsedSquareFootage) && parsedSquareFootage > 0
+        ? parsedSquareFootage
+        : (() => {
+            if (isExistingMode) {
+              console.warn(
+                `[RequestCreateSheet] Existing quote missing valid squareFootage (got "${derivedQuote.squareFootage}"), defaulting to 1`
+              );
+            }
+            return 1;
+          })();
 
     setIsSubmitting(true);
     try {
