@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import type { LifecycleRow, LifecycleTimelineEvent } from "./types";
 import { onboardingApi } from "@/lib/onboarding/api";
+import { getConfirmRequestLink } from "@/lib/bookingLinks";
 
 type BookingLifecycleSheetProps = {
   open: boolean;
@@ -58,6 +59,23 @@ function eventTypeLabel(eventType: string) {
   }
 }
 
+async function copyToClipboard(value: string) {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
 export default function BookingLifecycleSheet({
   open,
   onOpenChange,
@@ -69,14 +87,31 @@ export default function BookingLifecycleSheet({
 }: BookingLifecycleSheetProps) {
   const bookingId = row?.bookingId ?? null;
   const booking = useQuery(onboardingApi.getBooking, bookingId ? { id: bookingId } : "skip");
+  const linkedRequestId = row?.bookingRequestId ?? booking?.bookingRequestId ?? null;
+  const request = useQuery(
+    onboardingApi.getRequestById,
+    linkedRequestId ? { id: linkedRequestId } : "skip"
+  );
   const assignments = useQuery(
     onboardingApi.getBookingAssignments,
     bookingId ? { bookingId } : "skip"
   );
+  const tallyLinks = useQuery(onboardingApi.getTallyLinksForActiveOrganization, {});
+  const markLinkSent = useMutation(onboardingApi.markLinkSent);
+  const markConfirmLinkSent = useMutation(onboardingApi.markConfirmLinkSent);
+  const sendConfirmEmail = useAction(onboardingApi.sendConfirmationEmail);
+  const sendCardRequestEmail = useAction(onboardingApi.sendCardRequestEmail);
 
   const [cursor, setCursor] = useState<string | null>(null);
   const [events, setEvents] = useState<LifecycleTimelineEvent[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const [cardEmailState, setCardEmailState] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle"
+  );
+  const [confirmEmailState, setConfirmEmailState] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
+  const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const timeline = useQuery(
     onboardingApi.getBookingTimeline,
@@ -94,6 +129,9 @@ export default function BookingLifecycleSheet({
       setCursor(null);
       setEvents([]);
       setHasMore(false);
+      setCardEmailState("idle");
+      setConfirmEmailState("idle");
+      setConfirmCopyState("idle");
     }
   }, [open]);
 
@@ -102,6 +140,12 @@ export default function BookingLifecycleSheet({
     setEvents([]);
     setHasMore(false);
   }, [bookingId]);
+
+  useEffect(() => {
+    setCardEmailState("idle");
+    setConfirmEmailState("idle");
+    setConfirmCopyState("idle");
+  }, [linkedRequestId]);
 
   useEffect(() => {
     if (!timeline) return;
@@ -162,6 +206,13 @@ export default function BookingLifecycleSheet({
   }
 
   const staleBooking = booking === null;
+  const canonicalBookingHandle = request?.canonicalBookingHandle ?? null;
+  const canSendCardEmail = !staleBooking && Boolean(linkedRequestId && canonicalBookingHandle);
+  const canSendConfirmationEmail =
+    !staleBooking && Boolean(linkedRequestId && tallyLinks?.confirmationFormUrl);
+  const canCopyConfirmLink = Boolean(
+    !staleBooking && linkedRequestId && canonicalBookingHandle && tallyLinks?.confirmationFormUrl
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -194,9 +245,122 @@ export default function BookingLifecycleSheet({
               <p>Service type: {booking?.serviceType ?? row.serviceType ?? "—"}</p>
               <p>Amount: {formatCurrency(booking?.amount ?? row.amount)}</p>
               <p>Booking ID: {row.bookingId}</p>
-              <p>Request ID: {row.bookingRequestId ?? "—"}</p>
+              <p>Request ID: {linkedRequestId ?? "—"}</p>
               <p>Quote Request ID: {row.quoteRequestId ?? "—"}</p>
             </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canSendCardEmail || cardEmailState === "sending"}
+                onClick={async () => {
+                  if (!linkedRequestId || !canonicalBookingHandle) {
+                    setCardEmailState("error");
+                    setTimeout(() => setCardEmailState("idle"), 2000);
+                    return;
+                  }
+                  setCardEmailState("sending");
+                  try {
+                    await sendCardRequestEmail({ requestId: linkedRequestId });
+                    await markLinkSent({ requestId: linkedRequestId });
+                    setCardEmailState("sent");
+                    setTimeout(() => setCardEmailState("idle"), 2000);
+                  } catch (error) {
+                    console.error(error);
+                    setCardEmailState("error");
+                    setTimeout(() => setCardEmailState("idle"), 2500);
+                  }
+                }}
+              >
+                {cardEmailState === "sending"
+                  ? "Sending..."
+                  : cardEmailState === "sent"
+                  ? "Email sent"
+                  : cardEmailState === "error"
+                  ? "Failed"
+                  : "Card email"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canSendConfirmationEmail || confirmEmailState === "sending"}
+                onClick={async () => {
+                  if (!linkedRequestId) {
+                    setConfirmEmailState("error");
+                    setTimeout(() => setConfirmEmailState("idle"), 3000);
+                    return;
+                  }
+                  setConfirmEmailState("sending");
+                  try {
+                    await sendConfirmEmail({ requestId: linkedRequestId });
+                    setConfirmEmailState("sent");
+                    setTimeout(() => setConfirmEmailState("idle"), 3000);
+                  } catch (error) {
+                    console.error(error);
+                    setConfirmEmailState("error");
+                    setTimeout(() => setConfirmEmailState("idle"), 3000);
+                  }
+                }}
+              >
+                {confirmEmailState === "sending"
+                  ? "Sending..."
+                  : confirmEmailState === "sent"
+                  ? "Sent!"
+                  : confirmEmailState === "error"
+                  ? "Failed"
+                  : "Confirmation email"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canCopyConfirmLink}
+                onClick={async () => {
+                  if (!linkedRequestId || !canonicalBookingHandle) {
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                    return;
+                  }
+                  const link = getConfirmRequestLink(
+                    tallyLinks?.confirmationFormUrl ?? null,
+                    linkedRequestId,
+                    canonicalBookingHandle
+                  );
+                  if (!link) {
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                    return;
+                  }
+                  try {
+                    await copyToClipboard(link);
+                    await markConfirmLinkSent({ requestId: linkedRequestId });
+                    setConfirmCopyState("copied");
+                    setTimeout(() => setConfirmCopyState("idle"), 1500);
+                  } catch (error) {
+                    console.error(error);
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                  }
+                }}
+              >
+                {confirmCopyState === "copied"
+                  ? "Copied"
+                  : confirmCopyState === "error"
+                  ? "Unavailable"
+                  : "Copy link"}
+              </Button>
+            </div>
+
+            {!linkedRequestId ? (
+              <p className="mt-2 text-xs text-amber-700">
+                Email and link actions require a linked onboarding intake.
+              </p>
+            ) : null}
+            {linkedRequestId && canonicalBookingHandle && !tallyLinks?.confirmationFormUrl ? (
+              <p className="mt-2 text-xs text-amber-700">
+                Complete Integrations setup to enable confirmation link actions.
+              </p>
+            ) : null}
 
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
