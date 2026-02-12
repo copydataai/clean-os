@@ -346,7 +346,7 @@ export default function OnboardingPage() {
         <RequestCreateSheet triggerLabel="New onboarding" />
       </PageHeader>
 
-      <OnboardingKpiStrip rows={rows} />
+      <OnboardingKpiStrip rows={rows} intakeCount={intakeRows.length} activeJobsCount={activeJobRows.length} />
 
       <OnboardingAlertRail alerts={alerts} />
 
@@ -688,9 +688,15 @@ export default function OnboardingPage() {
   );
 }
 
-function OnboardingKpiStrip({ rows }: { rows: LifecycleRow[] }) {
-  const intakeCount = rows.filter((row) => row.rowType === "pre_booking").length;
-  const activeJobsCount = rows.filter((row) => row.rowType === "booking" && Boolean(row.bookingId)).length;
+function OnboardingKpiStrip({
+  rows,
+  intakeCount,
+  activeJobsCount,
+}: {
+  rows: LifecycleRow[];
+  intakeCount: number;
+  activeJobsCount: number;
+}) {
   const inProgressCount = rows.filter(
     (row) => row.rowType === "booking" && row.operationalStatus === "in_progress"
   ).length;
