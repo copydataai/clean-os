@@ -39,8 +39,9 @@ export default function BookingConfirmedEmail({
 
       <Text style={heading}>Booking Confirmed</Text>
       <Text style={subheading}>
-        Hi {firstName}, everything looks great.{"\n"}One quick step and
-        we&apos;ll get you on the schedule.
+        Hi {firstName}, everything looks great.
+        <br />
+        One quick step and we&apos;ll get you on the schedule.
       </Text>
 
       {/* ── Progress steps ── */}
