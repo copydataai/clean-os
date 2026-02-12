@@ -85,11 +85,8 @@ export default function OnboardingPage() {
   const intakeRows = rows.filter((row) => row.rowType === "pre_booking");
   const activeJobRows = rows.filter((row) => row.rowType === "booking" && Boolean(row.bookingId));
 
-  const deepLinkedBookingIdRaw = searchParams.get("bookingId");
   const deepLinkedBookingId =
-    deepLinkedBookingIdRaw && /^[a-z0-9]+$/.test(deepLinkedBookingIdRaw)
-      ? (deepLinkedBookingIdRaw as import("@clean-os/convex/data-model").Id<"bookings">)
-      : null;
+    (searchParams.get("bookingId") as import("@clean-os/convex/data-model").Id<"bookings">) ?? null;
   const [deepLinkHandled, setDeepLinkHandled] = useState(false);
   const [deepLinkResetAttempted, setDeepLinkResetAttempted] = useState(false);
   const [deepLinkAlert, setDeepLinkAlert] = useState<"needs_reset" | "not_found" | null>(null);
