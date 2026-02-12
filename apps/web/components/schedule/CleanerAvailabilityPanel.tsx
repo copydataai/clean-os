@@ -1,10 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
-import type { Id, Doc } from "@clean-os/convex/data-model";
+import type { Doc, Id } from "@clean-os/convex/data-model";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 
 type AvailableCleaner = {
   cleaner: Doc<"cleaners">;
@@ -17,10 +17,24 @@ type AvailableCleaner = {
 };
 
 type CleanerAvailabilityPanelProps = {
-  date: string; // ISO date string "YYYY-MM-DD"
+  date: string;
   bookingId?: Id<"bookings">;
   onAssigned?: () => void;
 };
+
+function workloadLabel(count: number): string {
+  if (count >= 5) return "High load";
+  if (count >= 3) return "Moderate load";
+  if (count >= 1) return "Light load";
+  return "Open capacity";
+}
+
+function workloadTone(count: number): string {
+  if (count >= 5) return "text-rose-700 dark:text-rose-300";
+  if (count >= 3) return "text-amber-700 dark:text-amber-300";
+  if (count >= 1) return "text-cyan-700 dark:text-cyan-300";
+  return "text-emerald-700 dark:text-emerald-300";
+}
 
 export default function CleanerAvailabilityPanel({
   date,
@@ -52,64 +66,55 @@ export default function CleanerAvailabilityPanel({
   };
 
   if (!availableCleaners) {
-    return (
-      <div className="text-sm text-muted-foreground">Loading availability...</div>
-    );
+    return <div className="text-sm text-muted-foreground">Loading cleaner availability...</div>;
   }
 
   if (availableCleaners.length === 0) {
     return (
-      <div className="rounded-lg border border-border bg-background p-4 text-center">
-        <p className="text-sm text-muted-foreground">
-          No cleaners available on this date
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          Check cleaner availability settings or time off requests
+      <div className="rounded-xl border border-dashed border-border/80 bg-background/70 p-4 text-center">
+        <p className="text-sm text-muted-foreground">No cleaners available on this date.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Check weekly availability entries and approved time off.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {availableCleaners.map(({ cleaner, availability, assignmentCount }: AvailableCleaner) => (
-        <div
+        <article
           key={cleaner._id}
-          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+          className="rounded-xl border border-border/80 bg-[linear-gradient(145deg,color-mix(in_oklch,var(--card)_92%,white),color-mix(in_oklch,var(--primary)_7%,white))] p-3"
         >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-medium text-white">
-              {cleaner.firstName.charAt(0)}
-              {cleaner.lastName.charAt(0)}
-            </div>
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">
+              <p className="truncate text-sm font-semibold text-foreground">
                 {cleaner.firstName} {cleaner.lastName}
               </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>
-                  {availability.startTime} - {availability.endTime}
-                </span>
-                {assignmentCount > 0 && (
-                  <span className="text-muted-foreground">
-                    ({assignmentCount} job{assignmentCount !== 1 ? "s" : ""})
-                  </span>
-                )}
-              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {availability.startTime} - {availability.endTime}
+                {availability.timezone ? ` (${availability.timezone})` : ""}
+              </p>
+              <p className={`mt-1 text-xs font-medium ${workloadTone(assignmentCount)}`}>
+                {workloadLabel(assignmentCount)} ({assignmentCount} assigned)
+              </p>
             </div>
-          </div>
 
-          {bookingId && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleAssign(cleaner._id)}
-              disabled={assigningId === cleaner._id}
-            >
-              {assigningId === cleaner._id ? "Assigning..." : "Assign"}
-            </Button>
-          )}
-        </div>
+            {bookingId ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleAssign(cleaner._id)}
+                disabled={assigningId === cleaner._id}
+              >
+                {assigningId === cleaner._id ? "Assigning..." : "Assign"}
+              </Button>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">Select booking first</span>
+            )}
+          </div>
+        </article>
       ))}
     </div>
   );

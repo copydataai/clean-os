@@ -129,6 +129,8 @@ const bookings = defineTable({
   .index("by_checkout_session", ["stripeCheckoutSessionId"])
   .index("by_status", ["status"])
   .index("by_org_status", ["organizationId", "status"])
+  .index("by_org_service_date", ["organizationId", "serviceDate"])
+  .index("by_org_status_service_date", ["organizationId", "status", "serviceDate"])
   .index("by_service_date", ["serviceDate"])
   .index("by_service_date_status", ["serviceDate", "status"])
   .index("by_customer", ["customerId"])

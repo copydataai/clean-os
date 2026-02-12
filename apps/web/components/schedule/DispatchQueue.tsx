@@ -61,10 +61,9 @@ function SortableBookingItem({
   onSaveMeta,
   onRef,
 }: SortableBookingItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: booking._id,
-    });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: booking._id,
+  });
 
   return (
     <div
@@ -76,7 +75,7 @@ function SortableBookingItem({
         transform: CSS.Transform.toString(transform),
         transition,
       }}
-      className={isDragging ? "opacity-60" : ""}
+      className={isDragging ? "opacity-70" : ""}
       {...attributes}
       {...listeners}
     >
@@ -123,6 +122,18 @@ export default function DispatchQueue({
 
   const ids = useMemo(() => orderedBookings.map((booking) => booking._id), [orderedBookings]);
 
+  const queueSummary = useMemo(() => {
+    const assigned = orderedBookings.filter((booking) => booking.assignments.assigned > 0).length;
+    const priority = orderedBookings.filter(
+      (booking) => booking.dispatchPriority === "urgent" || booking.dispatchPriority === "high"
+    ).length;
+    return {
+      assigned,
+      unassigned: orderedBookings.length - assigned,
+      priority,
+    };
+  }, [orderedBookings]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -143,11 +154,11 @@ export default function DispatchQueue({
 
   if (orderedBookings.length === 0) {
     return (
-      <div className="surface-card flex h-[620px] items-center justify-center p-6 text-center">
+      <div className="surface-card flex min-h-[640px] items-center justify-center border-border/70 bg-[linear-gradient(150deg,color-mix(in_oklch,var(--card)_90%,white),color-mix(in_oklch,var(--muted)_35%,white))] p-6 text-center">
         <div>
-          <p className="text-sm font-medium text-foreground">No bookings in this dispatch view</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Adjust date or filters to load bookings.
+          <p className="text-base font-semibold text-foreground">No bookings in this dispatch lane</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Shift the date or filter set to load active stops.
           </p>
         </div>
       </div>
@@ -155,15 +166,31 @@ export default function DispatchQueue({
   }
 
   return (
-    <div className="surface-card h-[620px] overflow-hidden p-3">
-      <div className="mb-3 flex items-center justify-between px-1">
-        <h3 className="text-sm font-semibold text-foreground">Dispatch Queue</h3>
-        <span className="text-xs text-muted-foreground">
-          Drag to reorder {reordering ? "(saving...)" : ""}
-        </span>
-      </div>
+    <section className="surface-card min-h-[640px] border-border/80 bg-[linear-gradient(150deg,color-mix(in_oklch,var(--card)_92%,white),color-mix(in_oklch,var(--primary)_6%,white))] p-3 sm:p-4">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Dispatch queue
+          </p>
+          <p className="text-sm font-semibold text-foreground">
+            {orderedBookings.length} stops, {queueSummary.priority} high-priority
+          </p>
+        </div>
 
-      <div className="h-[560px] overflow-y-auto space-y-2 pr-1">
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="rounded-full border border-border/70 bg-background px-2 py-1 text-muted-foreground">
+            Assigned {queueSummary.assigned}
+          </span>
+          <span className="rounded-full border border-border/70 bg-background px-2 py-1 text-muted-foreground">
+            Unassigned {queueSummary.unassigned}
+          </span>
+          <span className="rounded-full border border-border/70 bg-background px-2 py-1 text-muted-foreground">
+            Drag reorder {reordering ? "(saving)" : "(ready)"}
+          </span>
+        </div>
+      </header>
+
+      <div className="h-[560px] space-y-2 overflow-y-auto pr-1">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
             {orderedBookings.map((booking) => (
@@ -188,6 +215,6 @@ export default function DispatchQueue({
           </SortableContext>
         </DndContext>
       </div>
-    </div>
+    </section>
   );
 }

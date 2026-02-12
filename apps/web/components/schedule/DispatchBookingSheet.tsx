@@ -19,7 +19,7 @@ type DispatchBookingSheetProps = {
 };
 
 function formatCurrency(cents?: number | null): string {
-  if (!cents) return "—";
+  if (!cents) return "-";
   return `$${(cents / 100).toLocaleString()}`;
 }
 
@@ -33,30 +33,52 @@ export default function DispatchBookingSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
-        <SheetHeader>
+      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
+        <SheetHeader className="border-b border-border pb-4">
           <SheetTitle>{booking.customerName ?? booking.email}</SheetTitle>
-          <SheetDescription>Dispatch details and assignment tools</SheetDescription>
+          <SheetDescription>
+            Dispatch details, assignment context, and same-day cleaner availability.
+          </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-6 p-4">
-          <section className="space-y-2">
-            <div className="flex items-center justify-between">
+          <section className="rounded-2xl border border-border/70 bg-[linear-gradient(145deg,color-mix(in_oklch,var(--card)_92%,white),color-mix(in_oklch,var(--primary)_8%,white))] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <StatusBadge status={booking.status} />
-              <span className="text-sm font-semibold text-foreground">
+              <span className="text-lg font-semibold text-foreground">
                 {formatCurrency(booking.amount)}
               </span>
             </div>
-            <p className="text-sm text-muted-foreground">{booking.serviceType ?? "Standard"}</p>
-            <p className="text-sm text-muted-foreground">
-              {booking.location.addressLine || "No address available"}
-            </p>
+
+            <div className="mt-4 grid gap-2 text-xs sm:grid-cols-2">
+              <div className="rounded-lg border border-border/70 bg-background/80 px-2.5 py-2">
+                <p className="uppercase tracking-[0.15em] text-muted-foreground">Service</p>
+                <p className="mt-1 font-medium text-foreground">
+                  {booking.serviceType ?? "Standard cleaning"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background/80 px-2.5 py-2">
+                <p className="uppercase tracking-[0.15em] text-muted-foreground">Window</p>
+                <p className="mt-1 font-medium text-foreground">
+                  {booking.serviceWindowStart && booking.serviceWindowEnd
+                    ? `${booking.serviceWindowStart} - ${booking.serviceWindowEnd}`
+                    : "Not set"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-background/80 px-2.5 py-2 sm:col-span-2">
+                <p className="uppercase tracking-[0.15em] text-muted-foreground">Address</p>
+                <p className="mt-1 font-medium text-foreground">
+                  {booking.location.addressLine || "No address available"}
+                </p>
+              </div>
+            </div>
+
             <p
-              className={
+              className={`mt-3 rounded-lg px-2.5 py-1.5 text-xs font-medium ${
                 booking.checklist.complete
-                  ? "text-sm text-emerald-700"
-                  : "text-sm text-rose-700"
-              }
+                  ? "bg-emerald-100/80 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300"
+                  : "bg-rose-100/80 text-rose-700 dark:bg-rose-950/35 dark:text-rose-300"
+              }`}
             >
               Checklist: {booking.checklist.completed}/{booking.checklist.total}
               {booking.status === "in_progress" && !booking.checklist.complete
@@ -66,21 +88,23 @@ export default function DispatchBookingSheet({
           </section>
 
           <section>
-            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Assignment
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Current assignment
             </h3>
             {booking.assignments.cleaners.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">No cleaner assigned yet.</p>
+              <p className="mt-2 rounded-xl border border-dashed border-border/80 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                No cleaner is assigned yet.
+              </p>
             ) : (
               <div className="mt-2 space-y-2">
                 {booking.assignments.cleaners.map((cleaner) => (
                   <div
                     key={`${cleaner.cleanerId}-${cleaner.role}`}
-                    className="rounded-lg border border-border bg-background p-3"
+                    className="rounded-xl border border-border/80 bg-card px-3 py-2.5"
                   >
-                    <p className="text-sm font-medium text-foreground">{cleaner.name}</p>
+                    <p className="text-sm font-semibold text-foreground">{cleaner.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {cleaner.role} · {cleaner.status}
+                      Role: {cleaner.role} | Status: {cleaner.status}
                     </p>
                   </div>
                 ))}
@@ -89,8 +113,8 @@ export default function DispatchBookingSheet({
           </section>
 
           <section>
-            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Available Cleaners
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Available cleaners
             </h3>
             {booking.serviceDate ? (
               <div className="mt-2">
@@ -101,8 +125,8 @@ export default function DispatchBookingSheet({
                 />
               </div>
             ) : (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Service date is missing, cannot load availability.
+              <p className="mt-2 rounded-xl border border-dashed border-border/80 bg-background/70 px-3 py-3 text-sm text-muted-foreground">
+                Service date is missing, so availability cannot be loaded.
               </p>
             )}
           </section>

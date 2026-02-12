@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -10,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 
 type Filters = {
   status?: string;
@@ -24,52 +24,35 @@ type ScheduleFiltersProps = {
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
-  { value: "pending_card", label: "Pending Card" },
-  { value: "card_saved", label: "Card Saved" },
+  { value: "pending_card", label: "Pending card" },
+  { value: "card_saved", label: "Card saved" },
   { value: "scheduled", label: "Scheduled" },
-  { value: "in_progress", label: "In Progress" },
+  { value: "in_progress", label: "In progress" },
   { value: "completed", label: "Completed" },
-  { value: "payment_failed", label: "Payment Failed" },
+  { value: "payment_failed", label: "Payment failed" },
   { value: "charged", label: "Charged" },
   { value: "cancelled", label: "Cancelled" },
-  { value: "failed", label: "Failed (Legacy)" },
+  { value: "failed", label: "Failed (legacy)" },
 ];
 
-export default function ScheduleFilters({
-  filters,
-  onFiltersChange,
-}: ScheduleFiltersProps) {
+export default function ScheduleFilters({ filters, onFiltersChange }: ScheduleFiltersProps) {
   const cleaners = useQuery(api.cleaners.list, { status: "active" });
 
-  const handleStatusChange = (value: string | null) => {
-    if (!value) return;
-    onFiltersChange({
-      ...filters,
-      status: value === "all" ? undefined : value,
-    });
-  };
-
-  const handleCleanerChange = (value: string | null) => {
-    if (!value) return;
-    onFiltersChange({
-      ...filters,
-      cleanerId: value === "all" ? undefined : (value as Id<"cleaners">),
-    });
-  };
-
-  const handleClearFilters = () => {
-    onFiltersChange({});
-  };
-
-  const hasFilters = filters.status || filters.cleanerId;
+  const hasFilters = Boolean(filters.status || filters.cleanerId);
 
   return (
     <div className="flex flex-wrap items-center gap-3">
       <Select
         value={filters.status ?? "all"}
-        onValueChange={handleStatusChange}
+        onValueChange={(value) => {
+          if (!value) return;
+          onFiltersChange({
+            ...filters,
+            status: value === "all" ? undefined : value,
+          });
+        }}
       >
-        <SelectTrigger className="w-[160px]">
+        <SelectTrigger className="w-[180px] bg-background">
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
@@ -83,9 +66,15 @@ export default function ScheduleFilters({
 
       <Select
         value={filters.cleanerId ?? "all"}
-        onValueChange={handleCleanerChange}
+        onValueChange={(value) => {
+          if (!value) return;
+          onFiltersChange({
+            ...filters,
+            cleanerId: value === "all" ? undefined : (value as Id<"cleaners">),
+          });
+        }}
       >
-        <SelectTrigger className="w-[180px]">
+        <SelectTrigger className="w-[220px] bg-background">
           <SelectValue placeholder="Cleaner" />
         </SelectTrigger>
         <SelectContent>
@@ -98,10 +87,12 @@ export default function ScheduleFilters({
         </SelectContent>
       </Select>
 
-      {hasFilters && (
-        <Button variant="ghost" size="sm" onClick={handleClearFilters}>
+      {hasFilters ? (
+        <Button variant="ghost" size="sm" onClick={() => onFiltersChange({})}>
           Clear filters
         </Button>
+      ) : (
+        <span className="text-xs text-muted-foreground">No active filters</span>
       )}
     </div>
   );

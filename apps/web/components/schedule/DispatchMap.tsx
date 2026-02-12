@@ -41,6 +41,13 @@ function averageCoordinates(bookings: DispatchBooking[]) {
   };
 }
 
+function markerTone(booking: DispatchBooking, selected: boolean) {
+  if (selected) return "bg-primary text-primary-foreground border-primary";
+  if (booking.dispatchPriority === "urgent") return "bg-rose-500 text-white border-rose-700";
+  if (booking.dispatchPriority === "high") return "bg-amber-500 text-amber-950 border-amber-700";
+  return "bg-emerald-500 text-emerald-950 border-emerald-700";
+}
+
 export default function DispatchMap({
   bookings,
   selectedBookingId,
@@ -53,6 +60,11 @@ export default function DispatchMap({
     [bookings]
   );
 
+  const selectedBooking = useMemo(
+    () => mappableBookings.find((booking) => booking._id === selectedBookingId) ?? null,
+    [mappableBookings, selectedBookingId]
+  );
+
   const [viewState, setViewState] = useState<Pick<ViewState, "latitude" | "longitude" | "zoom">>(
     averageCoordinates(mappableBookings)
   );
@@ -62,25 +74,26 @@ export default function DispatchMap({
       setViewState(FALLBACK_VIEW);
       return;
     }
-    const selected = mappableBookings.find((booking) => booking._id === selectedBookingId);
-    if (selected?.location.latitude && selected.location.longitude) {
-      setViewState({
-        latitude: selected.location.latitude,
-        longitude: selected.location.longitude,
-        zoom: Math.max(viewState.zoom, 11),
-      });
+
+    if (selectedBooking?.location.latitude && selectedBooking.location.longitude) {
+      setViewState((current) => ({
+        latitude: selectedBooking.location.latitude as number,
+        longitude: selectedBooking.location.longitude as number,
+        zoom: Math.max(current.zoom, 11),
+      }));
       return;
     }
+
     setViewState(averageCoordinates(mappableBookings));
-  }, [mappableBookings, selectedBookingId, viewState.zoom]);
+  }, [mappableBookings, selectedBooking]);
 
   if (!mapboxToken) {
     return (
-      <div className="surface-card flex h-[620px] items-center justify-center p-8 text-center">
+      <div className="surface-card flex min-h-[640px] items-center justify-center border-border/70 bg-[linear-gradient(150deg,color-mix(in_oklch,var(--card)_90%,white),color-mix(in_oklch,var(--muted)_35%,white))] p-8 text-center">
         <div>
-          <p className="text-sm font-medium text-foreground">Map unavailable</p>
+          <p className="text-sm font-semibold text-foreground">Map unavailable</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Set NEXT_PUBLIC_MAPBOX_TOKEN to render dispatch map pins.
+            Set `NEXT_PUBLIC_MAPBOX_TOKEN` to render dispatch pins.
           </p>
         </div>
       </div>
@@ -89,11 +102,11 @@ export default function DispatchMap({
 
   if (mappableBookings.length === 0) {
     return (
-      <div className="surface-card flex h-[620px] items-center justify-center p-8 text-center">
+      <div className="surface-card flex min-h-[640px] items-center justify-center border-border/70 bg-[linear-gradient(150deg,color-mix(in_oklch,var(--card)_90%,white),color-mix(in_oklch,var(--muted)_35%,white))] p-8 text-center">
         <div>
-          <p className="text-sm font-medium text-foreground">No map pins yet</p>
+          <p className="text-sm font-semibold text-foreground">No map pins yet</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            This day has bookings, but none have geocoded coordinates.
+            Dispatch entries exist, but none include geocoded coordinates.
           </p>
         </div>
       </div>
@@ -101,10 +114,10 @@ export default function DispatchMap({
   }
 
   return (
-    <div className="surface-card relative h-[620px] overflow-hidden p-0">
+    <section className="surface-card relative min-h-[640px] overflow-hidden border-border/80 p-0">
       <Map
         mapboxAccessToken={mapboxToken}
-        mapStyle="mapbox://styles/mapbox/streets-v12"
+        mapStyle="mapbox://styles/mapbox/navigation-day-v1"
         longitude={viewState.longitude}
         latitude={viewState.latitude}
         zoom={viewState.zoom}
@@ -114,7 +127,7 @@ export default function DispatchMap({
         }}
         style={{ width: "100%", height: "100%" }}
       >
-        {mappableBookings.map((booking) => (
+        {mappableBookings.map((booking, index) => (
           <Marker
             key={booking._id}
             longitude={booking.location.longitude as number}
@@ -124,18 +137,33 @@ export default function DispatchMap({
             <button
               type="button"
               onClick={() => onSelectBooking(booking._id)}
-              className={`h-4 w-4 rounded-full border-2 border-white shadow ${
-                selectedBookingId === booking._id ? "bg-primary" : "bg-emerald-500"
-              }`}
+              className={`flex h-7 w-7 items-center justify-center rounded-full border text-[10px] font-semibold shadow-[0_8px_22px_-12px_rgba(0,0,0,0.55)] transition hover:scale-105 ${markerTone(
+                booking,
+                selectedBookingId === booking._id
+              )}`}
               aria-label={`Select booking ${booking._id}`}
-            />
+              title={booking.customerName ?? booking.email}
+            >
+              {(booking.dispatchOrder ?? index) + 1}
+            </button>
           </Marker>
         ))}
       </Map>
 
-      <div className="absolute left-3 top-3 rounded-lg bg-background/95 px-3 py-2 text-xs text-foreground shadow">
-        {mappableBookings.length} mapped stop{mappableBookings.length !== 1 ? "s" : ""}
+      <div className="absolute left-3 top-3 rounded-xl border border-border/70 bg-background/90 px-3 py-2 text-xs shadow-sm backdrop-blur">
+        <p className="font-semibold text-foreground">{mappableBookings.length} mapped stops</p>
+        <p className="text-muted-foreground">Tap a marker to focus the route card.</p>
       </div>
-    </div>
+
+      {selectedBooking ? (
+        <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-border/70 bg-background/92 p-3 text-xs shadow-sm backdrop-blur">
+          <p className="font-semibold text-foreground">{selectedBooking.customerName ?? selectedBooking.email}</p>
+          <p className="mt-1 text-muted-foreground">{selectedBooking.location.addressLine || "No address"}</p>
+          <p className="mt-1 text-muted-foreground">
+            Priority: {selectedBooking.dispatchPriority} | Assignments: {selectedBooking.assignments.assigned}
+          </p>
+        </div>
+      ) : null}
+    </section>
   );
 }

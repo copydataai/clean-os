@@ -160,22 +160,28 @@ export const getBookingsByDateRange = query({
         }));
     }
 
-    const allBookings = status
+    const rangeBookings = status
       ? await ctx.db
           .query("bookings")
-          .withIndex("by_org_status", (q) =>
-            q.eq("organizationId", organization._id).eq("status", status)
+          .withIndex("by_org_status_service_date", (q) =>
+            q
+              .eq("organizationId", organization._id)
+              .eq("status", status)
+              .gte("serviceDate", startDate)
+              .lte("serviceDate", endDate)
           )
           .collect()
       : await ctx.db
           .query("bookings")
-          .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+          .withIndex("by_org_service_date", (q) =>
+            q
+              .eq("organizationId", organization._id)
+              .gte("serviceDate", startDate)
+              .lte("serviceDate", endDate)
+          )
           .collect();
 
-    return allBookings.filter((b) => {
-      if (!b.serviceDate) return false;
-      return b.serviceDate >= startDate && b.serviceDate <= endDate;
-    });
+    return rangeBookings.filter((booking) => Boolean(booking.serviceDate));
   },
 });
 
@@ -210,19 +216,19 @@ export const getDispatchDay = query({
       assertRecordInActiveOrg(cleaner.organizationId, organization._id);
     }
 
-    const orgBookings = await ctx.db
-      .query("bookings")
-      .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
-      .collect();
-    const dayBookings = orgBookings.filter((booking) => {
-      if (booking.serviceDate !== date) {
-        return false;
-      }
-      if (status && booking.status !== status) {
-        return false;
-      }
-      return true;
-    });
+    const dayBookings = status
+      ? await ctx.db
+          .query("bookings")
+          .withIndex("by_org_status_service_date", (q) =>
+            q.eq("organizationId", organization._id).eq("status", status).eq("serviceDate", date)
+          )
+          .collect()
+      : await ctx.db
+          .query("bookings")
+          .withIndex("by_org_service_date", (q) =>
+            q.eq("organizationId", organization._id).eq("serviceDate", date)
+          )
+          .collect();
 
     const assignmentsByBooking = new Map<
       Id<"bookings">,
@@ -919,15 +925,23 @@ export const getAvailableCleanersForDate = query({
       )
       .collect();
 
-    const approvedTimeOff = await ctx.db
-      .query("cleanerTimeOff")
-      .withIndex("by_status", (q) => q.eq("status", "approved"))
-      .collect();
+    const approvedTimeOffByCleaner = await Promise.all(
+      cleaners.map((cleaner) =>
+        ctx.db
+          .query("cleanerTimeOff")
+          .withIndex("by_cleaner_status", (q) =>
+            q.eq("cleanerId", cleaner._id).eq("status", "approved")
+          )
+          .collect()
+      )
+    );
 
-    const timeOffOnDate = approvedTimeOff.filter((timeOff) => {
-      return timeOff.startDate <= date && timeOff.endDate >= date;
-    });
-    const cleanersOnTimeOff = new Set(timeOffOnDate.map((timeOff) => timeOff.cleanerId));
+    const cleanersOnTimeOff = new Set(
+      approvedTimeOffByCleaner
+        .flat()
+        .filter((timeOff) => timeOff.startDate <= date && timeOff.endDate >= date)
+        .map((timeOff) => timeOff.cleanerId)
+    );
 
     const availabilities = await Promise.all(
       cleaners.map(async (cleaner) => {
@@ -942,12 +956,12 @@ export const getAvailableCleanersForDate = query({
       })
     );
 
-    const bookingsForDate = (
-      await ctx.db
-        .query("bookings")
-        .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
-        .collect()
-    ).filter((booking) => booking.serviceDate === date);
+    const bookingsForDate = await ctx.db
+      .query("bookings")
+      .withIndex("by_org_service_date", (q) =>
+        q.eq("organizationId", organization._id).eq("serviceDate", date)
+      )
+      .collect();
     const bookingIds = bookingsForDate.map((booking) => booking._id);
 
     const allAssignments = await Promise.all(

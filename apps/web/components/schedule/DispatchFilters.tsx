@@ -26,15 +26,15 @@ type DispatchFiltersProps = {
 
 const STATUS_OPTIONS = [
   { value: "all", label: "All statuses" },
-  { value: "pending_card", label: "Pending Card" },
-  { value: "card_saved", label: "Card Saved" },
+  { value: "pending_card", label: "Pending card" },
+  { value: "card_saved", label: "Card saved" },
   { value: "scheduled", label: "Scheduled" },
-  { value: "in_progress", label: "In Progress" },
+  { value: "in_progress", label: "In progress" },
   { value: "completed", label: "Completed" },
-  { value: "payment_failed", label: "Payment Failed" },
+  { value: "payment_failed", label: "Payment failed" },
   { value: "charged", label: "Charged" },
   { value: "cancelled", label: "Cancelled" },
-  { value: "failed", label: "Failed (Legacy)" },
+  { value: "failed", label: "Failed (legacy)" },
 ];
 
 export default function DispatchFilters({
@@ -48,50 +48,54 @@ export default function DispatchFilters({
   onBackfillLocations,
   onOpenMobileMap,
 }: DispatchFiltersProps) {
-  const hasFilter = Boolean(filters.status || filters.cleanerId || filters.priority !== "all" || filters.assignmentState !== "all");
+  const hasFilter =
+    Boolean(filters.status || filters.cleanerId) ||
+    filters.priority !== "all" ||
+    filters.assignmentState !== "all";
 
   return (
-    <div className="surface-card space-y-4 p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Dispatch Date
-          </p>
-          <Input
-            type="date"
-            value={date}
-            onChange={(event) => onDateChange(event.target.value)}
-            className="mt-1 w-[180px]"
-          />
-        </div>
+    <section className="surface-card border-border/80 bg-[linear-gradient(145deg,color-mix(in_oklch,var(--card)_90%,white),color-mix(in_oklch,var(--accent)_16%,white))] p-4 sm:p-5">
+      <div className="flex flex-col gap-4 border-b border-border/70 pb-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.19em] text-muted-foreground">
+              Dispatch Date
+            </p>
+            <Input
+              type="date"
+              value={date}
+              onChange={(event) => onDateChange(event.target.value)}
+              className="mt-1.5 w-[190px] bg-background"
+            />
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>{totals.total} in queue</span>
-          <span>{totals.unassigned} unassigned</span>
-          <span>{totals.missingLocation} without map pin</span>
-        </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px]">
+            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 font-medium text-foreground">
+              Queue {totals.total}
+            </span>
+            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 font-medium text-foreground">
+              Assigned {totals.assigned}
+            </span>
+            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 font-medium text-foreground">
+              Unassigned {totals.unassigned}
+            </span>
+            <span className="rounded-full border border-border/70 bg-background px-2.5 py-1 font-medium text-foreground">
+              Missing pins {totals.missingLocation}
+            </span>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onBackfillLocations}
-            disabled={backfilling}
-          >
-            {backfilling ? "Refreshing..." : "Refresh locations"}
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpenMobileMap}
-            className="lg:hidden"
-          >
-            Show map
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={onBackfillLocations} disabled={backfilling}>
+              {backfilling ? "Refreshing map data..." : "Refresh map data"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={onOpenMobileMap} className="xl:hidden">
+              Open map
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[180px_190px_150px_230px_auto] xl:items-center">
         <Select
           value={filters.status ?? "all"}
           onValueChange={(value) => {
@@ -102,7 +106,7 @@ export default function DispatchFilters({
             });
           }}
         >
-          <SelectTrigger className="w-[170px]">
+          <SelectTrigger className="bg-background">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -124,7 +128,7 @@ export default function DispatchFilters({
             });
           }}
         >
-          <SelectTrigger className="w-[180px]">
+          <SelectTrigger className="bg-background">
             <SelectValue placeholder="Assignment" />
           </SelectTrigger>
           <SelectContent>
@@ -144,7 +148,7 @@ export default function DispatchFilters({
             });
           }}
         >
-          <SelectTrigger className="w-[150px]">
+          <SelectTrigger className="bg-background">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
@@ -166,7 +170,7 @@ export default function DispatchFilters({
             });
           }}
         >
-          <SelectTrigger className="w-[210px]">
+          <SelectTrigger className="bg-background">
             <SelectValue placeholder="Cleaner" />
           </SelectTrigger>
           <SelectContent>
@@ -179,21 +183,25 @@ export default function DispatchFilters({
           </SelectContent>
         </Select>
 
-        {hasFilter && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() =>
-              onFiltersChange({
-                assignmentState: "all",
-                priority: "all",
-              })
-            }
-          >
-            Clear filters
-          </Button>
-        )}
+        <div className="flex items-center justify-start xl:justify-end">
+          {hasFilter ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                onFiltersChange({
+                  assignmentState: "all",
+                  priority: "all",
+                })
+              }
+            >
+              Clear filters
+            </Button>
+          ) : (
+            <span className="text-xs text-muted-foreground">Filters are clear</span>
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
