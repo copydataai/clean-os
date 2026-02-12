@@ -41,7 +41,11 @@ export function validateRequestCreateInput(input: RequestCreateValidationInput):
   const errors: string[] = [];
 
   if (input.mode === "existing" && isBlank(input.existingQuoteRequestId)) {
-    errors.push("Select an existing quote request.");
+    errors.push("Select an existing quote.");
+  }
+
+  if (input.mode === "existing") {
+    return errors;
   }
 
   if (isBlank(input.contact.firstName)) {

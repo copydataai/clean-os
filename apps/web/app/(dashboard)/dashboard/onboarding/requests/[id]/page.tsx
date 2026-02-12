@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { api } from "@clean-os/convex/api";
 import type { Id } from "@clean-os/convex/data-model";
 import PageHeader from "@/components/dashboard/PageHeader";
 import StatusBadge from "@/components/dashboard/StatusBadge";
@@ -14,6 +13,8 @@ import EmptyState from "@/components/dashboard/EmptyState";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { getConfirmRequestLink } from "@/lib/bookingLinks";
+import { onboardingApi } from "@/lib/onboarding/api";
+import { onboardingListPath } from "@/lib/onboarding/routes";
 
 /* ─── Helpers ───────────────────────────────────────────────── */
 
@@ -71,23 +72,23 @@ export default function RequestDetailPage() {
   const wasCreated = searchParams.get("created") === "1";
   const quoteMode = searchParams.get("quote_mode");
   const request = useQuery(
-    api.bookingRequests.getById,
+    onboardingApi.getRequestById,
     requestId ? { id: requestId } : "skip"
   );
-  const tallyLinks = useQuery(api.integrations.getTallyFormLinksForActiveOrganization, {});
+  const tallyLinks = useQuery(onboardingApi.getTallyLinksForActiveOrganization, {});
   const booking = useQuery(
-    api.bookings.getBooking,
+    onboardingApi.getBooking,
     request?.bookingId ? { id: request.bookingId } : "skip"
   );
   const quote = useQuery(
-    api.quoteRequests.getById,
+    onboardingApi.getQuoteRequestById,
     request?.quoteRequestId ? { id: request.quoteRequestId } : "skip"
   );
-  const createBooking = useMutation(api.bookings.createBookingFromRequest);
-  const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
-  const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
-  const sendConfirmEmail = useAction(api.emailTriggers.sendConfirmationEmail);
-  const sendCardRequestEmail = useAction(api.emailTriggers.sendCardRequestEmail);
+  const createBooking = useMutation(onboardingApi.createBookingFromRequest);
+  const markLinkSent = useMutation(onboardingApi.markLinkSent);
+  const markConfirmLinkSent = useMutation(onboardingApi.markConfirmLinkSent);
+  const sendConfirmEmail = useAction(onboardingApi.sendConfirmationEmail);
+  const sendCardRequestEmail = useAction(onboardingApi.sendCardRequestEmail);
 
   const [actionState, setActionState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [cardEmailState, setCardEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -101,8 +102,8 @@ export default function RequestDetailPage() {
   if (request === null) {
     return (
       <EmptyState
-        title="Request not found"
-        description="We couldn't locate this booking request."
+        title="Intake not found"
+        description="We couldn't locate this onboarding intake."
       />
     );
   }
@@ -111,7 +112,7 @@ export default function RequestDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="mt-4 text-sm text-muted-foreground">Loading request...</p>
+        <p className="mt-4 text-sm text-muted-foreground">Loading intake...</p>
       </div>
     );
   }
@@ -123,19 +124,19 @@ export default function RequestDetailPage() {
       {wasCreated ? (
         <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-800 dark:border-emerald-800/40 dark:bg-emerald-950/30 dark:text-emerald-300">
           {quoteMode === "reused"
-            ? "Request created and linked to an existing quote request."
-            : "Request created and a new quote request was generated."}
+            ? "Onboarding intake created and linked to an existing quote."
+            : "Onboarding intake created and a new quote was generated."}
         </div>
       ) : null}
 
       {/* Header */}
       <PageHeader
-        title={request.contactDetails ?? "Booking Request"}
+        title={request.contactDetails ?? "Onboarding Intake"}
         subtitle={`Submitted ${formatDate(request.createdAt)}`}
       >
         <div className="flex items-center gap-2.5">
-          <Link href="/dashboard/requests">
-            <Button variant="outline" size="sm">Back to Requests</Button>
+          <Link href={onboardingListPath()}>
+            <Button variant="outline" size="sm">Back to Onboarding</Button>
           </Link>
           <Separator orientation="vertical" className="h-5" />
           <StatusBadge status={request.status} />
@@ -398,7 +399,7 @@ export default function RequestDetailPage() {
               <h2 className="text-sm font-semibold text-foreground">Booking</h2>
               {request.bookingId ? (
                 <Link
-                  href={`/dashboard/bookings?bookingId=${request.bookingId}`}
+                  href={onboardingListPath({ bookingId: request.bookingId })}
                   className={cn(buttonVariants({ variant: "outline", size: "xs" }))}
                 >
                   Open

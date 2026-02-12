@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useAction, useMutation } from "convex/react";
-import { api } from "@clean-os/convex/api";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Id } from "@clean-os/convex/data-model";
 import { getConfirmRequestLink } from "@/lib/bookingLinks";
+import { onboardingApi } from "@/lib/onboarding/api";
+import { onboardingRequestPath } from "@/lib/onboarding/routes";
 
 type RequestCardProps = {
   request: {
@@ -44,9 +45,9 @@ const statusIndicatorColors: Record<string, string> = {
 export default function RequestCard({ request, confirmationFormUrl, className }: RequestCardProps) {
   const [cardEmailState, setCardEmailState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
-  const markLinkSent = useMutation(api.bookingRequests.markLinkSent);
-  const markConfirmLinkSent = useMutation(api.bookingRequests.markConfirmLinkSent);
-  const sendCardRequestEmail = useAction(api.emailTriggers.sendCardRequestEmail);
+  const markLinkSent = useMutation(onboardingApi.markLinkSent);
+  const markConfirmLinkSent = useMutation(onboardingApi.markConfirmLinkSent);
+  const sendCardRequestEmail = useAction(onboardingApi.sendCardRequestEmail);
   const canonicalBookingHandle = request.canonicalBookingHandle ?? null;
   const name = request.contactDetails || "Unknown contact";
   const email = request.email || "No email";
@@ -120,7 +121,7 @@ export default function RequestCard({ request, confirmationFormUrl, className }:
 
   return (
     <Link
-      href={`/dashboard/requests/${request._id}`}
+      href={onboardingRequestPath(request._id)}
       className={cn(
         "group flex items-center gap-4 rounded-xl border border-border/50 bg-card px-4 py-3 transition-all hover:border-border hover:bg-muted/30",
         className,

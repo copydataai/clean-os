@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "@clean-os/convex/api";
+import { useAction, useMutation, useQuery } from "convex/react";
 import StatusBadge from "@/components/dashboard/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,9 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import type { LifecycleRow, LifecycleTimelineEvent } from "./types";
+import { onboardingApi } from "@/lib/onboarding/api";
+import { getConfirmRequestLink } from "@/lib/bookingLinks";
+import { cn } from "@/lib/utils";
 
 type BookingLifecycleSheetProps = {
   open: boolean;
@@ -58,6 +60,73 @@ function eventTypeLabel(eventType: string) {
   }
 }
 
+async function copyToClipboard(value: string) {
+  if (navigator?.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+}
+
+const statusAccent: Record<string, string> = {
+  pending_card: "from-orange-500/20 to-orange-500/0 border-orange-300/40 dark:from-orange-500/10 dark:border-orange-500/20",
+  card_saved: "from-green-500/20 to-green-500/0 border-green-300/40 dark:from-green-500/10 dark:border-green-500/20",
+  scheduled: "from-yellow-500/15 to-yellow-500/0 border-yellow-300/40 dark:from-yellow-500/10 dark:border-yellow-500/20",
+  in_progress: "from-cyan-500/20 to-cyan-500/0 border-cyan-300/40 dark:from-cyan-500/10 dark:border-cyan-500/20",
+  completed: "from-emerald-500/15 to-emerald-500/0 border-emerald-300/40 dark:from-emerald-500/10 dark:border-emerald-500/20",
+  charged: "from-emerald-500/15 to-emerald-500/0 border-emerald-300/40 dark:from-emerald-500/10 dark:border-emerald-500/20",
+  payment_failed: "from-red-500/20 to-red-500/0 border-red-300/40 dark:from-red-500/10 dark:border-red-500/20",
+  cancelled: "from-zinc-400/15 to-zinc-400/0 border-zinc-300/40 dark:from-zinc-500/10 dark:border-zinc-500/20",
+  failed: "from-red-500/20 to-red-500/0 border-red-300/40 dark:from-red-500/10 dark:border-red-500/20",
+};
+
+const timelineDot: Record<string, string> = {
+  created: "bg-blue-500",
+  baseline: "bg-slate-400",
+  transition: "bg-primary",
+  override_transition: "bg-amber-500",
+  legacy_transition: "bg-zinc-400",
+  rescheduled: "bg-violet-500",
+};
+
+function DataRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <span className="shrink-0 text-xs tracking-wide text-muted-foreground/70 uppercase">{label}</span>
+      <span className={cn("text-right text-sm text-foreground truncate", mono && "font-mono text-xs")}>{value}</span>
+    </div>
+  );
+}
+
+function ProgressBar({ completed, total }: { completed: number; total: number }) {
+  const pct = total === 0 ? 100 : Math.round((completed / total) * 100);
+  return (
+    <div className="flex items-center gap-2.5">
+      <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "absolute inset-y-0 left-0 rounded-full transition-all duration-500",
+            pct === 100 ? "bg-emerald-500" : "bg-primary"
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {completed}/{total}
+      </span>
+    </div>
+  );
+}
+
 export default function BookingLifecycleSheet({
   open,
   onOpenChange,
@@ -68,18 +137,35 @@ export default function BookingLifecycleSheet({
   onRequestOverride,
 }: BookingLifecycleSheetProps) {
   const bookingId = row?.bookingId ?? null;
-  const booking = useQuery(api.bookings.getBooking, bookingId ? { id: bookingId } : "skip");
+  const booking = useQuery(onboardingApi.getBooking, bookingId ? { id: bookingId } : "skip");
+  const linkedRequestId = row?.bookingRequestId ?? booking?.bookingRequestId ?? null;
+  const request = useQuery(
+    onboardingApi.getRequestById,
+    linkedRequestId ? { id: linkedRequestId } : "skip"
+  );
   const assignments = useQuery(
-    api.cleaners.getBookingAssignments,
+    onboardingApi.getBookingAssignments,
     bookingId ? { bookingId } : "skip"
   );
+  const tallyLinks = useQuery(onboardingApi.getTallyLinksForActiveOrganization, {});
+  const markLinkSent = useMutation(onboardingApi.markLinkSent);
+  const markConfirmLinkSent = useMutation(onboardingApi.markConfirmLinkSent);
+  const sendConfirmEmail = useAction(onboardingApi.sendConfirmationEmail);
+  const sendCardRequestEmail = useAction(onboardingApi.sendCardRequestEmail);
 
   const [cursor, setCursor] = useState<string | null>(null);
   const [events, setEvents] = useState<LifecycleTimelineEvent[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const [cardEmailState, setCardEmailState] = useState<"idle" | "sending" | "sent" | "error">(
+    "idle"
+  );
+  const [confirmEmailState, setConfirmEmailState] = useState<
+    "idle" | "sending" | "sent" | "error"
+  >("idle");
+  const [confirmCopyState, setConfirmCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   const timeline = useQuery(
-    api.bookingLifecycle.getBookingLifecycleTimeline,
+    onboardingApi.getBookingTimeline,
     bookingId
       ? {
           bookingId,
@@ -94,6 +180,9 @@ export default function BookingLifecycleSheet({
       setCursor(null);
       setEvents([]);
       setHasMore(false);
+      setCardEmailState("idle");
+      setConfirmEmailState("idle");
+      setConfirmCopyState("idle");
     }
   }, [open]);
 
@@ -102,6 +191,12 @@ export default function BookingLifecycleSheet({
     setEvents([]);
     setHasMore(false);
   }, [bookingId]);
+
+  useEffect(() => {
+    setCardEmailState("idle");
+    setConfirmEmailState("idle");
+    setConfirmCopyState("idle");
+  }, [linkedRequestId]);
 
   useEffect(() => {
     if (!timeline) return;
@@ -162,43 +257,199 @@ export default function BookingLifecycleSheet({
   }
 
   const staleBooking = booking === null;
+  const canonicalBookingHandle = request?.canonicalBookingHandle ?? null;
+  const canSendCardEmail = !staleBooking && Boolean(linkedRequestId && canonicalBookingHandle);
+  const canSendConfirmationEmail =
+    !staleBooking && Boolean(linkedRequestId && tallyLinks?.confirmationFormUrl);
+  const canCopyConfirmLink = Boolean(
+    !staleBooking && linkedRequestId && canonicalBookingHandle && tallyLinks?.confirmationFormUrl
+  );
+
+  const accentGradient =
+    statusAccent[row.operationalStatus ?? ""] ??
+    "from-primary/10 to-primary/0 border-border";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>{row.customerName ?? row.email ?? "Booking"}</SheetTitle>
-          <SheetDescription>Lifecycle timeline, scheduling metadata, and state actions</SheetDescription>
+          <SheetTitle className="text-lg tracking-tight">
+            {row.customerName ?? row.email ?? "Booking"}
+          </SheetTitle>
+          <SheetDescription className="sr-only">
+            Lifecycle timeline, scheduling metadata, and state actions
+          </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-6 p-4">
+        <div className="space-y-5 px-4 pb-8 pt-2">
+          {/* ── stale banner ── */}
           {staleBooking ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-lg border border-red-300/60 bg-red-50/80 px-3.5 py-2.5 text-sm font-medium text-red-700 dark:border-red-500/30 dark:bg-red-950/40 dark:text-red-400">
               Booking no longer exists. Close this panel and refresh the list.
             </div>
           ) : null}
 
-          <section className="rounded-lg border border-border p-4">
-            <div className="flex flex-wrap items-center gap-2">
+          {/* ── status header with gradient accent ── */}
+          <section
+            className={cn(
+              "rounded-xl border bg-gradient-to-b p-4 transition-colors",
+              accentGradient
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-1.5">
               {row.operationalStatus ? <StatusBadge status={row.operationalStatus} /> : null}
               {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
-              <Badge className="bg-muted text-muted-foreground">booking</Badge>
+              <Badge variant="secondary">booking</Badge>
             </div>
 
-            <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-              <p>Email: {row.email ?? "—"}</p>
-              <p>Service date: {formatDate(booking?.serviceDate ?? row.serviceDate)}</p>
-              <p>
-                Window: {booking?.serviceWindowStart ?? "—"} - {booking?.serviceWindowEnd ?? "—"}
+            <div className="mt-4 space-y-1.5">
+              <DataRow label="Email" value={row.email ?? "—"} />
+              <DataRow
+                label="Service"
+                value={formatDate(booking?.serviceDate ?? row.serviceDate)}
+              />
+              <DataRow
+                label="Window"
+                value={`${booking?.serviceWindowStart ?? "—"} – ${booking?.serviceWindowEnd ?? "—"}`}
+              />
+              <DataRow label="Type" value={booking?.serviceType ?? row.serviceType ?? "—"} />
+              <DataRow label="Amount" value={formatCurrency(booking?.amount ?? row.amount)} />
+            </div>
+
+            <div className="mt-3 space-y-1">
+              <DataRow label="Booking" value={String(row.bookingId)} mono />
+              <DataRow label="Request" value={String(linkedRequestId ?? "—")} mono />
+              {row.quoteRequestId ? (
+                <DataRow label="Quote" value={String(row.quoteRequestId)} mono />
+              ) : null}
+            </div>
+          </section>
+
+          {/* ── communication actions ── */}
+          <section className="space-y-2.5">
+            <h3 className="text-[11px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
+              Communication
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canSendCardEmail || cardEmailState === "sending"}
+                onClick={async () => {
+                  if (!linkedRequestId || !canonicalBookingHandle) {
+                    setCardEmailState("error");
+                    setTimeout(() => setCardEmailState("idle"), 2000);
+                    return;
+                  }
+                  setCardEmailState("sending");
+                  try {
+                    await sendCardRequestEmail({ requestId: linkedRequestId });
+                    await markLinkSent({ requestId: linkedRequestId });
+                    setCardEmailState("sent");
+                    setTimeout(() => setCardEmailState("idle"), 2000);
+                  } catch (error) {
+                    console.error(error);
+                    setCardEmailState("error");
+                    setTimeout(() => setCardEmailState("idle"), 2500);
+                  }
+                }}
+              >
+                {cardEmailState === "sending"
+                  ? "Sending..."
+                  : cardEmailState === "sent"
+                    ? "Email sent"
+                    : cardEmailState === "error"
+                      ? "Failed"
+                      : "Card email"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canSendConfirmationEmail || confirmEmailState === "sending"}
+                onClick={async () => {
+                  if (!linkedRequestId) {
+                    setConfirmEmailState("error");
+                    setTimeout(() => setConfirmEmailState("idle"), 3000);
+                    return;
+                  }
+                  setConfirmEmailState("sending");
+                  try {
+                    await sendConfirmEmail({ requestId: linkedRequestId });
+                    setConfirmEmailState("sent");
+                    setTimeout(() => setConfirmEmailState("idle"), 3000);
+                  } catch (error) {
+                    console.error(error);
+                    setConfirmEmailState("error");
+                    setTimeout(() => setConfirmEmailState("idle"), 3000);
+                  }
+                }}
+              >
+                {confirmEmailState === "sending"
+                  ? "Sending..."
+                  : confirmEmailState === "sent"
+                    ? "Sent!"
+                    : confirmEmailState === "error"
+                      ? "Failed"
+                      : "Confirmation email"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!canCopyConfirmLink}
+                onClick={async () => {
+                  if (!linkedRequestId || !canonicalBookingHandle) {
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                    return;
+                  }
+                  const link = getConfirmRequestLink(
+                    tallyLinks?.confirmationFormUrl ?? null,
+                    linkedRequestId,
+                    canonicalBookingHandle
+                  );
+                  if (!link) {
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                    return;
+                  }
+                  try {
+                    await copyToClipboard(link);
+                    await markConfirmLinkSent({ requestId: linkedRequestId });
+                    setConfirmCopyState("copied");
+                    setTimeout(() => setConfirmCopyState("idle"), 1500);
+                  } catch (error) {
+                    console.error(error);
+                    setConfirmCopyState("error");
+                    setTimeout(() => setConfirmCopyState("idle"), 2000);
+                  }
+                }}
+              >
+                {confirmCopyState === "copied"
+                  ? "Copied"
+                  : confirmCopyState === "error"
+                    ? "Unavailable"
+                    : "Copy link"}
+              </Button>
+            </div>
+
+            {!linkedRequestId ? (
+              <p className="rounded-md bg-amber-50/80 px-2.5 py-1.5 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                Email and link actions require a linked onboarding intake.
               </p>
-              <p>Service type: {booking?.serviceType ?? row.serviceType ?? "—"}</p>
-              <p>Amount: {formatCurrency(booking?.amount ?? row.amount)}</p>
-              <p>Booking ID: {row.bookingId}</p>
-              <p>Request ID: {row.bookingRequestId ?? "—"}</p>
-              <p>Quote Request ID: {row.quoteRequestId ?? "—"}</p>
-            </div>
+            ) : null}
+            {linkedRequestId && canonicalBookingHandle && !tallyLinks?.confirmationFormUrl ? (
+              <p className="rounded-md bg-amber-50/80 px-2.5 py-1.5 text-xs text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                Complete Integrations setup to enable confirmation link actions.
+              </p>
+            ) : null}
+          </section>
 
-            <div className="mt-4 flex flex-wrap gap-2">
+          {/* ── lifecycle actions ── */}
+          <section className="space-y-2.5">
+            <h3 className="text-[11px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
+              Lifecycle
+            </h3>
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -227,98 +478,145 @@ export default function BookingLifecycleSheet({
             </div>
           </section>
 
-          <section className="rounded-lg border border-border p-4">
-            <h3 className="text-sm font-semibold text-foreground">Assignment Snapshot</h3>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Active assignments: {assignmentRollup.activeAssignmentsCount} · Checklist{" "}
-              {assignmentRollup.checklistCompleted}/{assignmentRollup.checklistTotal}
-            </p>
+          {/* ── assignment snapshot ── */}
+          <section className="rounded-xl border border-border bg-card/50 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[11px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
+                Assignments
+              </h3>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {assignmentRollup.activeAssignmentsCount} active
+              </span>
+            </div>
+
+            <div className="mt-3">
+              <ProgressBar
+                completed={assignmentRollup.checklistCompleted}
+                total={assignmentRollup.checklistTotal}
+              />
+            </div>
+
             {row.operationalStatus === "in_progress" && !assignmentRollup.checklistComplete ? (
-              <p className="mt-2 text-xs font-medium text-rose-700">
+              <p className="mt-2.5 rounded-md bg-rose-50/80 px-2.5 py-1.5 text-xs font-medium text-rose-700 dark:bg-rose-950/30 dark:text-rose-400">
                 Clock-out is blocked until all checklist items are completed.
               </p>
             ) : null}
             {row.operationalStatus === "in_progress" &&
             assignmentRollup.allActiveAssignmentsCompleted ? (
-              <p className="mt-2 text-xs font-medium text-emerald-700">
-                All active assignments are completed. Booking is ready to auto-complete.
+              <p className="mt-2.5 rounded-md bg-emerald-50/80 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
+                All active assignments completed. Ready to auto-complete.
               </p>
             ) : null}
+
             {!assignments ? (
-              <p className="mt-2 text-sm text-muted-foreground">Loading assignments...</p>
+              <p className="mt-3 text-sm text-muted-foreground">Loading...</p>
             ) : orderedAssignments.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">No assignments.</p>
+              <p className="mt-3 text-sm text-muted-foreground">No assignments.</p>
             ) : (
               <div className="mt-3 space-y-2">
                 {orderedAssignments.map((assignment) => (
                   <div
                     key={assignment._id}
-                    className="rounded-md border border-border bg-background p-2 text-sm"
+                    className="group/card rounded-lg border border-border/60 bg-background px-3 py-2.5 transition-colors hover:border-border"
                   >
-                    <p className="font-medium text-foreground">
-                      {assignment.cleaner
-                        ? `${assignment.cleaner.firstName} ${assignment.cleaner.lastName}`
-                        : assignment.crew?.name ?? "Unassigned"}
-                    </p>
-                    <p className="text-muted-foreground">
-                      {assignment.role} · {assignment.status}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Checklist {assignment.checklist?.completed ?? 0}/
-                      {assignment.checklist?.total ?? 0}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground">
+                        {assignment.cleaner
+                          ? `${assignment.cleaner.firstName} ${assignment.cleaner.lastName}`
+                          : assignment.crew?.name ?? "Unassigned"}
+                      </p>
+                      <StatusBadge status={assignment.status} />
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">{assignment.role}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {assignment.checklist?.completed ?? 0}/{assignment.checklist?.total ?? 0}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </section>
 
-          <section className="rounded-lg border border-border p-4">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-foreground">Lifecycle Timeline</h3>
-              <Badge className="bg-muted text-muted-foreground">{events.length} events</Badge>
+          {/* ── lifecycle timeline ── */}
+          <section className="rounded-xl border border-border bg-card/50 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[11px] font-semibold tracking-widest text-muted-foreground/60 uppercase">
+                Timeline
+              </h3>
+              <Badge variant="secondary">{events.length}</Badge>
             </div>
 
             {!timeline && events.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">Loading lifecycle events...</p>
+              <p className="mt-3 text-sm text-muted-foreground">Loading lifecycle events...</p>
             ) : events.length === 0 ? (
-              <p className="mt-2 text-sm text-muted-foreground">No lifecycle events yet.</p>
+              <p className="mt-3 text-sm text-muted-foreground">No lifecycle events yet.</p>
             ) : (
-              <div className="mt-3 space-y-2">
-                {events.map((event) => (
-                  <div key={event._id} className="rounded-md border border-border bg-background p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">
-                        {eventTypeLabel(event.eventType)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{formatTimestamp(event.createdAt)}</p>
-                    </div>
+              <div className="relative mt-4">
+                {/* vertical connector */}
+                <div className="absolute top-2 bottom-2 left-[5px] w-px bg-border" />
 
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      <p>
-                        {event.fromStatus ?? "—"} → {event.toStatus ?? "—"}
-                      </p>
-                      {event.reason ? <p>Reason: {event.reason}</p> : null}
-                      <p>Source: {event.source}</p>
-                      {event.actorName ? <p>Actor: {event.actorName}</p> : null}
-                      {(event.fromServiceDate || event.toServiceDate) && (
-                        <p>
-                          Date: {event.fromServiceDate ?? "—"} → {event.toServiceDate ?? "—"}
-                        </p>
-                      )}
+                <div className="space-y-4">
+                  {events.map((event) => (
+                    <div key={event._id} className="relative pl-6">
+                      {/* dot */}
+                      <div
+                        className={cn(
+                          "absolute left-0 top-1.5 size-[11px] rounded-full ring-2 ring-background",
+                          timelineDot[event.eventType] ?? "bg-muted-foreground/50"
+                        )}
+                      />
+
+                      <div className="space-y-0.5">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-sm font-medium text-foreground">
+                            {eventTypeLabel(event.eventType)}
+                          </span>
+                          <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground/70">
+                            {formatTimestamp(event.createdAt)}
+                          </span>
+                        </div>
+
+                        {(event.fromStatus || event.toStatus) && (
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-mono">{event.fromStatus ?? "—"}</span>
+                            <span className="mx-1 text-muted-foreground/40">&rarr;</span>
+                            <span className="font-mono">{event.toStatus ?? "—"}</span>
+                          </p>
+                        )}
+
+                        {event.reason ? (
+                          <p className="text-xs text-muted-foreground">
+                            Reason: {event.reason}
+                          </p>
+                        ) : null}
+
+                        <div className="flex flex-wrap gap-x-3 text-[11px] text-muted-foreground/60">
+                          <span>{event.source}</span>
+                          {event.actorName ? <span>{event.actorName}</span> : null}
+                          {(event.fromServiceDate || event.toServiceDate) && (
+                            <span>
+                              {event.fromServiceDate ?? "—"} &rarr; {event.toServiceDate ?? "—"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
 
                 {hasMore ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCursor(timeline?.nextCursor ?? null)}
-                    disabled={!timeline?.nextCursor}
-                  >
-                    Load more
-                  </Button>
+                  <div className="mt-4 pl-6">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCursor(timeline?.nextCursor ?? null)}
+                      disabled={!timeline?.nextCursor}
+                    >
+                      Load more
+                    </Button>
+                  </div>
                 ) : null}
               </div>
             )}

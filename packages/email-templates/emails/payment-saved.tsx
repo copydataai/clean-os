@@ -1,4 +1,10 @@
-import { Text, Section, Row, Column } from "@react-email/components";
+import {
+  Text,
+  Section,
+  Row,
+  Column,
+  Hr,
+} from "@react-email/components";
 import * as React from "react";
 import EmailLayout from "./components/layout";
 
@@ -23,9 +29,12 @@ export default function PaymentSavedEmail({
       : undefined;
 
   return (
-    <EmailLayout preview={`${firstName}, you're all set — payment method saved`}>
-      <Section style={checkSection}>
-        <Text style={checkmark}>&#10003;</Text>
+    <EmailLayout
+      preview={`${firstName}, you're all set — payment method saved`}
+    >
+      {/* ── Success badge ── */}
+      <Section style={badgeSection}>
+        <Text style={badgeCircle}>&#10003;</Text>
       </Section>
 
       <Text style={heading}>You&apos;re All Set!</Text>
@@ -34,25 +43,35 @@ export default function PaymentSavedEmail({
         booking is now fully set up and ready to go.
       </Text>
 
+      {/* ── Booking details ── */}
       <Section style={detailsBox}>
         <Text style={detailsHeading}>Booking details</Text>
         {service && (
-          <Row style={detailRow}>
-            <Column style={detailLabel}>Service</Column>
-            <Column style={detailValue}>{service}</Column>
-          </Row>
+          <>
+            <Row style={detailRow}>
+              <Column style={detailLabel}>Service</Column>
+              <Column style={detailValue}>{service}</Column>
+            </Row>
+            <Hr style={divider} />
+          </>
         )}
         {cardDisplay && (
-          <Row style={detailRow}>
-            <Column style={detailLabel}>Card</Column>
-            <Column style={detailValue}>{cardDisplay}</Column>
-          </Row>
+          <>
+            <Row style={detailRow}>
+              <Column style={detailLabel}>Card</Column>
+              <Column style={detailValue}>{cardDisplay}</Column>
+            </Row>
+            <Hr style={divider} />
+          </>
         )}
         {bookingRef && (
-          <Row style={detailRow}>
-            <Column style={detailLabel}>Reference</Column>
-            <Column style={detailValue}>{bookingRef}</Column>
-          </Row>
+          <>
+            <Row style={detailRow}>
+              <Column style={detailLabel}>Reference</Column>
+              <Column style={detailValue}>{bookingRef}</Column>
+            </Row>
+            <Hr style={divider} />
+          </>
         )}
         <Row style={detailRow}>
           <Column style={detailLabel}>Payment</Column>
@@ -60,96 +79,175 @@ export default function PaymentSavedEmail({
         </Row>
       </Section>
 
-      <Text style={paragraph}>
-        <strong>What happens next?</strong>
-      </Text>
-      <Text style={listItem}>1. Our team will confirm your cleaning schedule</Text>
-      <Text style={listItem}>2. You&apos;ll receive a reminder before each visit</Text>
-      <Text style={listItem}>3. Your card is charged only after the service</Text>
-
-      <Text style={smallText}>
-        Questions? Just reply to this email. We&apos;re happy to help.
-      </Text>
+      {/* ── Next steps ── */}
+      <Section style={stepsBox}>
+        <Text style={stepsHeading}>What happens next</Text>
+        <Row style={stepRow}>
+          <Column style={stepNumCol}>
+            <Text style={stepNum}>1</Text>
+          </Column>
+          <Column>
+            <Text style={stepText}>
+              Our team will confirm your cleaning schedule
+            </Text>
+          </Column>
+        </Row>
+        <Row style={stepRow}>
+          <Column style={stepNumCol}>
+            <Text style={stepNum}>2</Text>
+          </Column>
+          <Column>
+            <Text style={stepText}>
+              You&apos;ll receive a reminder before each visit
+            </Text>
+          </Column>
+        </Row>
+        <Row style={stepRow}>
+          <Column style={stepNumCol}>
+            <Text style={stepNum}>3</Text>
+          </Column>
+          <Column>
+            <Text style={stepText}>
+              Your card is charged only after the service
+            </Text>
+          </Column>
+        </Row>
+      </Section>
     </EmailLayout>
   );
 }
 
-const checkSection = {
-  textAlign: "center" as const,
-  margin: "0 0 16px",
+const fontHeading =
+  '"Fraunces", Georgia, "Times New Roman", serif';
+
+/* ── Badge ── */
+const badgeSection: React.CSSProperties = {
+  textAlign: "center",
+  margin: "0 0 20px",
 };
 
-const checkmark = {
-  display: "inline-block" as const,
-  width: "48px",
-  height: "48px",
-  lineHeight: "48px",
+const badgeCircle: React.CSSProperties = {
+  display: "inline-block",
+  width: "52px",
+  height: "52px",
+  lineHeight: "52px",
   borderRadius: "50%",
-  backgroundColor: "#d1fae5",
-  color: "#059669",
+  backgroundColor: "#EDF5F0",
+  border: "2px solid #B8D4C4",
+  color: "#2D6A4F",
   fontSize: "24px",
-  fontWeight: "700" as const,
-  textAlign: "center" as const,
+  fontWeight: 700,
+  textAlign: "center",
   margin: "0 auto",
 };
 
-const heading = {
-  fontSize: "20px",
-  fontWeight: "600" as const,
-  color: "#111827",
-  textAlign: "center" as const,
-  margin: "0 0 16px",
+/* ── Typography ── */
+const heading: React.CSSProperties = {
+  fontSize: "24px",
+  fontWeight: 600,
+  color: "#1A2F23",
+  textAlign: "center",
+  margin: "0 0 12px",
+  letterSpacing: "-0.02em",
+  fontFamily: fontHeading,
 };
 
-const paragraph = {
+const paragraph: React.CSSProperties = {
   fontSize: "14px",
   lineHeight: "24px",
-  color: "#374151",
+  color: "#3D5347",
+  margin: "0 0 22px",
+};
+
+/* ── Details card ── */
+const detailsBox: React.CSSProperties = {
+  backgroundColor: "#FAF7F2",
+  borderRadius: "10px",
+  padding: "20px 20px 12px",
+  margin: "0 0 24px",
+  border: "1px solid #EDE8DF",
+};
+
+const detailsHeading: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.1em",
+  color: "#7A8E80",
+  margin: "0 0 14px",
+};
+
+const detailRow: React.CSSProperties = {
+  marginBottom: "0",
+};
+
+const detailLabel: React.CSSProperties = {
+  fontSize: "13px",
+  color: "#7A8E80",
+  width: "100px",
+  paddingTop: "8px",
+  paddingBottom: "8px",
+};
+
+const detailValue: React.CSSProperties = {
+  fontSize: "13px",
+  color: "#1A2F23",
+  fontWeight: 600,
+  paddingTop: "8px",
+  paddingBottom: "8px",
+};
+
+const divider: React.CSSProperties = {
+  borderColor: "#E8E2D8",
+  borderWidth: "1px 0 0",
+  borderStyle: "solid",
+  margin: "0",
+};
+
+/* ── Steps ── */
+const stepsBox: React.CSSProperties = {
+  backgroundColor: "#FAF7F2",
+  borderRadius: "10px",
+  padding: "20px",
+  margin: "0",
+  borderLeft: "3px solid #B8963E",
+};
+
+const stepsHeading: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.1em",
+  color: "#B8963E",
   margin: "0 0 16px",
 };
 
-const detailsBox = {
-  backgroundColor: "#f9fafb",
-  borderRadius: "6px",
-  padding: "16px",
-  margin: "16px 0",
+const stepRow: React.CSSProperties = {
+  marginBottom: "10px",
 };
 
-const detailsHeading = {
-  fontSize: "12px",
-  fontWeight: "600" as const,
-  textTransform: "uppercase" as const,
-  letterSpacing: "0.05em",
-  color: "#6b7280",
-  margin: "0 0 12px",
+const stepNumCol: React.CSSProperties = {
+  width: "28px",
+  verticalAlign: "top",
 };
 
-const detailRow = {
-  marginBottom: "8px",
-};
-
-const detailLabel = {
-  fontSize: "13px",
-  color: "#6b7280",
-  width: "100px",
-};
-
-const detailValue = {
-  fontSize: "13px",
-  color: "#111827",
-  fontWeight: "500" as const,
-};
-
-const listItem = {
-  fontSize: "13px",
-  lineHeight: "22px",
-  color: "#6b7280",
+const stepNum: React.CSSProperties = {
+  display: "inline-block",
+  width: "20px",
+  height: "20px",
+  lineHeight: "20px",
+  borderRadius: "50%",
+  backgroundColor: "#B8963E",
+  color: "#ffffff",
+  fontSize: "11px",
+  fontWeight: 700,
+  textAlign: "center",
   margin: "0",
-  paddingLeft: "8px",
 };
 
-const smallText = {
-  fontSize: "12px",
-  color: "#9ca3af",
-  margin: "24px 0 0",
+const stepText: React.CSSProperties = {
+  fontSize: "13px",
+  lineHeight: "20px",
+  color: "#5E7A6B",
+  margin: "0",
 };

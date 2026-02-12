@@ -1,4 +1,11 @@
-import { Text, Button, Section, Row, Column } from "@react-email/components";
+import {
+  Text,
+  Button,
+  Section,
+  Row,
+  Column,
+  Hr,
+} from "@react-email/components";
 import * as React from "react";
 import EmailLayout from "./components/layout";
 
@@ -42,27 +49,40 @@ export default function QuoteReadyEmail({
     <EmailLayout preview={`Your Kathy Clean Quote #${quoteNumber}`}>
       <Text style={heading}>Your Kathy Clean Quote</Text>
       <Text style={paragraph}>
-        Hi {firstName}, thank you for reaching out to Kathy Clean. Your quote is ready.
+        Hi {firstName}, thank you for reaching out to Kathy Clean. Your quote is
+        ready.
       </Text>
 
+      {/* ── Price highlight ── */}
+      <Section style={priceCard}>
+        <Text style={priceLabel}>Quoted total</Text>
+        <Text style={priceAmount}>
+          {formatCurrency(totalCents, currency)}
+        </Text>
+        {serviceLabel && <Text style={priceService}>{serviceLabel}</Text>}
+      </Section>
+
+      {/* ── Details ── */}
       <Section style={detailsBox}>
         <Row style={detailRow}>
           <Column style={detailLabel}>Quote</Column>
           <Column style={detailValue}>#{quoteNumber}</Column>
         </Row>
-        {serviceLabel ? (
-          <Row style={detailRow}>
-            <Column style={detailLabel}>Service</Column>
-            <Column style={detailValue}>{serviceLabel}</Column>
-          </Row>
-        ) : null}
-        <Row style={detailRow}>
-          <Column style={detailLabel}>Total</Column>
-          <Column style={detailValue}>{formatCurrency(totalCents, currency)}</Column>
-        </Row>
+        <Hr style={divider} />
+        {serviceLabel && (
+          <>
+            <Row style={detailRow}>
+              <Column style={detailLabel}>Service</Column>
+              <Column style={detailValue}>{serviceLabel}</Column>
+            </Row>
+            <Hr style={divider} />
+          </>
+        )}
         <Row style={detailRow}>
           <Column style={detailLabel}>Valid until</Column>
-          <Column style={detailValue}>{formatDate(validUntilTimestamp)}</Column>
+          <Column style={detailValue}>
+            {formatDate(validUntilTimestamp)}
+          </Column>
         </Row>
       </Section>
 
@@ -72,85 +92,152 @@ export default function QuoteReadyEmail({
 
       <Section style={ctaSection}>
         <Button href={confirmUrl} style={ctaButton}>
-          Confirm Your Booking
+          Confirm Your Booking &rarr;
         </Button>
       </Section>
 
-      {downloadUrl ? (
-        <Text style={paragraph}>
-          You can also download your quote PDF here:{" "}
+      {downloadUrl && (
+        <Text style={downloadText}>
+          You can also{" "}
           <a href={downloadUrl} style={linkStyle}>
-            Download Quote PDF
+            download your quote as PDF
           </a>
+          .
         </Text>
-      ) : null}
+      )}
 
       <Text style={smallText}>
-        This quote is valid for 30 days. If you have any questions, reply to this email.
+        {(() => {
+          const validDays = Math.max(0, Math.ceil((validUntilTimestamp - Date.now()) / (1000 * 60 * 60 * 24)));
+          return `This quote is valid for ${validDays} day${validDays !== 1 ? "s" : ""}.`;
+        })()}{" "}
+        If you have any questions, reply to this email.
       </Text>
     </EmailLayout>
   );
 }
 
-const heading = {
-  fontSize: "20px",
-  fontWeight: "600" as const,
-  color: "#111827",
-  margin: "0 0 16px",
+const fontHeading =
+  '"Fraunces", Georgia, "Times New Roman", serif';
+
+const heading: React.CSSProperties = {
+  fontSize: "24px",
+  fontWeight: 600,
+  color: "#1A2F23",
+  margin: "0 0 12px",
+  letterSpacing: "-0.02em",
+  fontFamily: fontHeading,
 };
 
-const paragraph = {
+const paragraph: React.CSSProperties = {
   fontSize: "14px",
   lineHeight: "24px",
-  color: "#374151",
-  margin: "0 0 16px",
+  color: "#3D5347",
+  margin: "0 0 22px",
 };
 
-const detailsBox = {
-  backgroundColor: "#f9fafb",
-  borderRadius: "6px",
-  padding: "16px",
-  margin: "16px 0",
+/* ── Price card ── */
+const priceCard: React.CSSProperties = {
+  backgroundColor: "#1A3C34",
+  borderRadius: "10px",
+  padding: "24px 20px",
+  margin: "0 0 24px",
+  textAlign: "center",
 };
 
-const detailRow = {
-  marginBottom: "8px",
+const priceLabel: React.CSSProperties = {
+  fontSize: "10px",
+  fontWeight: 700,
+  textTransform: "uppercase",
+  letterSpacing: "0.12em",
+  color: "#95B4A0",
+  margin: "0 0 6px",
 };
 
-const detailLabel = {
+const priceAmount: React.CSSProperties = {
+  fontSize: "32px",
+  fontWeight: 700,
+  color: "#FFFFFF",
+  margin: "0",
+  letterSpacing: "-0.02em",
+  fontFamily: fontHeading,
+};
+
+const priceService: React.CSSProperties = {
   fontSize: "13px",
-  color: "#6b7280",
+  color: "#95B4A0",
+  margin: "6px 0 0",
+};
+
+/* ── Details ── */
+const detailsBox: React.CSSProperties = {
+  backgroundColor: "#FAF7F2",
+  borderRadius: "10px",
+  padding: "16px 20px 8px",
+  margin: "0 0 24px",
+  border: "1px solid #EDE8DF",
+};
+
+const detailRow: React.CSSProperties = {
+  marginBottom: "0",
+};
+
+const detailLabel: React.CSSProperties = {
+  fontSize: "13px",
+  color: "#7A8E80",
   width: "110px",
+  paddingTop: "8px",
+  paddingBottom: "8px",
 };
 
-const detailValue = {
+const detailValue: React.CSSProperties = {
   fontSize: "13px",
-  color: "#111827",
-  fontWeight: "500" as const,
+  color: "#1A2F23",
+  fontWeight: 600,
+  paddingTop: "8px",
+  paddingBottom: "8px",
 };
 
-const ctaSection = {
-  textAlign: "center" as const,
+const divider: React.CSSProperties = {
+  borderColor: "#E8E2D8",
+  borderWidth: "1px 0 0",
+  borderStyle: "solid",
+  margin: "0",
+};
+
+/* ── CTA ── */
+const ctaSection: React.CSSProperties = {
+  textAlign: "center",
   margin: "24px 0",
 };
 
-const ctaButton = {
-  backgroundColor: "#111827",
+const ctaButton: React.CSSProperties = {
+  backgroundColor: "#1A3C34",
   color: "#ffffff",
   fontSize: "14px",
-  fontWeight: "600" as const,
-  padding: "12px 32px",
-  borderRadius: "6px",
+  fontWeight: 600,
+  padding: "14px 44px",
+  borderRadius: "8px",
   textDecoration: "none",
+  letterSpacing: "0.01em",
 };
 
-const smallText = {
+const downloadText: React.CSSProperties = {
+  fontSize: "13px",
+  color: "#5E7A6B",
+  textAlign: "center",
+  margin: "0 0 16px",
+};
+
+const linkStyle: React.CSSProperties = {
+  color: "#1A3C34",
+  fontWeight: 600,
+  textDecoration: "underline",
+  textUnderlineOffset: "2px",
+};
+
+const smallText: React.CSSProperties = {
   fontSize: "12px",
-  color: "#9ca3af",
-  margin: "16px 0 0",
+  color: "#6B7F72",
+  margin: "8px 0 0",
 };
-
-const linkStyle = {
-  color: "#111827",
-};
-
