@@ -25,7 +25,7 @@ const FALLBACK_VIEW: Pick<ViewState, "latitude" | "longitude" | "zoom"> = {
   longitude: -98.35,
   zoom: 3.3,
 };
-const MAP_PANEL_HEIGHT_CLASS = "h-[640px]";
+const MAP_PANEL_HEIGHT_CLASS = "h-[clamp(24rem,68vh,40rem)]";
 
 const ROUTE_HALO_LAYER: LayerProps = {
   id: "dispatch-route-halo",
