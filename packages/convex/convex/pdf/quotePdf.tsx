@@ -24,6 +24,8 @@ type QuotePdfData = {
     city: string;
     state: string;
     postalCode: string;
+    brandColor?: string;
+    tagline?: string;
   };
   recipient: {
     name?: string;
@@ -181,6 +183,16 @@ function QuotePdfDocument({ data }: { data: QuotePdfData }) {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
+        {/* ── Company header ── */}
+        <View style={[styles.section, { marginBottom: 16 }]}>
+          <Text style={{ fontSize: 14, fontWeight: 700, color: data.profile.brandColor || "#111827" }}>
+            {data.profile.displayName}
+          </Text>
+          {data.profile.tagline ? (
+            <Text style={{ fontSize: 8, color: "#6B7280", marginTop: 2 }}>{data.profile.tagline}</Text>
+          ) : null}
+        </View>
+
         <View style={[styles.row, styles.section]}>
           <View style={{ width: "58%" }}>
             <Text style={styles.infoLabel}>Recipient</Text>
@@ -204,7 +216,7 @@ function QuotePdfDocument({ data }: { data: QuotePdfData }) {
           </View>
         </View>
 
-        <View style={styles.tableHeader}>
+        <View style={[styles.tableHeader, data.profile.brandColor ? { backgroundColor: data.profile.brandColor } : {}]}>
           <Text style={styles.cService}>Product/Service</Text>
           <Text style={styles.cDescription}>Description</Text>
           <Text style={styles.cQty}>Qty.</Text>
