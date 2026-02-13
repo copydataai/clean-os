@@ -110,9 +110,6 @@ async function sendRevisionInternal(
       confirmUrl,
       downloadUrl: downloadUrl ?? undefined,
       serviceLabel: revision.serviceLabel,
-      attachmentFilename: filename,
-      attachmentContentBase64: pdfBuffer.toString("base64"),
-      attachmentContentType: "application/pdf",
     });
 
     await ctx.runMutation(internal.quotes.markRevisionSendResult, {

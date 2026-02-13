@@ -40,12 +40,6 @@ function buildTemplate(template: SupportedTemplate, templateProps: any) {
   }
 }
 
-function readProvider(): "legacy_resend" | "convex_resend" {
-  return process.env.EMAIL_SENDER_PROVIDER === "convex_resend"
-    ? "convex_resend"
-    : "legacy_resend";
-}
-
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -56,7 +50,7 @@ type SendResult = {
   sendId: string;
   status?: string;
   success?: boolean;
-  provider?: "legacy_resend" | "convex_resend";
+  provider?: "convex_resend";
   providerEmailId?: string;
 };
 
@@ -75,19 +69,10 @@ export const sendTransactional = internalAction({
     templateProps: v.any(),
     idempotencyKey: v.string(),
     from: v.optional(v.string()),
-    attachments: v.optional(
-      v.array(
-        v.object({
-          filename: v.string(),
-          contentBase64: v.string(),
-          contentType: v.optional(v.string()),
-        })
-      )
-    ),
   },
   handler: async (ctx, args): Promise<SendResult> => {
     const to = normalizeEmail(args.to);
-    const provider = args.template === "quote-ready" ? "legacy_resend" : readProvider();
+    const provider = "convex_resend" as const;
 
     const existing = await ctx.runQuery(internal.emailSends.getByIdempotencyKey, {
       idempotencyKey: args.idempotencyKey,
@@ -137,26 +122,12 @@ export const sendTransactional = internalAction({
     const html = await render(buildTemplate(args.template, args.templateProps));
 
     try {
-      let providerEmailId: string | undefined;
-
-      if (provider === "convex_resend") {
-        const result = await resend.sendEmail(ctx, {
-          from: fromAddress,
-          to,
-          subject: args.subject,
-          html,
-        });
-        providerEmailId = result;
-      } else {
-        const result = await ctx.runAction(internal.emailActions.sendEmail, {
-          to,
-          subject: args.subject,
-          html,
-          from: fromAddress,
-          attachments: args.attachments,
-        });
-        providerEmailId = result?.emailId;
-      }
+      const providerEmailId = await resend.sendEmail(ctx, {
+        from: fromAddress,
+        to,
+        subject: args.subject,
+        html,
+      });
 
       await ctx.runMutation(internal.emailSends.markSendStatus, {
         sendId,

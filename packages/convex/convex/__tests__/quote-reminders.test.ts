@@ -173,7 +173,7 @@ async function insertEmailSend(
       to: "test@example.com",
       subject: "Reminder",
       template: "quote-reminder",
-      provider: "legacy_resend",
+      provider: "convex_resend",
       status,
       createdAt: Date.now(),
       updatedAt: Date.now(),

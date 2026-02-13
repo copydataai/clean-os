@@ -1,15 +1,7 @@
 "use node";
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { Resend } from "resend";
-
-function getResendClient(): Resend {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("Missing RESEND_API_KEY environment variable");
-  }
-  return new Resend(apiKey);
-}
+import { resend } from "./resend";
 
 export const sendEmail = internalAction({
   args: {
@@ -27,28 +19,16 @@ export const sendEmail = internalAction({
       )
     ),
   },
-  handler: async (_ctx, { to, subject, html, from, attachments }) => {
-    const resend = getResendClient();
+  handler: async (ctx, { to, subject, html, from, attachments: _attachments }) => {
     const fromAddress = from ?? process.env.RESEND_FROM_ADDRESS ?? "Clean OS <noreply@cleanos.com>";
 
-    const { data, error } = await resend.emails.send({
+    const providerEmailId = await resend.sendEmail(ctx, {
       from: fromAddress,
       to,
       subject,
       html,
-      attachments: attachments?.map((attachment) => ({
-        filename: attachment.filename,
-        contentType: attachment.contentType,
-        content: Buffer.from(attachment.contentBase64, "base64"),
-      })),
     });
 
-    if (error) {
-      console.error("[Email] Failed to send", { to, subject, error });
-      throw new Error(`Failed to send email: ${error.message}`);
-    }
-
-    console.log("[Email] Sent successfully", { to, subject, emailId: data?.id });
-    return { emailId: data?.id };
+    return { emailId: providerEmailId };
   },
 });

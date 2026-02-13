@@ -131,9 +131,6 @@ export const sendQuoteReadyEmail = internalAction({
     confirmUrl: v.string(),
     downloadUrl: v.optional(v.string()),
     serviceLabel: v.optional(v.string()),
-    attachmentFilename: v.string(),
-    attachmentContentBase64: v.string(),
-    attachmentContentType: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<any> => {
     return await ctx.runAction(internal.emailSender.sendTransactional, {
@@ -151,13 +148,6 @@ export const sendQuoteReadyEmail = internalAction({
         downloadUrl: args.downloadUrl,
         serviceLabel: args.serviceLabel,
       },
-      attachments: [
-        {
-          filename: args.attachmentFilename,
-          contentBase64: args.attachmentContentBase64,
-          contentType: args.attachmentContentType,
-        },
-      ],
     });
   },
 });
