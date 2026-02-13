@@ -62,7 +62,7 @@ const DEFAULT_TERMS: TermsSnapshot = {
   cancellations:
     "Cancellations or rescheduling requests must be made at least 48 hours before the scheduled service. Cancellations made with less than 48 hours' notice will be charged 50% of the service value.",
   nonSolicitation:
-    "You agree not to directly or indirectly solicit any Kathy Clean employee to provide cleaning services outside of their employment with Kathy Clean during or after their engagement with us. If solicitation occurs, this agreement will terminate immediately, and you agree to pay $10,000 as liquidated damages. This amount represents a reasonable estimate of the harm caused and is not a penalty.",
+    "You agree not to directly or indirectly solicit any JoluAI employee to provide cleaning services outside of their employment with JoluAI during or after their engagement with us. If solicitation occurs, this agreement will terminate immediately, and you agree to pay $10,000 as liquidated damages. This amount represents a reasonable estimate of the harm caused and is not a penalty.",
   acceptance: "By accepting this quote, you agree to these terms of service.",
 };
 

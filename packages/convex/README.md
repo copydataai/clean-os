@@ -1,6 +1,6 @@
 # @clean-os/convex
 
-Shared Convex backend package for Clean OS.
+Shared Convex backend package for JoluAI.
 
 ## Client usage
 

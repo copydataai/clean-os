@@ -217,10 +217,10 @@ export default function QuoteProfileSettingsForm() {
           {/* Company names */}
           <div className="grid gap-4 sm:grid-cols-2">
             <FieldWrapper id="displayName" label="Display Name" hint="Shown on quotes">
-              <Input id="displayName" value={form.displayName} onChange={set("displayName")} placeholder="Kathy's Clean" />
+              <Input id="displayName" value={form.displayName} onChange={set("displayName")} placeholder="JoluAI" />
             </FieldWrapper>
             <FieldWrapper id="legalName" label="Legal Name" hint="For invoices & contracts">
-              <Input id="legalName" value={form.legalName} onChange={set("legalName")} placeholder="Kathy's Clean LLC" />
+              <Input id="legalName" value={form.legalName} onChange={set("legalName")} placeholder="JoluAI LLC" />
             </FieldWrapper>
           </div>
 

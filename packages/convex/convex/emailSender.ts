@@ -122,7 +122,7 @@ export const sendTransactional = internalAction({
     const fromAddress =
       args.from ??
       process.env.RESEND_FROM_ADDRESS ??
-      "Clean OS <noreply@cleanos.com>";
+      "JoluAI <jose@joluai.com>";
 
     const html = await render(buildTemplate(args.template, args.templateProps));
 

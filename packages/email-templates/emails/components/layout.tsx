@@ -28,7 +28,7 @@ export default function EmailLayout({ preview, children }: EmailLayoutProps) {
         <Container style={container}>
           {/* ── Brand mark ── */}
           <Section style={brandSection}>
-            <Text style={brandMark}>KATHYCLEAN&thinsp;OS</Text>
+            <Text style={brandMark}>JOLU&thinsp;AI</Text>
             <Hr style={brandRule} />
           </Section>
 
@@ -37,10 +37,10 @@ export default function EmailLayout({ preview, children }: EmailLayoutProps) {
 
           {/* ── Footer ── */}
           <Text style={footer}>
-            KathyClean &middot; Professional cleaning, simplified
+            JoluAI &middot; AI-powered operations
           </Text>
           <Text style={footerSub}>
-            Questions? Reply directly to this email.
+            Questions? Reach us at jose@joluai.com
           </Text>
         </Container>
       </Body>

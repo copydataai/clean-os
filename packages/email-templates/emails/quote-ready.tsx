@@ -46,10 +46,10 @@ export default function QuoteReadyEmail({
   serviceLabel,
 }: QuoteReadyEmailProps) {
   return (
-    <EmailLayout preview={`Your Kathy Clean Quote #${quoteNumber}`}>
-      <Text style={heading}>Your Kathy Clean Quote</Text>
+    <EmailLayout preview={`Your JoluAI Quote #${quoteNumber}`}>
+      <Text style={heading}>Your JoluAI Quote</Text>
       <Text style={paragraph}>
-        Hi {firstName}, thank you for reaching out to Kathy Clean. Your quote is
+        Hi {firstName}, thank you for reaching out to JoluAI. Your quote is
         ready.
       </Text>
 

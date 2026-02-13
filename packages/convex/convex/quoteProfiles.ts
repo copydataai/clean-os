@@ -2,15 +2,15 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { requireActiveOrganization } from "./lib/orgContext";
 
-const DEFAULT_PROFILE_KEY = "kathy_clean_default";
+const DEFAULT_PROFILE_KEY = "joluai_default";
 
 const DEFAULT_PROFILE = {
   key: DEFAULT_PROFILE_KEY,
-  displayName: "Kathy Clean",
-  legalName: "Kathy Clean",
+  displayName: "JoluAI",
+  legalName: "JoluAI",
   phone: "303-681-2559",
-  email: "commercial@kathyclean.com",
-  website: "https://kathyclean.com/",
+  email: "jose@joluai.com",
+  website: "https://joluai.com/",
   addressLine1: "7500 East Arapahoe Road",
   addressLine2: "Suite 200",
   city: "Centennial",

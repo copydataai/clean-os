@@ -135,7 +135,7 @@ export const sendQuoteReadyEmail = internalAction({
   handler: async (ctx, args): Promise<any> => {
     return await ctx.runAction(internal.emailSender.sendTransactional, {
       to: args.to,
-      subject: "Your Kathy Clean Quote",
+      subject: "Your JoluAI Quote",
       template: "quote-ready",
       idempotencyKey: args.idempotencyKey,
       templateProps: {
@@ -174,12 +174,12 @@ export const sendQuoteReminderEmail = internalAction({
   handler: async (ctx, args): Promise<any> => {
     const subject =
       args.reminderStage === "r3_pre_expiry"
-        ? "Final Reminder: Your Kathy Clean Quote Expires Soon"
+        ? "Final Reminder: Your JoluAI Quote Expires Soon"
         : args.reminderStage === "r2_72h"
-          ? "Reminder: Please Confirm Your Kathy Clean Quote"
+          ? "Reminder: Please Confirm Your JoluAI Quote"
           : args.reminderStage === "manual"
-            ? "Reminder: Please Confirm Your Kathy Clean Quote"
-          : "Reminder: Your Kathy Clean Quote Is Ready";
+            ? "Reminder: Please Confirm Your JoluAI Quote"
+          : "Reminder: Your JoluAI Quote Is Ready";
 
     return await ctx.runAction(internal.emailSender.sendTransactional, {
       to: args.to,

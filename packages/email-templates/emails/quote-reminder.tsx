@@ -70,7 +70,7 @@ export default function QuoteReminderEmail({
 
   return (
     <EmailLayout
-      preview={`Reminder for Kathy Clean Quote #${quoteNumber}`}
+      preview={`Reminder for JoluAI Quote #${quoteNumber}`}
     >
       {/* ── Urgency pill (pre-expiry only) ── */}
       {urgent && (
@@ -80,7 +80,7 @@ export default function QuoteReminderEmail({
       )}
 
       <Text style={heading}>
-        {urgent ? "Your Quote Expires Soon" : "Reminder: Your Kathy Clean Quote"}
+        {urgent ? "Your Quote Expires Soon" : "Reminder: Your JoluAI Quote"}
       </Text>
       <Text style={paragraph}>
         Hi {firstName}, {reminderCopy(reminderStage)}

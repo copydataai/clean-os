@@ -20,7 +20,7 @@ export const sendEmail = internalAction({
     ),
   },
   handler: async (ctx, { to, subject, html, from, attachments: _attachments }) => {
-    const fromAddress = from ?? process.env.RESEND_FROM_ADDRESS ?? "Clean OS <noreply@cleanos.com>";
+    const fromAddress = from ?? process.env.RESEND_FROM_ADDRESS ?? "JoluAI <jose@joluai.com>";
 
     const providerEmailId = await resend.sendEmail(ctx, {
       from: fromAddress,

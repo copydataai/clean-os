@@ -28,7 +28,7 @@ function buildEvent(args: {
   const baseData = {
     created_at: args.createdAt,
     email_id: args.resendEmailId,
-    from: args.from ?? "Clean OS <noreply@cleanos.com>",
+    from: args.from ?? "JoluAI <jose@joluai.com>",
     to: args.to ?? "customer@example.com",
     subject: args.subject ?? "Status update",
   };
