@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAction, useMutation, useQuery } from "convex/react";
 import PageHeader from "@/components/dashboard/PageHeader";
@@ -37,8 +37,44 @@ import OnboardingKpiStrip from "@/components/onboarding/OnboardingKpiStrip";
 import OnboardingAlertRail from "@/components/onboarding/OnboardingAlertRail";
 import OnboardingQueueSection, { QueueSectionEmpty } from "@/components/onboarding/OnboardingQueueSection";
 import OnboardingRowsSkeleton from "@/components/onboarding/OnboardingRowsSkeleton";
-import PreBookingCard from "@/components/onboarding/PreBookingCard";
+import PreBookingCard, { type QuickActionState } from "@/components/onboarding/PreBookingCard";
 import BookingCard from "@/components/onboarding/BookingCard";
+import {
+  getOnboardingAttentionLevel,
+  matchesAttentionFilter,
+  rankAttention,
+  type OnboardingAttentionFilter,
+} from "@/lib/commsAttention";
+
+const ATTENTION_PREVIEW_LIMIT = 8;
+
+type IntakeRowWithAttention = LifecycleRow & {
+  attentionLevel: ReturnType<typeof getOnboardingAttentionLevel>;
+  stableKey: string;
+};
+
+function intakeRowKey(row: LifecycleRow): string {
+  if (row.bookingRequestId) {
+    return row.bookingRequestId;
+  }
+
+  if (row.quoteRequestId) {
+    return row.quoteRequestId;
+  }
+
+  return `${row.createdAt}:${row.updatedAt}:${row.email ?? "no-email"}`;
+}
+
+const onboardingAttentionFilters: Array<{
+  value: OnboardingAttentionFilter;
+  label: string;
+}> = [
+  { value: "all", label: "All" },
+  { value: "needs_attention", label: "Needs attention" },
+  { value: "email_failed", label: "Email failed" },
+  { value: "delivery_delayed", label: "Delayed" },
+  { value: "undelivered_60m", label: "Undelivered 60m" },
+];
 
 export default function OnboardingPage() {
   const searchParams = useSearchParams();
@@ -49,6 +85,7 @@ export default function OnboardingPage() {
   const [rowType, setRowType] = useState<RowTypeFilter>("all");
   const [operationalStatus, setOperationalStatus] = useState<OperationalStatusFilter>("all");
   const [funnelStage, setFunnelStage] = useState<FunnelStageFilter>("all");
+  const [attentionFilter, setAttentionFilter] = useState<OnboardingAttentionFilter>("all");
   const [search, setSearch] = useState("");
   const [serviceDate, setServiceDate] = useState("");
 
@@ -57,6 +94,8 @@ export default function OnboardingPage() {
 
   const markCompleted = useMutation(onboardingApi.markBookingCompleted);
   const chargeJob = useAction(onboardingApi.chargeBooking);
+  const sendCardRequestEmail = useAction(onboardingApi.sendCardRequestEmail);
+  const sendConfirmationEmail = useAction(onboardingApi.sendConfirmationEmail);
   const cancelBooking = useMutation(onboardingApi.cancelBooking);
   const rescheduleBooking = useMutation(onboardingApi.rescheduleBooking);
   const overrideBookingStatus = useMutation(onboardingApi.overrideBookingStatus);
@@ -65,6 +104,9 @@ export default function OnboardingPage() {
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
     null
   );
+  const [commsBusyByRequestId, setCommsBusyByRequestId] = useState<
+    Record<string, { card: QuickActionState; confirm: QuickActionState }>
+  >({});
 
   const [detailRow, setDetailRow] = useState<LifecycleRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -90,6 +132,42 @@ export default function OnboardingPage() {
   const intakeRows = rows.filter((row) => row.rowType === "pre_booking");
   const activeJobRows = rows.filter((row) => row.rowType === "booking" && Boolean(row.bookingId));
 
+  const nowMs = Date.now();
+  const intakeRowsWithAttention = useMemo<IntakeRowWithAttention[]>(() => {
+    return intakeRows.map((row) => ({
+      ...row,
+      attentionLevel: getOnboardingAttentionLevel(row, nowMs),
+      stableKey: intakeRowKey(row),
+    }));
+  }, [intakeRows, nowMs]);
+
+  const filteredIntakeRows = useMemo(() => {
+    return intakeRowsWithAttention.filter((row) =>
+      matchesAttentionFilter(row, attentionFilter, nowMs)
+    );
+  }, [attentionFilter, intakeRowsWithAttention, nowMs]);
+
+  const attentionIntakeRows = useMemo(() => {
+    return [...filteredIntakeRows]
+      .filter((row) => row.attentionLevel !== "none")
+      .sort((a, b) => {
+        const rankDelta = rankAttention(b.attentionLevel) - rankAttention(a.attentionLevel);
+        if (rankDelta !== 0) {
+          return rankDelta;
+        }
+        return b.updatedAt - a.updatedAt;
+      });
+  }, [filteredIntakeRows]);
+
+  const normalIntakeRows = useMemo(() => {
+    if (attentionFilter === "all") {
+      return intakeRowsWithAttention.filter((row) => row.attentionLevel === "none");
+    }
+    return filteredIntakeRows.filter((row) => row.attentionLevel === "none");
+  }, [attentionFilter, filteredIntakeRows, intakeRowsWithAttention]);
+
+  const attentionPreviewRows = attentionIntakeRows.slice(0, ATTENTION_PREVIEW_LIMIT);
+
   const deepLinkedBookingId =
     (searchParams.get("bookingId") as import("@clean-os/convex/data-model").Id<"bookings">) ?? null;
   const [deepLinkHandled, setDeepLinkHandled] = useState(false);
@@ -100,6 +178,7 @@ export default function OnboardingPage() {
     rowType !== "all" ||
     operationalStatus !== "all" ||
     funnelStage !== "all" ||
+    attentionFilter !== "all" ||
     search.trim().length > 0 ||
     serviceDate.length > 0 ||
     Boolean(cursor) ||
@@ -108,6 +187,7 @@ export default function OnboardingPage() {
     rowType !== "all",
     operationalStatus !== "all",
     funnelStage !== "all",
+    attentionFilter !== "all",
     search.trim().length > 0,
     serviceDate.length > 0,
     Boolean(cursor) || cursorHistory.length > 0,
@@ -176,6 +256,7 @@ export default function OnboardingPage() {
     setRowType("all");
     setOperationalStatus("all");
     setFunnelStage("all");
+    setAttentionFilter("all");
     setSearch("");
     setServiceDate("");
     setCursor(undefined);
@@ -191,6 +272,81 @@ export default function OnboardingPage() {
 
   function clearAllFilters() {
     resetFilters(false);
+  }
+
+  function readCommsState(requestId: string | null | undefined) {
+    if (!requestId) {
+      return { card: "idle", confirm: "idle" } as const;
+    }
+
+    return commsBusyByRequestId[requestId] ?? { card: "idle", confirm: "idle" };
+  }
+
+  function setCommsState(
+    requestId: string,
+    channel: "card" | "confirm",
+    state: QuickActionState
+  ) {
+    setCommsBusyByRequestId((previous) => {
+      const existing = previous[requestId] ?? { card: "idle", confirm: "idle" };
+      return {
+        ...previous,
+        [requestId]: {
+          ...existing,
+          [channel]: state,
+        },
+      };
+    });
+  }
+
+  function resetCommsStateLater(
+    requestId: string,
+    channel: "card" | "confirm",
+    delayMs = 2200
+  ) {
+    window.setTimeout(() => {
+      setCommsState(requestId, channel, "idle");
+    }, delayMs);
+  }
+
+  const confirmationFormAvailable = Boolean(tallyLinks?.confirmationFormUrl);
+
+  async function onSendCardEmail(requestId: NonNullable<LifecycleRow["bookingRequestId"]>) {
+    setCommsState(requestId, "card", "sending");
+    try {
+      await sendCardRequestEmail({ requestId });
+      setCommsState(requestId, "card", "sent");
+      setFeedback({ type: "success", message: "Card email sent." });
+      resetCommsStateLater(requestId, "card");
+    } catch (error) {
+      setCommsState(requestId, "card", "error");
+      setFeedback({ type: "error", message: getErrorMessage(error) });
+      resetCommsStateLater(requestId, "card", 2600);
+    }
+  }
+
+  async function onSendConfirmEmail(requestId: NonNullable<LifecycleRow["bookingRequestId"]>) {
+    if (!confirmationFormAvailable) {
+      setCommsState(requestId, "confirm", "error");
+      setFeedback({
+        type: "error",
+        message: "Confirmation form URL is not configured in Integrations.",
+      });
+      resetCommsStateLater(requestId, "confirm", 2600);
+      return;
+    }
+
+    setCommsState(requestId, "confirm", "sending");
+    try {
+      await sendConfirmationEmail({ requestId });
+      setCommsState(requestId, "confirm", "sent");
+      setFeedback({ type: "success", message: "Confirmation email sent." });
+      resetCommsStateLater(requestId, "confirm");
+    } catch (error) {
+      setCommsState(requestId, "confirm", "error");
+      setFeedback({ type: "error", message: getErrorMessage(error) });
+      resetCommsStateLater(requestId, "confirm", 2600);
+    }
   }
 
   const alerts: OnboardingAlert[] = [];
@@ -325,6 +481,24 @@ export default function OnboardingPage() {
         <Separator />
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+          <p className="text-xs text-muted-foreground">Quick filters</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {onboardingAttentionFilters.map((filter) => (
+              <Button
+                key={filter.value}
+                size="xs"
+                variant={attentionFilter === filter.value ? "secondary" : "outline"}
+                onClick={() => setAttentionFilter(filter.value)}
+              >
+                {filter.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs text-muted-foreground">
               <span className="font-mono font-medium text-foreground">{rows.length}</span> rows on this page
@@ -390,20 +564,75 @@ export default function OnboardingPage() {
         />
       ) : (
         <div className="space-y-5 animate-in fade-in-0 slide-in-from-bottom-1 duration-200">
-          <OnboardingQueueSection title="Intake" count={intakeRows.length} kind="intake">
-            {intakeRows.length === 0 ? (
-              <QueueSectionEmpty copy="No intake rows in this onboarding view." />
+          <OnboardingQueueSection
+            title="Needs Attention"
+            count={attentionIntakeRows.length}
+            kind="intake"
+          >
+            {attentionIntakeRows.length === 0 ? (
+              <QueueSectionEmpty copy="No communication issues need attention on this page." />
             ) : (
               <div className="space-y-2">
-                {intakeRows.map((row, index) => (
-                  <div
-                    key={`pre:${row.bookingRequestId ?? row.quoteRequestId}`}
-                    className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
-                    style={{ animationDelay: `${Math.min(index * 20, 120)}ms` }}
-                  >
-                    <PreBookingCard row={row} />
-                  </div>
-                ))}
+                {attentionIntakeRows.length > ATTENTION_PREVIEW_LIMIT ? (
+                  <p className="text-xs text-muted-foreground">
+                    Showing top {ATTENTION_PREVIEW_LIMIT} of {attentionIntakeRows.length} attention rows.
+                  </p>
+                ) : null}
+                {attentionPreviewRows.map((row, index) => {
+                  const commsState = readCommsState(row.bookingRequestId);
+                  return (
+                    <div
+                      key={`pre:attention:${row.stableKey}`}
+                      className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+                      style={{ animationDelay: `${Math.min(index * 20, 120)}ms` }}
+                    >
+                      <PreBookingCard
+                        row={row}
+                        attentionLevel={row.attentionLevel}
+                        cardActionState={commsState.card}
+                        confirmActionState={commsState.confirm}
+                        confirmationEnabled={confirmationFormAvailable}
+                        onSendCardEmail={onSendCardEmail}
+                        onSendConfirmEmail={onSendConfirmEmail}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </OnboardingQueueSection>
+
+          <OnboardingQueueSection title="Intake" count={normalIntakeRows.length} kind="intake">
+            {normalIntakeRows.length === 0 ? (
+              <QueueSectionEmpty
+                copy={
+                  attentionFilter === "all"
+                    ? "No normal intake rows in this onboarding view."
+                    : "No additional intake rows match this quick filter."
+                }
+              />
+            ) : (
+              <div className="space-y-2">
+                {normalIntakeRows.map((row, index) => {
+                  const commsState = readCommsState(row.bookingRequestId);
+                  return (
+                    <div
+                      key={`pre:normal:${row.stableKey}`}
+                      className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200"
+                      style={{ animationDelay: `${Math.min(index * 20, 120)}ms` }}
+                    >
+                      <PreBookingCard
+                        row={row}
+                        attentionLevel={row.attentionLevel}
+                        cardActionState={commsState.card}
+                        confirmActionState={commsState.confirm}
+                        confirmationEnabled={confirmationFormAvailable}
+                        onSendCardEmail={onSendCardEmail}
+                        onSendConfirmEmail={onSendConfirmEmail}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </OnboardingQueueSection>
