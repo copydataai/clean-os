@@ -109,11 +109,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
             className="flex items-center gap-3 rounded-xl px-2 py-1.5 transition-colors hover:bg-sidebar-accent/70"
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sidebar-primary text-sm font-semibold text-sidebar-primary-foreground">
-              KC
+              J
             </div>
             <div className="flex min-w-0 flex-col">
               <span className="truncate text-sm font-semibold text-sidebar-foreground">
-                KathyClean OS
+                JoluAI
               </span>
             </div>
           </Link>

@@ -76,7 +76,7 @@ function BookCancelPageContent() {
             Return Home
           </Link>
           <a
-            href="mailto:support@cleanos.com"
+            href="mailto:support@joluai.com"
             className="text-sm text-muted-foreground hover:text-foreground"
           >
             Need help? Contact support

@@ -17,8 +17,8 @@ const brandMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Clean OS',
-  description: 'Operations platform for modern cleaning teams.',
+  title: 'JoluAI',
+  description: 'AI-powered operations platform for modern cleaning teams.',
 }
 
 export default function RootLayout({
