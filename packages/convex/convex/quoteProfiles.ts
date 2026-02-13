@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireActiveOrganization } from "./lib/orgContext";
 
 const DEFAULT_PROFILE_KEY = "joluai_default";
@@ -77,6 +77,77 @@ export const getActiveProfile = query({
   },
 });
 
+export const getProfileByOrganizationIdInternal = internalQuery({
+  args: {
+    organizationId: v.id("organizations"),
+  },
+  handler: async (ctx, args) => {
+    const byKey = await ctx.db
+      .query("quoteProfiles")
+      .withIndex("by_org_key", (q) =>
+        q.eq("organizationId", args.organizationId).eq("key", DEFAULT_PROFILE_KEY)
+      )
+      .first();
+
+    if (byKey) return byKey;
+
+    return await ctx.db
+      .query("quoteProfiles")
+      .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
+      .first();
+  },
+});
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireActiveOrganization(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const saveBrandingImage = mutation({
+  args: {
+    storageId: v.id("_storage"),
+    field: v.union(v.literal("logo"), v.literal("icon")),
+  },
+  handler: async (ctx, args) => {
+    const { organization } = await requireActiveOrganization(ctx);
+
+    let profile = await ctx.db
+      .query("quoteProfiles")
+      .withIndex("by_org_key", (q) =>
+        q.eq("organizationId", organization._id).eq("key", DEFAULT_PROFILE_KEY)
+      )
+      .first();
+
+    if (!profile) {
+      profile = await ctx.db
+        .query("quoteProfiles")
+        .withIndex("by_organization", (q) => q.eq("organizationId", organization._id))
+        .first();
+    }
+
+    if (!profile) {
+      throw new Error("Profile not found. Save the profile first.");
+    }
+
+    const url = await ctx.storage.getUrl(args.storageId);
+
+    const patch: Record<string, any> = { updatedAt: Date.now() };
+    if (args.field === "logo") {
+      patch.logoStorageId = args.storageId;
+      patch.logoUrl = url;
+    } else {
+      patch.iconStorageId = args.storageId;
+      patch.iconUrl = url;
+    }
+
+    await ctx.db.patch(profile._id, patch);
+    return { storageId: args.storageId, url };
+  },
+});
+
 export const updateProfile = mutation({
   args: {
     key: v.optional(v.string()),
@@ -95,6 +166,13 @@ export const updateProfile = mutation({
     defaultTaxName: v.optional(v.string()),
     defaultTaxRateBps: v.optional(v.number()),
     quoteValidityDays: v.optional(v.number()),
+    logoStorageId: v.optional(v.id("_storage")),
+    logoUrl: v.optional(v.string()),
+    iconStorageId: v.optional(v.id("_storage")),
+    iconUrl: v.optional(v.string()),
+    brandColor: v.optional(v.string()),
+    accentColor: v.optional(v.string()),
+    tagline: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { organization } = await requireActiveOrganization(ctx);

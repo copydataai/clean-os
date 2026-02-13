@@ -39,6 +39,7 @@ import type * as httpHandlers_tallyActions from "../httpHandlers/tallyActions.js
 import type * as integrations from "../integrations.js";
 import type * as integrationsNode from "../integrationsNode.js";
 import type * as lib_bookingFlowDebug from "../lib/bookingFlowDebug.js";
+import type * as lib_brandUtils from "../lib/brandUtils.js";
 import type * as lib_orgContext from "../lib/orgContext.js";
 import type * as lib_orgContextShared from "../lib/orgContextShared.js";
 import type * as lib_publicBookingContext from "../lib/publicBookingContext.js";
@@ -100,6 +101,7 @@ declare const fullApi: ApiFromModules<{
   integrations: typeof integrations;
   integrationsNode: typeof integrationsNode;
   "lib/bookingFlowDebug": typeof lib_bookingFlowDebug;
+  "lib/brandUtils": typeof lib_brandUtils;
   "lib/orgContext": typeof lib_orgContext;
   "lib/orgContextShared": typeof lib_orgContextShared;
   "lib/publicBookingContext": typeof lib_publicBookingContext;
