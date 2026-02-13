@@ -21,7 +21,12 @@ import BookingLifecycleSheet from "@/components/bookings/BookingLifecycleSheet";
 import CancelBookingDialog from "@/components/bookings/CancelBookingDialog";
 import RescheduleBookingDialog from "@/components/bookings/RescheduleBookingDialog";
 import OverrideStatusDialog from "@/components/bookings/OverrideStatusDialog";
-import { FUNNEL_STAGES, OPERATIONS_STATUSES, type LifecycleRow } from "@/components/bookings/types";
+import {
+  FUNNEL_STAGES,
+  OPERATIONS_STATUSES,
+  hasLifecycleSchedule,
+  type LifecycleRow,
+} from "@/components/bookings/types";
 import { cn } from "@/lib/utils";
 import { useActiveOrganization } from "@/components/org/useActiveOrganization";
 import { onboardingApi } from "@/lib/onboarding/api";
@@ -539,6 +544,7 @@ export default function OnboardingPage() {
         errorMessage={actionError}
         onConfirm={async (values) => {
           if (!rescheduleRow?.bookingId) return;
+          const wasScheduled = hasLifecycleSchedule(rescheduleRow);
           setActionBusy("reschedule");
           setActionError(null);
           try {
@@ -550,7 +556,10 @@ export default function OnboardingPage() {
               reason: values.reason,
             });
             setRescheduleRow(null);
-            setFeedback({ type: "success", message: "Booking rescheduled." });
+            setFeedback({
+              type: "success",
+              message: wasScheduled ? "Booking rescheduled." : "Booking scheduled.",
+            });
           } catch (error) {
             setActionError(getErrorMessage(error));
           } finally {

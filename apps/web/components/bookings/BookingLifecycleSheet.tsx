@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { LifecycleRow, LifecycleTimelineEvent } from "./types";
+import { hasLifecycleSchedule, type LifecycleRow, type LifecycleTimelineEvent } from "./types";
 import { onboardingApi } from "@/lib/onboarding/api";
 import { getConfirmRequestLink } from "@/lib/bookingLinks";
 import { cn } from "@/lib/utils";
@@ -268,6 +268,10 @@ export default function BookingLifecycleSheet({
   const accentGradient =
     statusAccent[row.operationalStatus ?? ""] ??
     "from-primary/10 to-primary/0 border-border";
+  const scheduleActionLabel =
+    hasLifecycleSchedule(row) || Boolean(booking?.serviceDate)
+      ? "Reschedule"
+      : "Schedule";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -456,7 +460,7 @@ export default function BookingLifecycleSheet({
                 disabled={staleBooking}
                 onClick={onRequestReschedule}
               >
-                Reschedule
+                {scheduleActionLabel}
               </Button>
               <Button
                 size="sm"

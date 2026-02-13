@@ -5,7 +5,7 @@ import AssignCleanerSheet from "@/components/cleaners/AssignCleanerSheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import type { LifecycleRow } from "@/components/bookings/types";
+import { hasLifecycleSchedule, type LifecycleRow } from "@/components/bookings/types";
 import { cn } from "@/lib/utils";
 import { onboardingApi } from "@/lib/onboarding/api";
 import { operationalStatusColors, formatCurrency } from "@/components/onboarding/types";
@@ -89,6 +89,7 @@ export default function BookingCard({
     row.operationalStatus === "in_progress" ||
     row.operationalStatus === "payment_failed" ||
     row.operationalStatus === "cancelled";
+  const scheduleActionLabel = hasLifecycleSchedule(row) ? "Reschedule" : "Schedule";
 
   return (
     <div
@@ -159,7 +160,7 @@ export default function BookingCard({
           disabled={isBusy || row.operationalStatus === "cancelled"}
           onClick={onReschedule}
         >
-          Reschedule
+          {scheduleActionLabel}
         </Button>
         <div className="flex items-center gap-2">
           <Button

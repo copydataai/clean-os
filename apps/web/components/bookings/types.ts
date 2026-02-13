@@ -27,6 +27,20 @@ export type LifecycleRow = {
   updatedAt: number;
 };
 
+export function hasLifecycleSchedule(
+  row: Pick<LifecycleRow, "serviceDate" | "operationalStatus" | "funnelStage"> | null | undefined
+) {
+  if (!row) {
+    return false;
+  }
+
+  return Boolean(
+    row.serviceDate ||
+      row.operationalStatus === "scheduled" ||
+      row.funnelStage === "scheduled"
+  );
+}
+
 export type LifecycleTimelineEvent = {
   _id: Id<"bookingLifecycleEvents">;
   bookingId: Id<"bookings">;

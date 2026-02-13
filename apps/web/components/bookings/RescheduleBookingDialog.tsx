@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { LifecycleRow } from "./types";
+import { hasLifecycleSchedule, type LifecycleRow } from "./types";
 
 type RescheduleBookingDialogProps = {
   open: boolean;
@@ -42,6 +42,9 @@ export default function RescheduleBookingDialog({
   const [newWindowEnd, setNewWindowEnd] = useState("");
   const [reason, setReason] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const isReschedule = hasLifecycleSchedule(booking);
+  const actionLabel = isReschedule ? "Reschedule" : "Schedule";
+  const actionNoun = isReschedule ? "reschedule" : "schedule";
 
   useEffect(() => {
     if (open) {
@@ -60,9 +63,9 @@ export default function RescheduleBookingDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent className="max-w-lg">
         <AlertDialogHeader>
-          <AlertDialogTitle>Reschedule booking</AlertDialogTitle>
+          <AlertDialogTitle>{actionLabel} booking</AlertDialogTitle>
           <AlertDialogDescription>
-            This updates service date/window and appends a rescheduled lifecycle event.
+            This updates service date/window and appends a lifecycle event.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -104,7 +107,7 @@ export default function RescheduleBookingDialog({
               rows={4}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Reason for reschedule"
+              placeholder={`Reason for ${actionNoun}`}
             />
           </div>
 
@@ -123,7 +126,7 @@ export default function RescheduleBookingDialog({
                 return;
               }
               if (!trimmedReason) {
-                setLocalError("Reschedule reason is required.");
+                setLocalError(`${actionLabel} reason is required.`);
                 return;
               }
 
@@ -136,7 +139,7 @@ export default function RescheduleBookingDialog({
               });
             }}
           >
-            {submitting ? "Saving..." : "Save reschedule"}
+            {submitting ? "Saving..." : `Save ${actionNoun}`}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
