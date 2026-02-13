@@ -4,7 +4,15 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Id } from "@clean-os/convex/data-model";
 import StatusBadge from "@/components/dashboard/StatusBadge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  getAttentionBadgeClass,
+  getAttentionLabel,
+  type AttentionLevel,
+} from "@/lib/commsAttention";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/utils";
 
 function timeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
@@ -17,32 +25,64 @@ function timeAgo(timestamp: number): string {
   return `${days}d ago`;
 }
 
+function actionLabel(base: string, state: QuoteActionState) {
+  if (state === "sending") {
+    return "Sending...";
+  }
+
+  if (state === "sent") {
+    return "Sent";
+  }
+
+  if (state === "error") {
+    return "Failed";
+  }
+
+  return base;
+}
+
+export type QuoteActionState = "idle" | "sending" | "sent" | "error";
+
+export type QuoteKanbanCardRow = {
+  _id: Id<"quoteRequests">;
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  requestStatus: string;
+  quoteStatus?: string | null;
+  serviceType?: string | null;
+  frequency?: string | null;
+  squareFootage?: number | null;
+  sentAt?: number | null;
+  expiresAt?: number | null;
+  hoursUntilExpiry?: number | null;
+  urgencyLevel?: "normal" | "warning" | "critical" | "expired";
+  latestEmailDelivery?: {
+    status:
+      | "queued"
+      | "sent"
+      | "delivered"
+      | "delivery_delayed"
+      | "failed"
+      | "skipped";
+    errorMessage?: string;
+  } | null;
+  createdAt: number;
+};
+
 type QuoteKanbanCardProps = {
-  quote: {
-    _id: Id<"quoteRequests">;
-    firstName?: string | null;
-    lastName?: string | null;
-    email?: string | null;
-    requestStatus: string;
-    quoteStatus?: string | null;
-    serviceType?: string | null;
-    frequency?: string | null;
-    squareFootage?: number | null;
-    sentAt?: number | null;
-    expiresAt?: number | null;
-    hoursUntilExpiry?: number | null;
-    urgencyLevel?: "normal" | "warning" | "critical" | "expired";
-    latestEmailDelivery?: {
-      status:
-        | "queued"
-        | "sent"
-        | "delivered"
-        | "delivery_delayed"
-        | "failed"
-        | "skipped";
-    } | null;
-    createdAt: number;
-  };
+  quote: QuoteKanbanCardRow;
+  reminderState?: QuoteActionState;
+  resendState?: QuoteActionState;
+  canSendReminder?: boolean;
+  canResendQuote?: boolean;
+  deliveryContext?: string;
+  attentionLevel?: AttentionLevel;
+  onSendReminder?: (quoteRequestId: Id<"quoteRequests">) => void;
+  onResendQuote?: (quoteRequestId: Id<"quoteRequests">) => void;
+  showActions?: boolean;
+  showDragHandle?: boolean;
+  disableNavigation?: boolean;
 };
 
 function urgencyLabel(quote: QuoteKanbanCardProps["quote"]): string | null {
@@ -77,12 +117,26 @@ function urgencyClass(urgencyLevel?: QuoteKanbanCardProps["quote"]["urgencyLevel
   return "bg-slate-100 text-slate-700";
 }
 
-export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
+export default function QuoteKanbanCard({
+  quote,
+  reminderState = "idle",
+  resendState = "idle",
+  canSendReminder = false,
+  canResendQuote = false,
+  deliveryContext,
+  attentionLevel = "none",
+  onSendReminder,
+  onResendQuote,
+  showActions = true,
+  showDragHandle = true,
+  disableNavigation = false,
+}: QuoteKanbanCardProps) {
   const router = useRouter();
   const {
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -98,38 +152,59 @@ export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
       ? `${quote.firstName ?? ""} ${quote.lastName ?? ""}`.trim()
       : quote.email ?? "Unknown";
   const urgency = urgencyLabel(quote);
+  const requestBusy = reminderState === "sending" || resendState === "sending";
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
       onClick={() => {
-        if (!isDragging) {
+        if (!disableNavigation && !isDragging) {
           router.push(`/dashboard/quotes/${quote._id}`);
         }
       }}
-      className={`surface-card p-3 cursor-grab active:cursor-grabbing ${
-        isDragging ? "opacity-50" : ""
-      }`}
+      className={cn("surface-card p-3 cursor-pointer", isDragging ? "opacity-50" : "")}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-foreground truncate">
-          {displayName}
-        </p>
-        <div className="flex items-center gap-1 shrink-0">
-          <StatusBadge status={quote.requestStatus} className="text-[10px]" />
-          {quote.quoteStatus === "expired" || quote.quoteStatus === "send_failed" ? (
-            <StatusBadge status={quote.quoteStatus} className="text-[10px]" />
+        <div className="min-w-0 space-y-1">
+          <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+          <p className="text-[11px] text-muted-foreground truncate">{quote.email ?? "No email"}</p>
+        </div>
+        <div className="flex items-start gap-1.5 shrink-0">
+          {showDragHandle ? (
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              {...attributes}
+              {...listeners}
+              onClick={(event) => event.stopPropagation()}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border/70 text-muted-foreground transition hover:bg-muted/60 cursor-grab active:cursor-grabbing"
+              aria-label="Drag quote card"
+            >
+              <span className="text-xs leading-none">::</span>
+            </button>
           ) : null}
-          {quote.latestEmailDelivery ? (
-            <StatusBadge
-              status={quote.latestEmailDelivery.status}
-              label={`email ${quote.latestEmailDelivery.status.replace(/_/g, " ")}`}
-              className="text-[10px]"
-            />
-          ) : null}
+          <div className="flex flex-wrap justify-end gap-1">
+            <StatusBadge status={quote.requestStatus} className="text-[10px]" />
+            {quote.quoteStatus === "expired" || quote.quoteStatus === "send_failed" ? (
+              <StatusBadge status={quote.quoteStatus} className="text-[10px]" />
+            ) : null}
+            {quote.latestEmailDelivery ? (
+              <span
+                title={
+                  quote.latestEmailDelivery.status === "failed"
+                    ? quote.latestEmailDelivery.errorMessage ?? undefined
+                    : undefined
+                }
+              >
+                <StatusBadge
+                  status={quote.latestEmailDelivery.status}
+                  label={`email ${quote.latestEmailDelivery.status.replace(/_/g, " ")}`}
+                  className="text-[10px]"
+                />
+              </span>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -138,15 +213,61 @@ export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
         {quote.frequency && <span>{quote.frequency}</span>}
         {quote.squareFootage && <span>{quote.squareFootage} sqft</span>}
       </div>
-      {urgency ? (
-        <p className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${urgencyClass(quote.urgencyLevel)}`}>
-          {urgency}
-        </p>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {attentionLevel !== "none" ? (
+          <Badge
+            variant="outline"
+            className={cn("text-[10px] font-medium", getAttentionBadgeClass(attentionLevel))}
+          >
+            {getAttentionLabel(attentionLevel)}
+          </Badge>
+        ) : null}
+        {urgency ? (
+          <p className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${urgencyClass(quote.urgencyLevel)}`}>
+            {urgency}
+          </p>
+        ) : null}
+      </div>
+
+      {deliveryContext ? (
+        <p className="mt-2 text-[11px] text-muted-foreground">{deliveryContext}</p>
       ) : null}
 
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        {timeAgo(quote.createdAt)}
-      </p>
+      {showActions ? (
+        <div className="mt-3 flex flex-wrap gap-1.5" onClick={(event) => event.stopPropagation()}>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!canSendReminder || requestBusy}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!onSendReminder) {
+                return;
+              }
+              onSendReminder(quote._id);
+            }}
+          >
+            {actionLabel("Send reminder", reminderState)}
+          </Button>
+          <Button
+            size="xs"
+            variant="outline"
+            disabled={!canResendQuote || requestBusy}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!onResendQuote) {
+                return;
+              }
+              onResendQuote(quote._id);
+            }}
+          >
+            {actionLabel("Resend quote", resendState)}
+          </Button>
+        </div>
+      ) : null}
+
+      <p className="mt-2 text-[11px] text-muted-foreground">{timeAgo(quote.createdAt)}</p>
     </div>
   );
 }

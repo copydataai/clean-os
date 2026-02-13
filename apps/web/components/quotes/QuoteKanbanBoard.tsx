@@ -14,8 +14,12 @@ import {
 import { useMutation } from "convex/react";
 import type { Id } from "@clean-os/convex/data-model";
 import { api } from "@clean-os/convex/api";
-import QuoteKanbanColumn, { ColumnConfig } from "./QuoteKanbanColumn";
-import QuoteKanbanCard from "./QuoteKanbanCard";
+import type { AttentionLevel } from "@/lib/commsAttention";
+import QuoteKanbanColumn, { ColumnConfig, type QuoteKanbanColumnRow } from "./QuoteKanbanColumn";
+import QuoteKanbanCard, {
+  type QuoteActionState,
+  type QuoteKanbanCardRow,
+} from "./QuoteKanbanCard";
 
 const COLUMNS: ColumnConfig[] = [
   { id: "requested", title: "Requested", color: "border-t-amber-500" },
@@ -23,42 +27,33 @@ const COLUMNS: ColumnConfig[] = [
   { id: "confirmed", title: "Confirmed", color: "border-t-green-500" },
 ];
 
-type RequestStatus = "requested" | "quoted" | "confirmed";
+export type RequestStatus = "requested" | "quoted" | "confirmed";
 const STATUS_SET = new Set<string>(["requested", "quoted", "confirmed"]);
 
-type QuoteBoardRow = {
-  _id: Id<"quoteRequests">;
-  firstName?: string | null;
-  lastName?: string | null;
-  email?: string | null;
+export type QuoteBoardRow = QuoteKanbanCardRow & {
   service?: string | null;
-  serviceType?: string | null;
-  frequency?: string | null;
-  squareFootage?: number | null;
-  sentAt?: number | null;
-  expiresAt?: number | null;
-  hoursUntilExpiry?: number | null;
-  urgencyLevel?: "normal" | "warning" | "critical" | "expired";
-  latestEmailDelivery?: {
-    status:
-      | "queued"
-      | "sent"
-      | "delivered"
-      | "delivery_delayed"
-      | "failed"
-      | "skipped";
-  } | null;
-  createdAt: number;
-  requestStatus: string;
+  address?: string | null;
+  addressLine2?: string | null;
   boardColumn: RequestStatus;
-  quoteStatus?: string | null;
+  attentionLevel?: AttentionLevel;
+  deliveryContext?: string;
+  canSendReminder?: boolean;
+  canResendQuote?: boolean;
+  reminderState?: QuoteActionState;
+  resendState?: QuoteActionState;
 };
 
 type QuoteKanbanBoardProps = {
   quotes: QuoteBoardRow[];
+  onSendReminder?: (quoteRequestId: Id<"quoteRequests">) => void;
+  onResendQuote?: (quoteRequestId: Id<"quoteRequests">) => void;
 };
 
-export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
+export default function QuoteKanbanBoard({
+  quotes,
+  onSendReminder,
+  onResendQuote,
+}: QuoteKanbanBoardProps) {
   const moveBoardCard = useMutation(api.quotes.moveBoardCard);
   const [activeId, setActiveId] = useState<Id<"quoteRequests"> | null>(null);
 
@@ -69,7 +64,7 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
   );
 
   const buckets = useMemo(() => {
-    const map: Record<RequestStatus, QuoteBoardRow[]> = {
+    const map: Record<RequestStatus, QuoteKanbanColumnRow[]> = {
       requested: [],
       quoted: [],
       confirmed: [],
@@ -113,19 +108,17 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
     if (!quote) return;
     if (quote.boardColumn === "confirmed") return;
 
-    // Determine target status: over.id could be a column ID or another card ID
     let targetStatus: string;
     if (STATUS_SET.has(over.id as string)) {
       targetStatus = over.id as string;
     } else {
-      // It's a card ID — find which bucket that card is in
       const targetQuote = quotes.find((q) => q._id === over.id);
       targetStatus = targetQuote?.boardColumn ?? quote.boardColumn;
     }
 
     if (targetStatus !== quote.boardColumn) {
       if (targetStatus === "confirmed") return;
-      moveBoardCard({
+      void moveBoardCard({
         quoteRequestId: quoteId,
         targetColumn: targetStatus as RequestStatus,
       });
@@ -145,12 +138,25 @@ export default function QuoteKanbanBoard({ quotes }: QuoteKanbanBoardProps) {
             key={col.id}
             config={col}
             quotes={buckets[col.id as RequestStatus]}
+            onSendReminder={onSendReminder}
+            onResendQuote={onResendQuote}
           />
         ))}
       </div>
 
       <DragOverlay>
-        {activeQuote ? <QuoteKanbanCard quote={activeQuote} /> : null}
+        {activeQuote ? (
+          <div className="w-[320px]">
+            <QuoteKanbanCard
+              quote={activeQuote}
+              attentionLevel={activeQuote.attentionLevel}
+              deliveryContext={activeQuote.deliveryContext}
+              showActions={false}
+              showDragHandle={false}
+              disableNavigation
+            />
+          </div>
+        ) : null}
       </DragOverlay>
     </DndContext>
   );
