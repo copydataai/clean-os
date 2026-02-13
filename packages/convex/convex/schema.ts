@@ -269,6 +269,14 @@ const quoteProfiles = defineTable({
   defaultTaxName: v.string(),
   defaultTaxRateBps: v.number(),
   quoteValidityDays: v.number(),
+  // Branding
+  logoStorageId: v.optional(v.id("_storage")),
+  logoUrl: v.optional(v.string()),
+  iconStorageId: v.optional(v.id("_storage")),
+  iconUrl: v.optional(v.string()),
+  brandColor: v.optional(v.string()),
+  accentColor: v.optional(v.string()),
+  tagline: v.optional(v.string()),
   createdAt: v.number(),
   updatedAt: v.number(),
 })
