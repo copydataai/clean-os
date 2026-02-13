@@ -3,6 +3,7 @@ import { internalAction } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import Stripe from "stripe";
+import { extractBrandFromProfile } from "../lib/brandUtils";
 
 function createStripeClient(secretKey: string): Stripe {
   return new Stripe(secretKey, {
@@ -135,10 +136,12 @@ export const handleStripeWebhook = internalAction({
             const email = session.customer_email ?? session.metadata?.email;
             if (email) {
               try {
+                const profile = await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId });
                 await ctx.runAction(internal.emailRenderers.sendPaymentSavedEmail, {
                   to: email,
                   idempotencyKey: `payment-saved:${session.id}`,
                   bookingRef: session.metadata?.bookingId,
+                  brand: extractBrandFromProfile(profile),
                 });
               } catch (err) {
                 console.error("[Stripe Webhook] Failed to send payment saved email", err);

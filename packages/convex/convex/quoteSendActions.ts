@@ -5,6 +5,7 @@ import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { renderQuotePdfBuffer } from "./pdf/quotePdf";
+import { extractBrandFromProfile } from "./lib/brandUtils";
 
 async function sendRevisionInternal(
   ctx: any,
@@ -54,6 +55,8 @@ async function sendRevisionInternal(
       city: profile.city,
       state: profile.state,
       postalCode: profile.postalCode,
+      brandColor: profile.brandColor,
+      tagline: profile.tagline,
     },
     recipient: revision.recipientSnapshot,
     lineItem: {
@@ -110,6 +113,7 @@ async function sendRevisionInternal(
       confirmUrl,
       downloadUrl: downloadUrl ?? undefined,
       serviceLabel: revision.serviceLabel,
+      brand: extractBrandFromProfile(profile),
     });
 
     await ctx.runMutation(internal.quotes.markRevisionSendResult, {

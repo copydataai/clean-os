@@ -16,6 +16,7 @@ import {
   toStringArray,
 } from "../lib/tallyRuntime";
 import { bookingFlowLog, bookingFlowWarn } from "../lib/bookingFlowDebug";
+import { extractBrandFromProfile } from "../lib/brandUtils";
 
 type Endpoint = "request" | "confirmation";
 
@@ -383,6 +384,7 @@ export const handleTallyRequestWebhook = internalAction({
 
     if (parsedFields.email) {
       try {
+        const profile = await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId: verified.config.organizationId });
         await ctx.runAction(internal.emailRenderers.sendQuoteReceivedEmail, {
           to: parsedFields.email,
           idempotencyKey: `quote-received:${quoteRequestId}`,
@@ -394,6 +396,7 @@ export const handleTallyRequestWebhook = internalAction({
           address: parsedFields.address,
           city: parsedFields.city,
           state: parsedFields.state,
+          brand: extractBrandFromProfile(profile),
         });
       } catch (err) {
         console.error("[Tally Webhook] Failed to send quote received email", err);
@@ -524,6 +527,7 @@ export const handleTallyConfirmationWebhook = internalAction({
           handle: canonicalRoute.handle,
         });
 
+        const profile = await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId: verified.config.organizationId });
         await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {
           to: confirmEmail,
           idempotencyKey: `booking-confirmed:${updatedRequestId}`,
@@ -534,6 +538,7 @@ export const handleTallyConfirmationWebhook = internalAction({
           accessMethod: parsedFields.accessMethod,
           pets: parsedFields.pets,
           bookingLink,
+          brand: extractBrandFromProfile(profile),
         });
       } catch (err) {
         console.error("[Tally Webhook] Failed to send booking confirmed email", err);

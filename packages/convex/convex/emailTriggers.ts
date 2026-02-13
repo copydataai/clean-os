@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { bookingFlowLog, bookingFlowWarn } from "./lib/bookingFlowDebug";
+import { extractBrandFromProfile } from "./lib/brandUtils";
 
 export const sendConfirmationEmail = action({
   args: {
@@ -76,6 +77,9 @@ export const sendConfirmationEmail = action({
     }
     const confirmUrl = confirmUrlObj.toString();
 
+    const profile = organizationId
+      ? await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId })
+      : null;
     const sendResult = await ctx.runAction(internal.emailRenderers.sendConfirmationLinkEmail, {
       to: request.email,
       idempotencyKey: `confirmation-link:${requestId}`,
@@ -83,6 +87,7 @@ export const sendConfirmationEmail = action({
       service: quoteData.service,
       frequency: quoteData.frequency,
       confirmUrl,
+      brand: extractBrandFromProfile(profile),
     });
 
     const emailSendId = sendResult?.sendId as Id<"emailSends"> | undefined;
@@ -140,6 +145,10 @@ export const sendCardRequestEmail = action({
     const bookingPath = `/book/${canonicalRoute.handle}?request_id=${requestId}`;
     const bookingLink = `${appUrl}${bookingPath}`;
 
+    const orgId = canonicalRoute?.organizationId ?? request.organizationId;
+    const profile = orgId
+      ? await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId: orgId })
+      : null;
     const sendResult = await ctx.runAction(
       internal.emailRenderers.sendBookingConfirmedEmail,
       {
@@ -152,6 +161,7 @@ export const sendCardRequestEmail = action({
         accessMethod: request.accessMethod ?? undefined,
         pets: request.pets ?? undefined,
         bookingLink,
+        brand: extractBrandFromProfile(profile),
       }
     );
 

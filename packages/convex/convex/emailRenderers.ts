@@ -15,6 +15,7 @@ export const sendQuoteReceivedEmail = internalAction({
     address: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
+    brand: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await ctx.runAction(internal.emailSender.sendTransactional, {
@@ -31,6 +32,7 @@ export const sendQuoteReceivedEmail = internalAction({
         address: args.address,
         city: args.city,
         state: args.state,
+        brand: args.brand,
       },
     });
   },
@@ -44,6 +46,7 @@ export const sendConfirmationLinkEmail = internalAction({
     service: v.optional(v.string()),
     frequency: v.optional(v.string()),
     confirmUrl: v.string(),
+    brand: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<any> => {
     return await ctx.runAction(internal.emailSender.sendTransactional, {
@@ -56,6 +59,7 @@ export const sendConfirmationLinkEmail = internalAction({
         service: args.service,
         frequency: args.frequency,
         confirmUrl: args.confirmUrl,
+        brand: args.brand,
       },
     });
   },
@@ -72,6 +76,7 @@ export const sendBookingConfirmedEmail = internalAction({
     accessMethod: v.optional(v.array(v.string())),
     pets: v.optional(v.array(v.string())),
     bookingLink: v.string(),
+    brand: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<any> => {
     return await ctx.runAction(internal.emailSender.sendTransactional, {
@@ -87,6 +92,7 @@ export const sendBookingConfirmedEmail = internalAction({
         accessMethod: args.accessMethod,
         pets: args.pets,
         bookingLink: args.bookingLink,
+        brand: args.brand,
       },
     });
   },
@@ -101,6 +107,7 @@ export const sendPaymentSavedEmail = internalAction({
     cardBrand: v.optional(v.string()),
     cardLast4: v.optional(v.string()),
     bookingRef: v.optional(v.string()),
+    brand: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await ctx.runAction(internal.emailSender.sendTransactional, {
@@ -114,6 +121,7 @@ export const sendPaymentSavedEmail = internalAction({
         cardBrand: args.cardBrand,
         cardLast4: args.cardLast4,
         bookingRef: args.bookingRef,
+        brand: args.brand,
       },
     });
   },
@@ -131,11 +139,13 @@ export const sendQuoteReadyEmail = internalAction({
     confirmUrl: v.string(),
     downloadUrl: v.optional(v.string()),
     serviceLabel: v.optional(v.string()),
+    brand: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<any> => {
+    const brandName = args.brand?.displayName || "JoluAI";
     return await ctx.runAction(internal.emailSender.sendTransactional, {
       to: args.to,
-      subject: "Your JoluAI Quote",
+      subject: `Your ${brandName} Quote`,
       template: "quote-ready",
       idempotencyKey: args.idempotencyKey,
       templateProps: {
@@ -147,6 +157,7 @@ export const sendQuoteReadyEmail = internalAction({
         confirmUrl: args.confirmUrl,
         downloadUrl: args.downloadUrl,
         serviceLabel: args.serviceLabel,
+        brand: args.brand,
       },
     });
   },
@@ -170,16 +181,18 @@ export const sendQuoteReminderEmail = internalAction({
       v.literal("r3_pre_expiry"),
       v.literal("manual")
     ),
+    brand: v.optional(v.any()),
   },
   handler: async (ctx, args): Promise<any> => {
+    const brandName = args.brand?.displayName || "JoluAI";
     const subject =
       args.reminderStage === "r3_pre_expiry"
-        ? "Final Reminder: Your JoluAI Quote Expires Soon"
+        ? `Final Reminder: Your ${brandName} Quote Expires Soon`
         : args.reminderStage === "r2_72h"
-          ? "Reminder: Please Confirm Your JoluAI Quote"
+          ? `Reminder: Please Confirm Your ${brandName} Quote`
           : args.reminderStage === "manual"
-            ? "Reminder: Please Confirm Your JoluAI Quote"
-          : "Reminder: Your JoluAI Quote Is Ready";
+            ? `Reminder: Please Confirm Your ${brandName} Quote`
+          : `Reminder: Your ${brandName} Quote Is Ready`;
 
     return await ctx.runAction(internal.emailSender.sendTransactional, {
       to: args.to,
@@ -196,6 +209,7 @@ export const sendQuoteReminderEmail = internalAction({
         downloadUrl: args.downloadUrl,
         serviceLabel: args.serviceLabel,
         reminderStage: args.reminderStage,
+        brand: args.brand,
       },
     });
   },

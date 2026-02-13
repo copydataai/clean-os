@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
+import { extractBrandFromProfile } from "./lib/brandUtils";
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -269,6 +270,9 @@ export const sendDueQuoteReminders = internalAction({
       const confirmUrl = confirmUrlObj.toString();
 
       try {
+        const profile = quote.organizationId
+          ? await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId: quote.organizationId })
+          : null;
         const sendResult = await ctx.runAction(internal.emailRenderers.sendQuoteReminderEmail, {
           to: quote.quoteRequestEmail,
           idempotencyKey: selected.idempotencyKey,
@@ -281,6 +285,7 @@ export const sendDueQuoteReminders = internalAction({
           downloadUrl: quote.downloadUrl ?? undefined,
           serviceLabel: quote.serviceLabel ?? undefined,
           reminderStage: selected.stage,
+          brand: extractBrandFromProfile(profile),
         });
 
         const status = mapSendResultToEventStatus(sendResult);
@@ -427,6 +432,9 @@ export const sendManualReminderInternal = internalAction({
     const confirmUrl = confirmUrlObj.toString();
 
     try {
+      const profile = quote.organizationId
+        ? await ctx.runQuery(internal.quoteProfiles.getProfileByOrganizationIdInternal, { organizationId: quote.organizationId })
+        : null;
       const sendResult = await ctx.runAction(internal.emailRenderers.sendQuoteReminderEmail, {
         to: quoteRequest.email,
         idempotencyKey,
@@ -441,6 +449,7 @@ export const sendManualReminderInternal = internalAction({
           : undefined,
         serviceLabel: revision?.serviceLabel ?? undefined,
         reminderStage: "manual",
+        brand: extractBrandFromProfile(profile),
       });
 
       const status = mapSendResultToEventStatus(sendResult);
