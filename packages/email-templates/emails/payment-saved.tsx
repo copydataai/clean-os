@@ -6,7 +6,7 @@ import {
   Hr,
 } from "@react-email/components";
 import * as React from "react";
-import EmailLayout from "./components/layout";
+import EmailLayout, { type EmailBrandConfig } from "./components/layout";
 
 interface PaymentSavedEmailProps {
   firstName?: string;
@@ -14,6 +14,7 @@ interface PaymentSavedEmailProps {
   cardBrand?: string;
   cardLast4?: string;
   bookingRef?: string;
+  brand?: EmailBrandConfig;
 }
 
 export default function PaymentSavedEmail({
@@ -22,7 +23,9 @@ export default function PaymentSavedEmail({
   cardBrand,
   cardLast4,
   bookingRef,
+  brand,
 }: PaymentSavedEmailProps) {
+  const bc = brand?.brandColor || "#1A3C34";
   const cardDisplay =
     cardBrand && cardLast4
       ? `${cardBrand.charAt(0).toUpperCase() + cardBrand.slice(1)} ending in ${cardLast4}`
@@ -31,13 +34,14 @@ export default function PaymentSavedEmail({
   return (
     <EmailLayout
       preview={`${firstName}, you're all set — payment method saved`}
+      brand={brand}
     >
       {/* ── Success badge ── */}
       <Section style={badgeSection}>
         <Text style={badgeCircle}>&#10003;</Text>
       </Section>
 
-      <Text style={heading}>You&apos;re All Set!</Text>
+      <Text style={{ ...heading, color: bc }}>You&apos;re All Set!</Text>
       <Text style={paragraph}>
         Hi {firstName}, your payment method has been saved successfully. Your
         booking is now fully set up and ready to go.

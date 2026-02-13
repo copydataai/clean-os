@@ -7,7 +7,7 @@ import {
   Hr,
 } from "@react-email/components";
 import * as React from "react";
-import EmailLayout from "./components/layout";
+import EmailLayout, { type EmailBrandConfig } from "./components/layout";
 
 interface QuoteReadyEmailProps {
   firstName?: string;
@@ -18,6 +18,7 @@ interface QuoteReadyEmailProps {
   confirmUrl: string;
   downloadUrl?: string;
   serviceLabel?: string;
+  brand?: EmailBrandConfig;
 }
 
 function formatCurrency(cents: number, currency = "usd"): string {
@@ -44,17 +45,21 @@ export default function QuoteReadyEmail({
   confirmUrl,
   downloadUrl,
   serviceLabel,
+  brand,
 }: QuoteReadyEmailProps) {
+  const brandName = brand?.displayName || "JoluAI";
+  const bc = brand?.brandColor || "#1A3C34";
+
   return (
-    <EmailLayout preview={`Your JoluAI Quote #${quoteNumber}`}>
-      <Text style={heading}>Your JoluAI Quote</Text>
+    <EmailLayout preview={`Your ${brandName} Quote #${quoteNumber}`} brand={brand}>
+      <Text style={{ ...heading, color: bc }}>Your {brandName} Quote</Text>
       <Text style={paragraph}>
-        Hi {firstName}, thank you for reaching out to JoluAI. Your quote is
+        Hi {firstName}, thank you for reaching out to {brandName}. Your quote is
         ready.
       </Text>
 
       {/* ── Price highlight ── */}
-      <Section style={priceCard}>
+      <Section style={{ ...priceCard, backgroundColor: bc }}>
         <Text style={priceLabel}>Quoted total</Text>
         <Text style={priceAmount}>
           {formatCurrency(totalCents, currency)}
@@ -91,7 +96,7 @@ export default function QuoteReadyEmail({
       </Text>
 
       <Section style={ctaSection}>
-        <Button href={confirmUrl} style={ctaButton}>
+        <Button href={confirmUrl} style={{ ...ctaButton, backgroundColor: bc }}>
           Confirm Your Booking &rarr;
         </Button>
       </Section>
@@ -99,7 +104,7 @@ export default function QuoteReadyEmail({
       {downloadUrl && (
         <Text style={downloadText}>
           You can also{" "}
-          <a href={downloadUrl} style={linkStyle}>
+          <a href={downloadUrl} style={{ ...linkStyle, color: bc }}>
             download your quote as PDF
           </a>
           .

@@ -6,7 +6,7 @@ import {
   Hr,
 } from "@react-email/components";
 import * as React from "react";
-import EmailLayout from "./components/layout";
+import EmailLayout, { type EmailBrandConfig } from "./components/layout";
 
 interface QuoteReceivedEmailProps {
   firstName?: string;
@@ -17,6 +17,7 @@ interface QuoteReceivedEmailProps {
   address?: string;
   city?: string;
   state?: string;
+  brand?: EmailBrandConfig;
 }
 
 export default function QuoteReceivedEmail({
@@ -28,19 +29,22 @@ export default function QuoteReceivedEmail({
   address,
   city,
   state,
+  brand,
 }: QuoteReceivedEmailProps) {
+  const bc = brand?.brandColor || "#1A3C34";
   const locationLine = [address, city, state].filter(Boolean).join(", ");
 
   return (
     <EmailLayout
       preview={`Hi ${firstName}, we received your quote request`}
+      brand={brand}
     >
       {/* ── Status pill ── */}
       <Section style={pillSection}>
         <Text style={statusPill}>RECEIVED</Text>
       </Section>
 
-      <Text style={heading}>Quote Request Received</Text>
+      <Text style={{ ...heading, color: bc }}>Quote Request Received</Text>
       <Text style={paragraph}>
         Hi {firstName}, thank you for reaching out! We&apos;ve received your
         cleaning quote request and our team will review it shortly.
@@ -71,7 +75,7 @@ export default function QuoteReceivedEmail({
       </Text>
 
       {/* ── Timeline ── */}
-      <Section style={timelineBox}>
+      <Section style={{ ...timelineBox, borderLeftColor: bc }}>
         <Text style={timelineHeading}>What happens next</Text>
         <Row style={timelineStep}>
           <Column style={dotCol}>

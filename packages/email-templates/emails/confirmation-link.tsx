@@ -7,13 +7,14 @@ import {
   Hr,
 } from "@react-email/components";
 import * as React from "react";
-import EmailLayout from "./components/layout";
+import EmailLayout, { type EmailBrandConfig } from "./components/layout";
 
 interface ConfirmationLinkEmailProps {
   firstName?: string;
   service?: string;
   frequency?: string;
   confirmUrl: string;
+  brand?: EmailBrandConfig;
 }
 
 export default function ConfirmationLinkEmail({
@@ -21,17 +22,21 @@ export default function ConfirmationLinkEmail({
   service,
   frequency,
   confirmUrl,
+  brand,
 }: ConfirmationLinkEmailProps) {
+  const bc = brand?.brandColor || "#1A3C34";
+
   return (
     <EmailLayout
       preview={`${firstName}, your quote is ready — confirm your booking`}
+      brand={brand}
     >
       {/* ── Status pill ── */}
       <Section style={pillSection}>
         <Text style={statusPill}>APPROVED</Text>
       </Section>
 
-      <Text style={heading}>Your Quote Has Been Approved</Text>
+      <Text style={{ ...heading, color: bc }}>Your Quote Has Been Approved</Text>
       <Text style={paragraph}>
         Hi {firstName}, great news! We&apos;ve reviewed your request
         {service ? ` for ${service}` : ""} and your quote is ready.
@@ -64,7 +69,7 @@ export default function ConfirmationLinkEmail({
       </Text>
 
       <Section style={ctaSection}>
-        <Button href={confirmUrl} style={ctaButton}>
+        <Button href={confirmUrl} style={{ ...ctaButton, backgroundColor: bc }}>
           Confirm Your Booking &rarr;
         </Button>
       </Section>

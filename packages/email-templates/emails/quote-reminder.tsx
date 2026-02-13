@@ -7,7 +7,7 @@ import {
   Hr,
 } from "@react-email/components";
 import * as React from "react";
-import EmailLayout from "./components/layout";
+import EmailLayout, { type EmailBrandConfig } from "./components/layout";
 
 type ReminderStage = "r1_24h" | "r2_72h" | "r3_pre_expiry" | "manual";
 
@@ -21,6 +21,7 @@ interface QuoteReminderEmailProps {
   downloadUrl?: string;
   serviceLabel?: string;
   reminderStage: ReminderStage;
+  brand?: EmailBrandConfig;
 }
 
 function formatCurrency(cents: number, currency = "usd"): string {
@@ -65,12 +66,16 @@ export default function QuoteReminderEmail({
   downloadUrl,
   serviceLabel,
   reminderStage,
+  brand,
 }: QuoteReminderEmailProps) {
   const urgent = isUrgent(reminderStage);
+  const brandName = brand?.displayName || "JoluAI";
+  const bc = brand?.brandColor || "#1A3C34";
 
   return (
     <EmailLayout
-      preview={`Reminder for JoluAI Quote #${quoteNumber}`}
+      preview={`Reminder for ${brandName} Quote #${quoteNumber}`}
+      brand={brand}
     >
       {/* ── Urgency pill (pre-expiry only) ── */}
       {urgent && (
@@ -79,8 +84,8 @@ export default function QuoteReminderEmail({
         </Section>
       )}
 
-      <Text style={heading}>
-        {urgent ? "Your Quote Expires Soon" : "Reminder: Your JoluAI Quote"}
+      <Text style={{ ...heading, color: bc }}>
+        {urgent ? "Your Quote Expires Soon" : `Reminder: Your ${brandName} Quote`}
       </Text>
       <Text style={paragraph}>
         Hi {firstName}, {reminderCopy(reminderStage)}
@@ -118,7 +123,7 @@ export default function QuoteReminderEmail({
       </Section>
 
       <Section style={ctaSection}>
-        <Button href={confirmUrl} style={ctaButton}>
+        <Button href={confirmUrl} style={{ ...ctaButton, backgroundColor: bc }}>
           Confirm Your Booking &rarr;
         </Button>
       </Section>
@@ -126,7 +131,7 @@ export default function QuoteReminderEmail({
       {downloadUrl && (
         <Text style={downloadText}>
           Need to review it again?{" "}
-          <a href={downloadUrl} style={linkStyle}>
+          <a href={downloadUrl} style={{ ...linkStyle, color: bc }}>
             Open your quote PDF
           </a>
         </Text>

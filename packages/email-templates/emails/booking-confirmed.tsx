@@ -8,7 +8,7 @@ import {
   Img,
 } from "@react-email/components";
 import * as React from "react";
-import EmailLayout from "./components/layout";
+import EmailLayout, { type EmailBrandConfig } from "./components/layout";
 
 interface BookingConfirmedEmailProps {
   firstName?: string;
@@ -18,6 +18,7 @@ interface BookingConfirmedEmailProps {
   accessMethod?: string[];
   pets?: string[];
   bookingLink: string;
+  brand?: EmailBrandConfig;
 }
 
 export default function BookingConfirmedEmail({
@@ -28,17 +29,21 @@ export default function BookingConfirmedEmail({
   accessMethod,
   pets,
   bookingLink,
+  brand,
 }: BookingConfirmedEmailProps) {
+  const bc = brand?.brandColor || "#1A3C34";
+
   return (
     <EmailLayout
       preview={`${firstName}, your booking is confirmed — one last step`}
+      brand={brand}
     >
       {/* ── Confirmation badge ── */}
       <Section style={badgeSection}>
         <Text style={badgeCircle}>&#10003;</Text>
       </Section>
 
-      <Text style={heading}>Booking Confirmed</Text>
+      <Text style={{ ...heading, color: bc }}>Booking Confirmed</Text>
       <Text style={subheading}>
         Hi {firstName}, everything looks great.
         <br />
@@ -64,7 +69,7 @@ export default function BookingConfirmedEmail({
       </Section>
 
       {/* ── Summary card ── */}
-      <Section style={summaryCard}>
+      <Section style={{ ...summaryCard, borderLeftColor: bc }}>
         <Text style={summaryHeading}>Your booking</Text>
         {service && (
           <>
@@ -117,7 +122,7 @@ export default function BookingConfirmedEmail({
       </Text>
 
       <Section style={ctaSection}>
-        <Button href={bookingLink} style={ctaButton}>
+        <Button href={bookingLink} style={{ ...ctaButton, backgroundColor: bc }}>
           Save Payment Method &rarr;
         </Button>
       </Section>
