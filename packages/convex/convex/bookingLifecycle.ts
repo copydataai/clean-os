@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 import { mapOperationalStatusToFunnel } from "./bookingStateMachine";
 import { assertRecordInActiveOrg, requireActiveOrganization } from "./lib/orgContext";
 
@@ -29,6 +30,44 @@ const funnelStageValidator = v.union(
   v.literal("charged"),
   v.literal("cancelled")
 );
+
+type EmailDeliverySnapshot = {
+  sendId: Id<"emailSends">;
+  status:
+    | "queued"
+    | "sent"
+    | "delivered"
+    | "delivery_delayed"
+    | "failed"
+    | "skipped";
+  provider: string;
+  updatedAt: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+async function resolveEmailDeliverySnapshot(
+  ctx: any,
+  sendId?: Id<"emailSends"> | null
+): Promise<EmailDeliverySnapshot | null> {
+  if (!sendId) {
+    return null;
+  }
+
+  const send = await ctx.db.get(sendId);
+  if (!send) {
+    return null;
+  }
+
+  return {
+    sendId: send._id,
+    status: send.status as EmailDeliverySnapshot["status"],
+    provider: send.provider,
+    updatedAt: send.updatedAt,
+    errorCode: send.errorCode,
+    errorMessage: send.errorMessage,
+  };
+}
 
 function derivePreBookingFunnelStage(args: {
   requestStatus?: string;
@@ -216,6 +255,8 @@ export const listUnifiedLifecycleRows = query({
       serviceDate: booking.serviceDate ?? null,
       serviceType: booking.serviceType ?? null,
       amount: booking.amount ?? null,
+      cardRequestEmailDelivery: null,
+      confirmationEmailDelivery: null,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt,
     }));
@@ -229,6 +270,14 @@ export const listUnifiedLifecycleRows = query({
 
     const preBookingRows = await Promise.all(
       pendingRequests.map(async (request) => {
+        const cardRequestEmailDelivery = await resolveEmailDeliverySnapshot(
+          ctx,
+          request.cardRequestEmailSendId
+        );
+        const confirmationEmailDelivery = await resolveEmailDeliverySnapshot(
+          ctx,
+          request.confirmationEmailSendId
+        );
         const quote = request.quoteRequestId
           ? await ctx.db
               .query("quotes")
@@ -254,6 +303,8 @@ export const listUnifiedLifecycleRows = query({
           serviceDate: null,
           serviceType: null,
           amount: null,
+          cardRequestEmailDelivery,
+          confirmationEmailDelivery,
           createdAt: request.createdAt,
           updatedAt: request.updatedAt,
         };

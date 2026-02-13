@@ -165,7 +165,13 @@ async function createQuoteFixture(
 async function insertEmailSend(
   t: ReturnType<typeof convexTest>,
   idempotencyKey: string,
-  status: "queued" | "sent" | "failed" | "skipped"
+  status:
+    | "queued"
+    | "sent"
+    | "delivered"
+    | "delivery_delayed"
+    | "failed"
+    | "skipped"
 ) {
   await t.run(async (ctx) => {
     await ctx.db.insert("emailSends", {
@@ -364,7 +370,7 @@ describe.sequential("quote reminders", () => {
     expect(result.scanned).toBe(1);
   });
 
-  it("retries failed stage and does not resend sent/skipped stages", async () => {
+  it("retries failed stage and does not resend sent/skipped/delivered/delivery_delayed stages", async () => {
     const t = convexTest(schema, modules);
     const nowMs = 1_740_000_000_000;
 
@@ -411,6 +417,48 @@ describe.sequential("quote reminders", () => {
     await insertEmailSend(
       t,
       reminderKey(alreadySkipped.quoteId, alreadySkipped.revisionId!, "r2_72h"),
+      "sent"
+    );
+
+    const alreadyDelivered = await createQuoteFixture(t, {
+      nowMs,
+      status: "sent",
+      sentAt: nowMs - 80 * 60 * 60 * 1000,
+      expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
+    });
+    await insertEmailSend(
+      t,
+      reminderKey(alreadyDelivered.quoteId, alreadyDelivered.revisionId!, "r1_24h"),
+      "delivered"
+    );
+    await insertEmailSend(
+      t,
+      reminderKey(alreadyDelivered.quoteId, alreadyDelivered.revisionId!, "r2_72h"),
+      "sent"
+    );
+
+    const alreadyDeliveryDelayed = await createQuoteFixture(t, {
+      nowMs,
+      status: "sent",
+      sentAt: nowMs - 80 * 60 * 60 * 1000,
+      expiresAt: nowMs + 5 * 24 * 60 * 60 * 1000,
+    });
+    await insertEmailSend(
+      t,
+      reminderKey(
+        alreadyDeliveryDelayed.quoteId,
+        alreadyDeliveryDelayed.revisionId!,
+        "r1_24h"
+      ),
+      "delivery_delayed"
+    );
+    await insertEmailSend(
+      t,
+      reminderKey(
+        alreadyDeliveryDelayed.quoteId,
+        alreadyDeliveryDelayed.revisionId!,
+        "r2_72h"
+      ),
       "sent"
     );
 

@@ -78,7 +78,12 @@ export const sendTransactional = internalAction({
       idempotencyKey: args.idempotencyKey,
     });
 
-    if (existing && ["queued", "sent", "skipped"].includes(existing.status)) {
+    if (
+      existing &&
+      ["queued", "sent", "delivered", "delivery_delayed", "skipped"].includes(
+        existing.status
+      )
+    ) {
       return {
         skipped: true,
         reason: "idempotent_reuse",

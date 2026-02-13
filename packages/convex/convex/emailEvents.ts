@@ -12,8 +12,9 @@ function readRecipientEmail(to: string | string[]): string {
 export const onEmailEvent = internalMutation({
   args: vOnEmailEventArgs,
   handler: async (ctx, args) => {
-    const eventId = `${args.id}:${args.event.type}:${args.event.created_at}`;
-    const providerEmailId = args.event.data.email_id;
+    const callbackEmailId = String(args.id);
+    const resendEmailId = args.event.data.email_id;
+    const eventId = `${callbackEmailId}:${args.event.type}:${args.event.created_at}`;
     const email = readRecipientEmail(args.event.data.to);
 
     const existing = await ctx.db
@@ -29,27 +30,61 @@ export const onEmailEvent = internalMutation({
       eventId,
       type: args.event.type,
       email,
-      providerEmailId,
+      providerEmailId: resendEmailId,
       raw: args.event,
       processedAt: Date.now(),
     });
 
-    const send = await ctx.db
+    let send = await ctx.db
       .query("emailSends")
       .withIndex("by_provider_email_id", (q) =>
-        q.eq("providerEmailId", providerEmailId)
+        q.eq("providerEmailId", callbackEmailId)
       )
       .first();
 
+    if (!send && resendEmailId !== callbackEmailId) {
+      send = await ctx.db
+        .query("emailSends")
+        .withIndex("by_provider_email_id", (q) =>
+          q.eq("providerEmailId", resendEmailId)
+        )
+        .first();
+    }
+
     if (send) {
+      const trackedProviderEmailId = send.providerEmailId ?? callbackEmailId;
+      const currentStatus = send.status;
+
       if (
-        args.event.type === "email.sent" ||
-        args.event.type === "email.delivered"
+        args.event.type === "email.sent" &&
+        !["delivered", "delivery_delayed", "failed"].includes(currentStatus)
       ) {
         await ctx.runMutation(internal.emailSends.markSendStatus, {
           sendId: send._id,
           status: "sent",
-          providerEmailId,
+          providerEmailId: trackedProviderEmailId,
+        });
+      }
+
+      if (
+        args.event.type === "email.delivered" &&
+        !["delivered", "failed"].includes(currentStatus)
+      ) {
+        await ctx.runMutation(internal.emailSends.markSendStatus, {
+          sendId: send._id,
+          status: "delivered",
+          providerEmailId: trackedProviderEmailId,
+        });
+      }
+
+      if (
+        args.event.type === "email.delivery_delayed" &&
+        ["queued", "sent"].includes(currentStatus)
+      ) {
+        await ctx.runMutation(internal.emailSends.markSendStatus, {
+          sendId: send._id,
+          status: "delivery_delayed",
+          providerEmailId: trackedProviderEmailId,
         });
       }
 
@@ -61,7 +96,7 @@ export const onEmailEvent = internalMutation({
         await ctx.runMutation(internal.emailSends.markSendStatus, {
           sendId: send._id,
           status: "failed",
-          providerEmailId,
+          providerEmailId: trackedProviderEmailId,
           errorCode: args.event.type,
           errorMessage:
             args.event.type === "email.bounced"

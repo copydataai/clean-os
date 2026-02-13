@@ -414,6 +414,16 @@ export default function QuoteDetailPage() {
             <h2 className="text-lg font-semibold text-foreground">Quote State</h2>
             {detail.quote ? (
               <div className="mt-4 space-y-2 text-sm text-muted-foreground">
+                {detail.currentRevision?.emailDelivery ? (
+                  <div className="flex items-center gap-2">
+                    <span>Email delivery:</span>
+                    <StatusBadge
+                      status={detail.currentRevision.emailDelivery.status}
+                      label={detail.currentRevision.emailDelivery.status.replace(/_/g, " ")}
+                      className="text-[10px]"
+                    />
+                  </div>
+                ) : null}
                 <p>Status: {currentStatus}</p>
                 <p>Quote number: #{detail.quote.quoteNumber}</p>
                 <p>Sent at: {formatDate(detail.quote.sentAt)}</p>
@@ -560,6 +570,15 @@ export default function QuoteDetailPage() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {formatCurrency(revision.totalCents, revision.currency)} · {revision.sendStatus}
                     </p>
+                    {revision.emailDelivery ? (
+                      <div className="mt-1">
+                        <StatusBadge
+                          status={revision.emailDelivery.status}
+                          label={`email ${revision.emailDelivery.status.replace(/_/g, " ")}`}
+                          className="text-[10px]"
+                        />
+                      </div>
+                    ) : null}
                     <p className="mt-1 text-xs text-muted-foreground">{formatDate(revision.createdAt)}</p>
                   </button>
                 ))}

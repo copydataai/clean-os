@@ -184,7 +184,16 @@ export const sendDueQuoteReminders = internalAction({
         const priorSend = await ctx.runQuery(internal.emailSends.getByIdempotencyKey, {
           idempotencyKey,
         });
-        if (priorSend && ["queued", "sent", "skipped"].includes(priorSend.status)) {
+        if (
+          priorSend &&
+          [
+            "queued",
+            "sent",
+            "delivered",
+            "delivery_delayed",
+            "skipped",
+          ].includes(priorSend.status)
+        ) {
           continue;
         }
 

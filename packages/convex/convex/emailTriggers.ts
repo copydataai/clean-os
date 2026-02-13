@@ -1,6 +1,7 @@
 "use node";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { bookingFlowLog, bookingFlowWarn } from "./lib/bookingFlowDebug";
 
@@ -75,7 +76,7 @@ export const sendConfirmationEmail = action({
     }
     const confirmUrl = confirmUrlObj.toString();
 
-    await ctx.runAction(internal.emailRenderers.sendConfirmationLinkEmail, {
+    const sendResult = await ctx.runAction(internal.emailRenderers.sendConfirmationLinkEmail, {
       to: request.email,
       idempotencyKey: `confirmation-link:${requestId}`,
       firstName: quoteData.firstName ?? request.contactDetails,
@@ -84,12 +85,19 @@ export const sendConfirmationEmail = action({
       confirmUrl,
     });
 
-    // Mark that the confirmation link was sent
-    await ctx.runMutation(internal.bookingRequests.markConfirmLinkSentInternal, {
-      requestId,
-    });
+    const emailSendId = sendResult?.sendId as Id<"emailSends"> | undefined;
+    await ctx.runMutation(
+      internal.bookingRequests.recordConfirmationEmailDispatchInternal,
+      {
+        requestId,
+        emailSendId,
+      }
+    );
 
-    return { success: true };
+    return {
+      success: true,
+      emailSendId,
+    };
   },
 });
 
@@ -132,22 +140,30 @@ export const sendCardRequestEmail = action({
     const bookingPath = `/book/${canonicalRoute.handle}?request_id=${requestId}`;
     const bookingLink = `${appUrl}${bookingPath}`;
 
-    await ctx.runAction(internal.emailRenderers.sendBookingConfirmedEmail, {
-      to: request.email,
-      idempotencyKey: `card-request:${requestId}:${Date.now()}`,
-      firstName: quoteData.firstName ?? request.contactDetails ?? undefined,
-      service: quoteData.service,
-      frequency: quoteData.frequency,
-      address: quoteData.address,
-      accessMethod: request.accessMethod ?? undefined,
-      pets: request.pets ?? undefined,
-      bookingLink,
-    });
+    const sendResult = await ctx.runAction(
+      internal.emailRenderers.sendBookingConfirmedEmail,
+      {
+        to: request.email,
+        idempotencyKey: `card-request:${requestId}:${Date.now()}`,
+        firstName: quoteData.firstName ?? request.contactDetails ?? undefined,
+        service: quoteData.service,
+        frequency: quoteData.frequency,
+        address: quoteData.address,
+        accessMethod: request.accessMethod ?? undefined,
+        pets: request.pets ?? undefined,
+        bookingLink,
+      }
+    );
 
-    await ctx.runMutation(internal.bookingRequests.markLinkSentInternal, {
+    const emailSendId = sendResult?.sendId as Id<"emailSends"> | undefined;
+    await ctx.runMutation(internal.bookingRequests.recordCardRequestEmailDispatchInternal, {
       requestId,
+      emailSendId,
     });
 
-    return { success: true };
+    return {
+      success: true,
+      emailSendId,
+    };
   },
 });

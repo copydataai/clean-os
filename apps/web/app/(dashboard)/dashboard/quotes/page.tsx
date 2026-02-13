@@ -185,6 +185,12 @@ export default function QuotesPage() {
                   {quote.quoteStatus === "expired" || quote.quoteStatus === "send_failed" ? (
                     <StatusBadge status={quote.quoteStatus} />
                   ) : null}
+                  {quote.latestEmailDelivery ? (
+                    <StatusBadge
+                      status={quote.latestEmailDelivery.status}
+                      label={`email ${quote.latestEmailDelivery.status.replace(/_/g, " ")}`}
+                    />
+                  ) : null}
                   {urgencyText(quote) ? (
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${urgencyClass(quote.urgencyLevel)}`}>
                       {urgencyText(quote)}

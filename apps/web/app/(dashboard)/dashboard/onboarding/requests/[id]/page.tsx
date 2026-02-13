@@ -28,6 +28,10 @@ function renderList(items?: string[] | null) {
   return items.join(", ");
 }
 
+function emailStatusLabel(prefix: "card" | "confirm", status: string) {
+  return `${prefix} ${status.replace(/_/g, " ")}`;
+}
+
 function SectionNumber({ n }: { n: string }) {
   return (
     <span className="mr-3 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted/60 font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
@@ -85,7 +89,6 @@ export default function RequestDetailPage() {
     request?.quoteRequestId ? { id: request.quoteRequestId } : "skip"
   );
   const createBooking = useMutation(onboardingApi.createBookingFromRequest);
-  const markLinkSent = useMutation(onboardingApi.markLinkSent);
   const markConfirmLinkSent = useMutation(onboardingApi.markConfirmLinkSent);
   const sendConfirmEmail = useAction(onboardingApi.sendConfirmationEmail);
   const sendCardRequestEmail = useAction(onboardingApi.sendCardRequestEmail);
@@ -140,12 +143,28 @@ export default function RequestDetailPage() {
           </Link>
           <Separator orientation="vertical" className="h-5" />
           <StatusBadge status={request.status} />
-          {request.linkSentAt && (
-            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">link sent</Badge>
-          )}
-          {request.confirmLinkSentAt && (
-            <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400">confirm link sent</Badge>
-          )}
+          {request.cardRequestEmailDelivery ? (
+            <StatusBadge
+              status={request.cardRequestEmailDelivery.status}
+              label={emailStatusLabel("card", request.cardRequestEmailDelivery.status)}
+              className="text-[10px]"
+            />
+          ) : request.linkSentAt ? (
+            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+              link sent
+            </Badge>
+          ) : null}
+          {request.confirmationEmailDelivery ? (
+            <StatusBadge
+              status={request.confirmationEmailDelivery.status}
+              label={emailStatusLabel("confirm", request.confirmationEmailDelivery.status)}
+              className="text-[10px]"
+            />
+          ) : request.confirmLinkSentAt ? (
+            <Badge className="bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400">
+              confirm link sent
+            </Badge>
+          ) : null}
         </div>
       </PageHeader>
 
@@ -175,7 +194,6 @@ export default function RequestDetailPage() {
                 setCardEmailState("sending");
                 try {
                   await sendCardRequestEmail({ requestId: request._id });
-                  await markLinkSent({ requestId: request._id });
                   setCardEmailState("sent");
                   setTimeout(() => setCardEmailState("idle"), 2000);
                 } catch (error) {

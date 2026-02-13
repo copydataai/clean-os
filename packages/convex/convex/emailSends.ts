@@ -48,6 +48,8 @@ export const markSendStatus = internalMutation({
     status: v.union(
       v.literal("queued"),
       v.literal("sent"),
+      v.literal("delivered"),
+      v.literal("delivery_delayed"),
       v.literal("failed"),
       v.literal("skipped")
     ),

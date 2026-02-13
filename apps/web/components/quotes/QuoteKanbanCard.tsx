@@ -32,6 +32,15 @@ type QuoteKanbanCardProps = {
     expiresAt?: number | null;
     hoursUntilExpiry?: number | null;
     urgencyLevel?: "normal" | "warning" | "critical" | "expired";
+    latestEmailDelivery?: {
+      status:
+        | "queued"
+        | "sent"
+        | "delivered"
+        | "delivery_delayed"
+        | "failed"
+        | "skipped";
+    } | null;
     createdAt: number;
   };
 };
@@ -113,6 +122,13 @@ export default function QuoteKanbanCard({ quote }: QuoteKanbanCardProps) {
           <StatusBadge status={quote.requestStatus} className="text-[10px]" />
           {quote.quoteStatus === "expired" || quote.quoteStatus === "send_failed" ? (
             <StatusBadge status={quote.quoteStatus} className="text-[10px]" />
+          ) : null}
+          {quote.latestEmailDelivery ? (
+            <StatusBadge
+              status={quote.latestEmailDelivery.status}
+              label={`email ${quote.latestEmailDelivery.status.replace(/_/g, " ")}`}
+              className="text-[10px]"
+            />
           ) : null}
         </div>
       </div>

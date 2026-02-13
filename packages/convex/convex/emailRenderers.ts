@@ -45,8 +45,8 @@ export const sendConfirmationLinkEmail = internalAction({
     frequency: v.optional(v.string()),
     confirmUrl: v.string(),
   },
-  handler: async (ctx, args) => {
-    await ctx.runAction(internal.emailSender.sendTransactional, {
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runAction(internal.emailSender.sendTransactional, {
       to: args.to,
       subject: "Your quote is approved — confirm your booking",
       template: "confirmation-link",
@@ -73,8 +73,8 @@ export const sendBookingConfirmedEmail = internalAction({
     pets: v.optional(v.array(v.string())),
     bookingLink: v.string(),
   },
-  handler: async (ctx, args) => {
-    await ctx.runAction(internal.emailSender.sendTransactional, {
+  handler: async (ctx, args): Promise<any> => {
+    return await ctx.runAction(internal.emailSender.sendTransactional, {
       to: args.to,
       subject: "Booking confirmed — save your payment method",
       template: "booking-confirmed",

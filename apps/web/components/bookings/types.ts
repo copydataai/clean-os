@@ -23,6 +23,34 @@ export type LifecycleRow = {
   serviceDate: string | null;
   serviceType: string | null;
   amount: number | null;
+  cardRequestEmailDelivery: {
+    sendId: Id<"emailSends">;
+    status:
+      | "queued"
+      | "sent"
+      | "delivered"
+      | "delivery_delayed"
+      | "failed"
+      | "skipped";
+    provider: string;
+    updatedAt: number;
+    errorCode?: string;
+    errorMessage?: string;
+  } | null;
+  confirmationEmailDelivery: {
+    sendId: Id<"emailSends">;
+    status:
+      | "queued"
+      | "sent"
+      | "delivered"
+      | "delivery_delayed"
+      | "failed"
+      | "skipped";
+    provider: string;
+    updatedAt: number;
+    errorCode?: string;
+    errorMessage?: string;
+  } | null;
   createdAt: number;
   updatedAt: number;
 };

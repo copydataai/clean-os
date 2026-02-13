@@ -12,6 +12,23 @@ const modules: Record<string, () => Promise<any>> = {
   "../quotes.ts": () => import("../quotes"),
 };
 
+const defaultInclusions = {
+  title: "What's Included",
+  intro: "Included:",
+  includedItems: ["Floors", "Bathrooms"],
+  whyItWorksItems: ["Consistent quality"],
+  outro: "Thank you.",
+};
+
+const defaultTerms = {
+  quoteValidity: "30 days",
+  serviceLimitations: "Standard limitations apply.",
+  access: "Access required.",
+  cancellations: "24h notice.",
+  nonSolicitation: "Non-solicitation applies.",
+  acceptance: "Acceptance via confirmation form.",
+};
+
 async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
   return await t.run(async (ctx) => {
     const suffix = Math.random().toString(36).slice(2, 8);
@@ -54,6 +71,32 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
 
     const now = Date.now();
 
+    const emailSendAId = await ctx.db.insert("emailSends", {
+      idempotencyKey: `scope-email-a-${suffix}`,
+      to: "a@example.com",
+      subject: "Org A email",
+      template: "booking-confirmed",
+      provider: "convex_resend",
+      status: "delivered",
+      providerEmailId: `convex_email_a_${suffix}`,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const emailSendBId = await ctx.db.insert("emailSends", {
+      idempotencyKey: `scope-email-b-${suffix}`,
+      to: "b@example.com",
+      subject: "Org B email",
+      template: "booking-confirmed",
+      provider: "convex_resend",
+      status: "failed",
+      providerEmailId: `convex_email_b_${suffix}`,
+      errorCode: "email.failed",
+      errorMessage: "Provider rejected message",
+      createdAt: now + 1,
+      updatedAt: now + 1,
+    });
+
     const bookingAId = await ctx.db.insert("bookings", {
       organizationId: orgAId,
       email: "a@example.com",
@@ -81,6 +124,7 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
       status: "requested",
       email: "a@example.com",
       contactDetails: "Alpha Request",
+      cardRequestEmailSendId: emailSendAId,
       createdAt: now,
       updatedAt: now,
     });
@@ -90,6 +134,7 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
       status: "requested",
       email: "b@example.com",
       contactDetails: "Beta Request",
+      cardRequestEmailSendId: emailSendBId,
       createdAt: now + 1,
       updatedAt: now + 1,
     });
@@ -114,7 +159,7 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
       updatedAt: now + 1,
     });
 
-    await ctx.db.insert("quotes", {
+    const quoteAId = await ctx.db.insert("quotes", {
       organizationId: orgAId,
       quoteRequestId: quoteRequestAId,
       quoteNumber: 10001,
@@ -127,7 +172,7 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
       updatedAt: now,
     });
 
-    await ctx.db.insert("quotes", {
+    const quoteBId = await ctx.db.insert("quotes", {
       organizationId: orgBId,
       quoteRequestId: quoteRequestBId,
       quoteNumber: 10002,
@@ -138,6 +183,74 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
       requiresReview: false,
       createdAt: now + 1,
       updatedAt: now + 1,
+    });
+
+    const quoteRevisionAId = await ctx.db.insert("quoteRevisions", {
+      organizationId: orgAId,
+      quoteId: quoteAId,
+      revisionNumber: 1,
+      source: "manual",
+      serviceLabel: "Standard Cleaning",
+      description: "Standard cleaning service",
+      quantity: 1,
+      unitPriceCents: 10000,
+      subtotalCents: 10000,
+      taxName: "Colorado",
+      taxRateBps: 0,
+      taxAmountCents: 0,
+      totalCents: 10000,
+      currency: "usd",
+      recipientSnapshot: {
+        firstName: "Alpha",
+        lastName: "Quote",
+        name: "Alpha Quote",
+        email: "alpha.quote@example.com",
+      },
+      inclusionsSnapshot: defaultInclusions,
+      termsSnapshot: defaultTerms,
+      sendStatus: "sent",
+      emailSendId: emailSendAId,
+      sentAt: now,
+      createdAt: now,
+    });
+
+    const quoteRevisionBId = await ctx.db.insert("quoteRevisions", {
+      organizationId: orgBId,
+      quoteId: quoteBId,
+      revisionNumber: 1,
+      source: "manual",
+      serviceLabel: "Standard Cleaning",
+      description: "Standard cleaning service",
+      quantity: 1,
+      unitPriceCents: 20000,
+      subtotalCents: 20000,
+      taxName: "Colorado",
+      taxRateBps: 0,
+      taxAmountCents: 0,
+      totalCents: 20000,
+      currency: "usd",
+      recipientSnapshot: {
+        firstName: "Beta",
+        lastName: "Quote",
+        name: "Beta Quote",
+        email: "beta.quote@example.com",
+      },
+      inclusionsSnapshot: defaultInclusions,
+      termsSnapshot: defaultTerms,
+      sendStatus: "sent",
+      emailSendId: emailSendBId,
+      sentAt: now + 1,
+      createdAt: now + 1,
+    });
+
+    await ctx.db.patch(quoteAId, {
+      currentRevisionId: quoteRevisionAId,
+      latestSentRevisionId: quoteRevisionAId,
+    });
+
+    await ctx.db.patch(quoteBId, {
+      currentRevisionId: quoteRevisionBId,
+      latestSentRevisionId: quoteRevisionBId,
     });
 
     return {
@@ -152,6 +265,8 @@ async function seedTwoOrgFixture(t: ReturnType<typeof convexTest>) {
       requestBId,
       quoteRequestAId,
       quoteRequestBId,
+      emailSendAId,
+      emailSendBId,
     };
   });
 }
@@ -183,10 +298,14 @@ describe.sequential("dashboard org scoping", () => {
       id: fixture.requestAId,
     });
     expect(requestDetailA?.canonicalBookingHandle).toBe("org-a");
+    expect(requestDetailA?.cardRequestEmailDelivery?.sendId).toBe(fixture.emailSendAId);
+    expect(requestDetailA?.cardRequestEmailDelivery?.status).toBe("delivered");
 
     const boardA = await asOrgA.query(api.quotes.listQuoteBoard, { limit: 10 });
     expect(boardA).toHaveLength(1);
     expect((boardA[0]?._id as Id<"quoteRequests">)).toBe(fixture.quoteRequestAId);
+    expect(boardA[0]?.latestEmailDelivery?.sendId).toBe(fixture.emailSendAId);
+    expect(boardA[0]?.latestEmailDelivery?.status).toBe("delivered");
 
     const asOrgB = t.withIdentity({
       subject: fixture.userClerkId,
@@ -210,9 +329,13 @@ describe.sequential("dashboard org scoping", () => {
       id: fixture.requestBId,
     });
     expect(requestDetailB?.canonicalBookingHandle).toBe("org-b");
+    expect(requestDetailB?.cardRequestEmailDelivery?.sendId).toBe(fixture.emailSendBId);
+    expect(requestDetailB?.cardRequestEmailDelivery?.status).toBe("failed");
 
     const boardB = await asOrgB.query(api.quotes.listQuoteBoard, { limit: 10 });
     expect(boardB).toHaveLength(1);
     expect((boardB[0]?._id as Id<"quoteRequests">)).toBe(fixture.quoteRequestBId);
+    expect(boardB[0]?.latestEmailDelivery?.sendId).toBe(fixture.emailSendBId);
+    expect(boardB[0]?.latestEmailDelivery?.status).toBe("failed");
   });
 });

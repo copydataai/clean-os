@@ -8,6 +8,44 @@ import { resolveCanonicalBookingRoute, resolvePublicBookingContext } from "./lib
 const FALLBACK_LOOKBACK_DAYS = 7;
 const FALLBACK_SAMPLE_SIZE = 10;
 
+type EmailDeliverySnapshot = {
+  sendId: Id<"emailSends">;
+  status:
+    | "queued"
+    | "sent"
+    | "delivered"
+    | "delivery_delayed"
+    | "failed"
+    | "skipped";
+  provider: string;
+  updatedAt: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+async function resolveEmailDeliverySnapshot(
+  ctx: any,
+  sendId?: Id<"emailSends"> | null
+): Promise<EmailDeliverySnapshot | null> {
+  if (!sendId) {
+    return null;
+  }
+
+  const send = await ctx.db.get(sendId);
+  if (!send) {
+    return null;
+  }
+
+  return {
+    sendId: send._id,
+    status: send.status as EmailDeliverySnapshot["status"],
+    provider: send.provider,
+    updatedAt: send.updatedAt,
+    errorCode: send.errorCode,
+    errorMessage: send.errorMessage,
+  };
+}
+
 export const createRequest = internalMutation({
   args: {
     organizationId: v.optional(v.id("organizations")),
@@ -543,11 +581,39 @@ export const markLinkSentInternal = internalMutation({
   },
 });
 
+export const recordCardRequestEmailDispatchInternal = internalMutation({
+  args: {
+    requestId: v.id("bookingRequests"),
+    emailSendId: v.optional(v.id("emailSends")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.requestId, {
+      linkSentAt: Date.now(),
+      cardRequestEmailSendId: args.emailSendId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 export const markConfirmLinkSentInternal = internalMutation({
   args: { requestId: v.id("bookingRequests") },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.requestId, {
       confirmLinkSentAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const recordConfirmationEmailDispatchInternal = internalMutation({
+  args: {
+    requestId: v.id("bookingRequests"),
+    emailSendId: v.optional(v.id("emailSends")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.requestId, {
+      confirmLinkSentAt: Date.now(),
+      confirmationEmailSendId: args.emailSendId,
       updatedAt: Date.now(),
     });
   },
@@ -584,9 +650,19 @@ export const getById = query({
       throw new Error("ORG_MISMATCH");
     }
 
+    const cardRequestEmailDelivery = await resolveEmailDeliverySnapshot(
+      ctx,
+      request.cardRequestEmailSendId
+    );
+    const confirmationEmailDelivery = await resolveEmailDeliverySnapshot(
+      ctx,
+      request.confirmationEmailSendId
+    );
     const canonicalRoute = await resolveCanonicalBookingRoute(ctx, request._id);
     return {
       ...request,
+      cardRequestEmailDelivery,
+      confirmationEmailDelivery,
       canonicalBookingHandle: canonicalRoute.errorCode ? null : canonicalRoute.canonicalSlug,
     };
   },

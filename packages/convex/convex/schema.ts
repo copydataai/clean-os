@@ -202,6 +202,8 @@ const bookingRequests = defineTable({
   bookingId: v.optional(v.id("bookings")),
   linkSentAt: v.optional(v.number()),
   confirmLinkSentAt: v.optional(v.number()),
+  cardRequestEmailSendId: v.optional(v.id("emailSends")),
+  confirmationEmailSendId: v.optional(v.id("emailSends")),
   createdAt: v.number(),
   updatedAt: v.number(),
   confirmedAt: v.optional(v.number()),
@@ -575,7 +577,7 @@ const emailSends = defineTable({
   subject: v.string(),
   template: v.string(),
   provider: v.string(),
-  status: v.string(), // queued|sent|failed|skipped
+  status: v.string(), // queued|sent|delivered|delivery_delayed|failed|skipped
   providerEmailId: v.optional(v.string()),
   errorCode: v.optional(v.string()),
   errorMessage: v.optional(v.string()),

@@ -30,6 +30,15 @@ type QuoteKanbanColumnProps = {
     expiresAt?: number | null;
     hoursUntilExpiry?: number | null;
     urgencyLevel?: "normal" | "warning" | "critical" | "expired";
+    latestEmailDelivery?: {
+      status:
+        | "queued"
+        | "sent"
+        | "delivered"
+        | "delivery_delayed"
+        | "failed"
+        | "skipped";
+    } | null;
     createdAt: number;
   }[];
 };

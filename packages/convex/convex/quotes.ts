@@ -100,6 +100,59 @@ function buildRecipientSnapshot(quoteRequest: any) {
 
 type BoardColumn = "requested" | "quoted" | "confirmed";
 type UrgencyLevel = "normal" | "warning" | "critical" | "expired";
+type EmailDeliveryStatus =
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "delivery_delayed"
+  | "failed"
+  | "skipped";
+type EmailDeliverySnapshot = {
+  sendId: Id<"emailSends">;
+  status: EmailDeliveryStatus;
+  provider: string;
+  updatedAt: number;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+function isEmailDeliveryStatus(value: string): value is EmailDeliveryStatus {
+  return (
+    value === "queued" ||
+    value === "sent" ||
+    value === "delivered" ||
+    value === "delivery_delayed" ||
+    value === "failed" ||
+    value === "skipped"
+  );
+}
+
+async function resolveEmailDeliverySnapshot(
+  ctx: any,
+  sendId?: string | Id<"emailSends"> | null
+): Promise<EmailDeliverySnapshot | null> {
+  if (!sendId) {
+    return null;
+  }
+
+  try {
+    const send = await ctx.db.get(sendId as Id<"emailSends">);
+    if (!send || !isEmailDeliveryStatus(send.status)) {
+      return null;
+    }
+
+    return {
+      sendId: send._id,
+      status: send.status,
+      provider: send.provider,
+      updatedAt: send.updatedAt,
+      errorCode: send.errorCode,
+      errorMessage: send.errorMessage,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function mapQuoteStatusToBoardColumn(quoteStatus: string): BoardColumn {
   if (quoteStatus === "accepted") {
@@ -466,9 +519,19 @@ export const getQuoteDetailByRequestId = query({
       .collect();
     revisions.sort((a, b) => b.revisionNumber - a.revisionNumber);
 
-    const currentRevision = quote.currentRevisionId
-      ? await ctx.db.get(quote.currentRevisionId)
-      : revisions[0] ?? null;
+    const revisionsWithEmailDelivery = await Promise.all(
+      revisions.map(async (revision) => ({
+        ...revision,
+        emailDelivery: await resolveEmailDeliverySnapshot(ctx, revision.emailSendId),
+      }))
+    );
+
+    const currentRevisionId = quote.currentRevisionId ?? revisionsWithEmailDelivery[0]?._id ?? null;
+    const currentRevision = currentRevisionId
+      ? revisionsWithEmailDelivery.find(
+          (revision) => revision._id === currentRevisionId
+        ) ?? null
+      : null;
     const profile = await getProfileByKeyOrDefault(
       ctx,
       organization._id,
@@ -485,7 +548,7 @@ export const getQuoteDetailByRequestId = query({
       bookingRequest,
       profile,
       currentRevision,
-      revisions,
+      revisions: revisionsWithEmailDelivery,
       pricingSuggestion,
       isExpired,
     };
@@ -543,9 +606,17 @@ export const listQuoteBoard = query({
             expiresAt: null,
             hoursUntilExpiry: null,
             urgencyLevel: "normal" as UrgencyLevel,
+            latestEmailDelivery: null,
           };
         }
 
+        const latestRevision = quote.latestSentRevisionId
+          ? await ctx.db.get(quote.latestSentRevisionId)
+          : null;
+        const latestEmailDelivery = await resolveEmailDeliverySnapshot(
+          ctx,
+          latestRevision?.emailSendId
+        );
         const isQuoteExpired =
           quote.status === "sent" && Boolean(quote.expiresAt) && now > (quote.expiresAt ?? 0);
         const effectiveQuoteStatus = isQuoteExpired ? "expired" : quote.status;
@@ -560,6 +631,7 @@ export const listQuoteBoard = query({
           expiresAt: quote.expiresAt ?? null,
           hoursUntilExpiry: urgency.hoursUntilExpiry,
           urgencyLevel: urgency.urgencyLevel,
+          latestEmailDelivery,
         };
       })
     );

@@ -6,6 +6,10 @@ import type { LifecycleRow } from "@/components/bookings/types";
 import { cn } from "@/lib/utils";
 import { onboardingRequestPath } from "@/lib/onboarding/routes";
 
+function emailStatusLabel(prefix: "card" | "confirm", status: string) {
+  return `${prefix} ${status.replace(/_/g, " ")}`;
+}
+
 export default function PreBookingCard({ row }: { row: LifecycleRow }) {
   return (
     <div className="rounded-xl border border-dashed border-border/60 bg-card px-4 py-3">
@@ -30,6 +34,20 @@ export default function PreBookingCard({ row }: { row: LifecycleRow }) {
             intake
           </Badge>
           {row.funnelStage ? <StatusBadge status={row.funnelStage} context="funnel" /> : null}
+          {row.cardRequestEmailDelivery ? (
+            <StatusBadge
+              status={row.cardRequestEmailDelivery.status}
+              label={emailStatusLabel("card", row.cardRequestEmailDelivery.status)}
+              className="text-[10px]"
+            />
+          ) : null}
+          {row.confirmationEmailDelivery ? (
+            <StatusBadge
+              status={row.confirmationEmailDelivery.status}
+              label={emailStatusLabel("confirm", row.confirmationEmailDelivery.status)}
+              className="text-[10px]"
+            />
+          ) : null}
         </div>
       </div>
 
