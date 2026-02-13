@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "@clean-os/convex/api";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,11 @@ type QuoteProfileFormState = {
   defaultTaxName: string;
   defaultTaxRateBps: string;
   quoteValidityDays: string;
+  brandColor: string;
+  accentColor: string;
+  tagline: string;
+  logoUrl: string;
+  iconUrl: string;
 };
 
 const DEFAULT_FORM: QuoteProfileFormState = {
@@ -47,6 +52,11 @@ const DEFAULT_FORM: QuoteProfileFormState = {
   defaultTaxName: "Colorado",
   defaultTaxRateBps: "0",
   quoteValidityDays: "30",
+  brandColor: "#1A3C34",
+  accentColor: "#C5BCAD",
+  tagline: "",
+  logoUrl: "",
+  iconUrl: "",
 };
 
 /* ─── Sub-components ────────────────────────────────────────── */
@@ -103,6 +113,12 @@ function CompletionDot({ filled }: { filled: boolean }) {
 export default function QuoteProfileSettingsForm() {
   const profile = useQuery(api.quoteProfiles.getActiveProfile, {});
   const updateProfile = useMutation(api.quoteProfiles.updateProfile);
+  const generateUploadUrl = useMutation(api.quoteProfiles.generateUploadUrl);
+  const saveBrandingImage = useMutation(api.quoteProfiles.saveBrandingImage);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const iconInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingIcon, setUploadingIcon] = useState(false);
 
   const [form, setForm] = useState<QuoteProfileFormState>(DEFAULT_FORM);
   const [isBootstrapping, setIsBootstrapping] = useState(false);
@@ -146,8 +162,39 @@ export default function QuoteProfileSettingsForm() {
       defaultTaxName: profile.defaultTaxName,
       defaultTaxRateBps: String(profile.defaultTaxRateBps),
       quoteValidityDays: String(profile.quoteValidityDays),
+      brandColor: profile.brandColor ?? "#1A3C34",
+      accentColor: profile.accentColor ?? "#C5BCAD",
+      tagline: profile.tagline ?? "",
+      logoUrl: profile.logoUrl ?? "",
+      iconUrl: profile.iconUrl ?? "",
     });
   }, [profile]);
+
+  const handleImageUpload = async (
+    file: File,
+    field: "logo" | "icon",
+  ) => {
+    const setUploading = field === "logo" ? setUploadingLogo : setUploadingIcon;
+    setUploading(true);
+    try {
+      const uploadUrl = await generateUploadUrl();
+      const res = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      const { storageId } = await res.json();
+      const result = await saveBrandingImage({ storageId, field });
+      setForm((prev) => ({
+        ...prev,
+        [field === "logo" ? "logoUrl" : "iconUrl"]: result.url ?? "",
+      }));
+    } catch (err) {
+      console.error(`Failed to upload ${field}`, err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const set = (field: keyof QuoteProfileFormState) => (event: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [field]: event.target.value }));
@@ -279,6 +326,156 @@ export default function QuoteProfileSettingsForm() {
         </div>
       </section>
 
+      {/* 03 · Branding */}
+      <section className="surface-card overflow-hidden rounded-2xl">
+        <div className="flex items-start gap-2 p-5">
+          <SectionNumber n="03" />
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Branding</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Logo, colors, and tagline used in emails and PDFs.
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        <div className="space-y-5 p-5">
+          {/* Logo & Icon uploads */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Logo</label>
+              <p className="text-[10px] text-muted-foreground">Recommended 280×80px, PNG or SVG</p>
+              <div className="flex items-center gap-3">
+                {form.logoUrl ? (
+                  <img
+                    src={form.logoUrl}
+                    alt="Logo"
+                    className="h-10 max-w-[140px] rounded border border-border/60 bg-white object-contain p-1"
+                  />
+                ) : (
+                  <div className="flex h-10 w-[140px] items-center justify-center rounded border border-dashed border-border/60 bg-muted/30 text-[10px] text-muted-foreground">
+                    No logo
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingLogo}
+                  onClick={() => logoInputRef.current?.click()}
+                >
+                  {uploadingLogo ? "Uploading..." : "Upload"}
+                </Button>
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file, "logo");
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground">Icon</label>
+              <p className="text-[10px] text-muted-foreground">Square, 64×64px minimum</p>
+              <div className="flex items-center gap-3">
+                {form.iconUrl ? (
+                  <img
+                    src={form.iconUrl}
+                    alt="Icon"
+                    className="h-10 w-10 rounded border border-border/60 bg-white object-contain p-1"
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded border border-dashed border-border/60 bg-muted/30 text-[10px] text-muted-foreground">
+                    —
+                  </div>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingIcon}
+                  onClick={() => iconInputRef.current?.click()}
+                >
+                  {uploadingIcon ? "Uploading..." : "Upload"}
+                </Button>
+                <input
+                  ref={iconInputRef}
+                  type="file"
+                  accept="image/png,image/svg+xml,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageUpload(file, "icon");
+                    e.target.value = "";
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Colors */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FieldWrapper id="brandColor" label="Brand Color" hint="Primary color">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={form.brandColor}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, brandColor: e.target.value }));
+                    if (status !== "idle") setStatus("idle");
+                  }}
+                  className="h-8 w-8 cursor-pointer rounded border border-border/60"
+                />
+                <Input
+                  id="brandColor"
+                  value={form.brandColor}
+                  onChange={set("brandColor")}
+                  placeholder="#1A3C34"
+                  className="font-mono"
+                />
+              </div>
+            </FieldWrapper>
+            <FieldWrapper id="accentColor" label="Accent Color" hint="Dividers & details">
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={form.accentColor}
+                  onChange={(e) => {
+                    setForm((prev) => ({ ...prev, accentColor: e.target.value }));
+                    if (status !== "idle") setStatus("idle");
+                  }}
+                  className="h-8 w-8 cursor-pointer rounded border border-border/60"
+                />
+                <Input
+                  id="accentColor"
+                  value={form.accentColor}
+                  onChange={set("accentColor")}
+                  placeholder="#C5BCAD"
+                  className="font-mono"
+                />
+              </div>
+            </FieldWrapper>
+          </div>
+
+          {/* Tagline */}
+          <FieldWrapper id="tagline" label="Tagline" hint="Shown in email footer">
+            <Input
+              id="tagline"
+              value={form.tagline}
+              onChange={set("tagline")}
+              placeholder="AI-powered operations"
+            />
+          </FieldWrapper>
+        </div>
+      </section>
+
       {/* 02 · Quote Defaults */}
       <section className="surface-card overflow-hidden rounded-2xl">
         <div className="flex items-start gap-2 p-5">
@@ -367,6 +564,9 @@ export default function QuoteProfileSettingsForm() {
                 defaultTaxName: form.defaultTaxName,
                 defaultTaxRateBps,
                 quoteValidityDays,
+                brandColor: form.brandColor || undefined,
+                accentColor: form.accentColor || undefined,
+                tagline: form.tagline || undefined,
               });
               setStatus("saved");
             } catch (error) {
