@@ -3,6 +3,7 @@ import {
   Container,
   Head,
   Html,
+  Img,
   Preview,
   Section,
   Text,
@@ -10,12 +11,34 @@ import {
 } from "@react-email/components";
 import * as React from "react";
 
+export interface EmailBrandConfig {
+  displayName?: string;
+  logoUrl?: string;
+  iconUrl?: string;
+  brandColor?: string;
+  accentColor?: string;
+  tagline?: string;
+  email?: string;
+}
+
 interface EmailLayoutProps {
   preview: string;
   children: React.ReactNode;
+  brand?: EmailBrandConfig;
 }
 
-export default function EmailLayout({ preview, children }: EmailLayoutProps) {
+const DEFAULT_BRAND_NAME = "JOLU\u2009AI";
+const DEFAULT_BRAND_COLOR = "#1A3C34";
+const DEFAULT_TAGLINE = "AI-powered operations";
+const DEFAULT_CONTACT_EMAIL = "jose@joluai.com";
+
+export default function EmailLayout({ preview, children, brand }: EmailLayoutProps) {
+  const brandName = brand?.displayName || DEFAULT_BRAND_NAME;
+  const brandColor = brand?.brandColor || DEFAULT_BRAND_COLOR;
+  const accentColor = brand?.accentColor || "#C5BCAD";
+  const tagline = brand?.tagline || DEFAULT_TAGLINE;
+  const contactEmail = brand?.email || DEFAULT_CONTACT_EMAIL;
+
   return (
     <Html>
       <Head>
@@ -24,23 +47,37 @@ export default function EmailLayout({ preview, children }: EmailLayoutProps) {
         </style>
       </Head>
       <Preview>{preview}</Preview>
-      <Body style={body}>
+      <Body style={{ ...body, backgroundColor: brandColor }}>
         <Container style={container}>
           {/* ── Brand mark ── */}
           <Section style={brandSection}>
-            <Text style={brandMark}>JOLU&thinsp;AI</Text>
-            <Hr style={brandRule} />
+            {brand?.logoUrl ? (
+              <Img
+                src={brand.logoUrl}
+                alt={brandName}
+                width="140"
+                height="auto"
+                style={{ margin: "0 auto 12px", display: "block" }}
+              />
+            ) : (
+              <Text style={brandMarkStyle}>
+                {brandName.toUpperCase()}
+              </Text>
+            )}
+            <Hr style={{ ...brandRule, borderColor: accentColor }} />
           </Section>
 
           {/* ── Content card ── */}
-          <Section style={card}>{children}</Section>
+          <Section style={{ ...card, borderTop: `3px solid ${accentColor}` }}>
+            {children}
+          </Section>
 
           {/* ── Footer ── */}
-          <Text style={footer}>
-            JoluAI &middot; AI-powered operations
+          <Text style={{ ...footer, color: accentColor }}>
+            {brandName} &middot; {tagline}
           </Text>
-          <Text style={footerSub}>
-            Questions? Reach us at jose@joluai.com
+          <Text style={{ ...footerSub, color: accentColor }}>
+            Questions? Reach us at {contactEmail}
           </Text>
         </Container>
       </Body>
@@ -69,11 +106,11 @@ const brandSection: React.CSSProperties = {
   marginBottom: "32px",
 };
 
-const brandMark: React.CSSProperties = {
+const brandMarkStyle: React.CSSProperties = {
   fontSize: "13px",
   fontWeight: 700,
   letterSpacing: "0.22em",
-  color: "#1A3C34",
+  color: "#FFFFFF",
   textTransform: "uppercase",
   margin: "0 0 12px",
   fontFamily: fontBody,
@@ -91,7 +128,6 @@ const card: React.CSSProperties = {
   backgroundColor: "#FFFFFF",
   borderRadius: "12px",
   padding: "36px 32px 32px",
-  borderTop: "3px solid #1A3C34",
 };
 
 const footer: React.CSSProperties = {
